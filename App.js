@@ -5,9 +5,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Provider as PaperProvider } from 'react-native-paper';
 
-import PsicologoDashboard from "./screens/psicologo/PsicologoDashboard";
 import EjercicioDinamico from "./screens/EjercicioDinamico";
+import PsicologoDashboard from "./screens/psicologo/PsicologoDashboard";
 import RegistroPsicologo from "./screens/psicologo/RegistroPsicologo";
+import SalaTeleconsulta from "./screens/psicologo/SalaTeleconsulta";
 
 import Anxiosimetro from './screens/anxiosimetro';
 import Autoabrazo from "./screens/Autoabrazo";
@@ -61,7 +62,7 @@ export default function App() {
           <Stack.Screen name="EjercicioDinamico" component={EjercicioDinamico} />
           <Stack.Screen name="PsicologoDashboard" component={PsicologoDashboard} />
           <Stack.Screen name="RegistroPsicologo" component={RegistroPsicologo} />
-
+          <Stack.Screen name="SalaTeleconsulta" component={SalaTeleconsulta} />   
 
 
         </Stack.Navigator>
