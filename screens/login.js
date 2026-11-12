@@ -173,7 +173,17 @@ export default function Login({navigation}) {
                   <Text style={styles.register}>Registrarse</Text>
                 </TouchableOpacity>
               </View>
+            
+              <TouchableOpacity
+                onPress={() => navigation.replace("PsicologoDashboard")}
+                style={{ marginTop: 14, alignItems: "center" }}
+              >
+                <Text style={{ color: "#7C3AED", fontWeight: "700", fontSize: 13 }}>
+                  🩺 Entrar como Especialista / Psicólogo
+                </Text>
+              </TouchableOpacity>
             </View>
+            
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

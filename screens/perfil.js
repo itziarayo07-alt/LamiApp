@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { deleteUser, signOut } from "firebase/auth";
 import { deleteDoc, doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebaseConfig";
+import { vincularConPsicologo } from "../services/lamiSyncService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -57,6 +58,9 @@ export default function ProfileScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [language, setLanguage] = useState("es");
+  const [codigoPsicologo, setCodigoPsicologo] = useState("");
+  const [psicologoVinculado, setPsicologoVinculado] = useState(null);
+  const [vinculando, setVinculando] = useState(false);
 
   // Centro de ayuda
   const [showHelp, setShowHelp] = useState(false);
@@ -269,6 +273,9 @@ export default function ProfileScreen({ navigation }) {
         setName(data.nombre ?? "");
         setEmail(data.correo ?? user.email);
         setPhone(data.telefono ?? "");
+        if (data.psicologoNombre) {
+          setPsicologoVinculado(data.psicologoNombre);
+        }
       }
     } catch (error) {
       console.log("Error cargando perfil:", error);
@@ -483,6 +490,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.sectionSubtitle}>
                 Toca una opción para actualizar cómo te sientes.
               </Text>
+              
 
               <View style={styles.chipsRow}>
                 {["Tranquila😌", "Nerviosa 😰", "Cansada 🥱"].map((item) => (
@@ -508,6 +516,61 @@ export default function ProfileScreen({ navigation }) {
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+            {/* VINCULACIÓN CON PSICÓLOGO */}
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Mi Especialista 🩺</Text>
+
+              {psicologoVinculado ? (
+                <View style={{ backgroundColor: "#EDE9FE", padding: 12, borderRadius: 14 }}>
+                  <Text style={{ fontSize: 12, color: "#6D28D9", fontWeight: "700" }}>
+                    VINCULADO EN LAMI
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#111827", marginTop: 2 }}>
+                    {psicologoVinculado}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: "#4B5563", marginTop: 4 }}>
+                    Tus ejercicios asignados aparecerán automáticamente en Checking.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.sectionSubtitle}>
+                    Ingresa el código que te dio tu psicólogo en consulta (ej. PSI-492).
+                  </Text>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={[styles.input, { fontWeight: "700", letterSpacing: 2 }]}
+                      placeholder="PSI-492"
+                      placeholderTextColor="#9CA3AF"
+                      autoCapitalize="characters"
+                      value={codigoPsicologo}
+                      onChangeText={setCodigoPsicologo}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    disabled={vinculando || !codigoPsicologo.trim()}
+                    onPress={async () => {
+                      try {
+                        setVinculando(true);
+                        const res = await vincularConPsicologo(auth.currentUser.uid, codigoPsicologo);
+                        setPsicologoVinculado(res.psicologoNombre);
+                        Alert.alert("¡Vinculación exitosa! 💜", `Ahora estás conectado con ${res.psicologoNombre}`);
+                      } catch (err) {
+                        Alert.alert("Error", err.message);
+                      } finally {
+                        setVinculando(false);
+                      }
+                    }}
+                    style={[styles.sessionButton, { marginTop: 12, marginBottom: 0 }]}
+                  >
+                    <Text style={styles.sessionButtonText}>
+                      {vinculando ? "Vinculando..." : "Vincular con mi psicólogo"}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
 
             {/* DATOS PERSONALES */}

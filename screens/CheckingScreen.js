@@ -14,6 +14,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import { auth } from "../config/firebaseConfig";
+import { escucharTareasDelPsicologo } from "../services/lamiSyncService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -81,9 +83,18 @@ export default function CheckingScreen({ navigation }) {
 
   // controla si hoy ya se puede hacer el test (después de las 5:00)
   const [puedeHacerTestHoy, setPuedeHacerTestHoy] = useState(false);
-
+  const [tareasPsicologo, setTareasPsicologo] = useState([]);
   useEffect(() => {
     cargarEstado();
+
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const unsubscribe = escucharTareasDelPsicologo(uid, (nuevasTareas) => {
+      setTareasPsicologo(nuevasTareas);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const ensureNotifPermission = async () => {
@@ -478,6 +489,43 @@ export default function CheckingScreen({ navigation }) {
           </View>
 
           {/* LISTA DE EJERCICIOS */}
+          {/* 👇 PEGA ESTE BLOQUE AQUÍ (ANTES DE LISTA DE EJERCICIOS) */}
+          {tareasPsicologo
+            .filter((t) => !t.completado)
+            .map((tarea) => (
+              <View
+                key={tarea.id}
+                style={[styles.card, { borderColor: "#7C3AED", borderWidth: 2 }]}
+              >
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: "#7C3AED",
+                    marginBottom: 4,
+                  }}
+                >
+                  🩺 ASIGNADO POR TU PSICÓLOGO •{" "}
+                  {tarea.enfoque?.toUpperCase() || "TERAPIA"}
+                </Text>
+                <Text style={styles.cardTitulo}>{tarea.titulo}</Text>
+                <Text style={styles.cardDescripcion}>{tarea.descripcion}</Text>
+                <Text style={styles.cardDuracion}>
+                  Duración: {tarea.duracion || "5 min"}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.boton}
+                  onPress={() =>
+                    navigation.navigate("EjercicioDinamico", { tarea })
+                  }
+                >
+                  <Text style={styles.botonTexto}>
+                    Realizar ejercicio asignado
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))}
           {visibleEjercicios.map((item) => (
             <View key={item.id} style={styles.card}>
               <View style={styles.cardImageBox}>
