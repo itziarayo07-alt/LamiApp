@@ -1,6 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from "expo-notifications";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -13,16 +16,10 @@ import {
   useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-//importamos base de datos
-import { getAuth } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
+import { notificarAlertaAlEspecialista } from "../services/lamiSyncService";
 
 const auth = getAuth();
-
-import * as Notifications from "expo-notifications";
-
 const CONGRATS_IDS_KEY = "@congrats_notif_ids";
 
 Notifications.setNotificationHandler({
@@ -36,7 +33,6 @@ Notifications.setNotificationHandler({
 export default function Anxiosimetro({ navigation, route }) {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
 
-  // helpers solo para responsive (no cambia diseño, solo escala)
   const clamp = (n, min, max) => Math.max(min, Math.min(n, max));
 
   const NAV_ITEM_W = SCREEN_WIDTH * 0.22;
@@ -77,8 +73,6 @@ export default function Anxiosimetro({ navigation, route }) {
   const animDia = useRef(new Animated.Value(0)).current;
 
   const intervalRef = useRef(null);
-
-  //  BOTÓN de ayuda
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -103,11 +97,15 @@ export default function Anxiosimetro({ navigation, route }) {
 
   // ---------- NOTIFICACIONES (solo felicitaciones) ----------
   const ensureNotifPermission = async () => {
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    if (existing === "granted") return true;
+    try {
+      const { status: existing } = await Notifications.getPermissionsAsync();
+      if (existing === "granted") return true;
 
-    const { status } = await Notifications.requestPermissionsAsync();
-    return status === "granted";
+      const { status } = await Notifications.requestPermissionsAsync();
+      return status === "granted";
+    } catch (e) {
+      return false;
+    }
   };
 
   const cancelCongratsScheduled = async () => {
@@ -124,61 +122,61 @@ export default function Anxiosimetro({ navigation, route }) {
   };
 
   const scheduleCongratsForDays = async (inicioISO, daysToSchedule = 30) => {
-    const ok = await ensureNotifPermission();
-    if (!ok) return;
+    try {
+      const ok = await ensureNotifPermission();
+      if (!ok) return;
 
-    await cancelCongratsScheduled();
+      await cancelCongratsScheduled();
 
-    const inicio = new Date(inicioISO);
-    const ids = [];
+      const inicio = new Date(inicioISO);
+      const ids = [];
 
-    for (let d = 1; d <= daysToSchedule; d++) {
-      const when = new Date(inicio);
-      when.setDate(when.getDate() + d);
+      for (let d = 1; d <= daysToSchedule; d++) {
+        const when = new Date(inicio);
+        when.setDate(when.getDate() + d);
 
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "¡Felicidades! 🎉",
-          body: `Hola, acabas de cumplir ${d} día${d === 1 ? "" : "s"} sin ansiedad 💜`,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: when,
-        },
-      });
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "¡Felicidades! 🎉",
+            body: `Hola, acabas de cumplir ${d} día${d === 1 ? "" : "s"} sin ansiedad 💜`,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: when,
+          },
+        });
 
-      ids.push(id);
+        ids.push(id);
+      }
+
+      await AsyncStorage.setItem(CONGRATS_IDS_KEY, JSON.stringify(ids));
+    } catch (e) {
+      console.log("Notificaciones omitidas en Expo Go:", e?.message);
     }
-
-    await AsyncStorage.setItem(CONGRATS_IDS_KEY, JSON.stringify(ids));
   };
 
   const obtenerGenero = async (uid) => {
     try {
-      const docRef = doc(db, "usuarios", uid); // colección "usuarios"
+      const docRef = doc(db, "usuarios", uid);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setGenero(data.genero); // "Femenino" o "Masculino"
-        setNombreUsuario(data.nombre || ""); // opcional: nombre
-      } else {
-        console.log("No existe el documento del usuario");
+        setGenero(data.genero);
+        setNombreUsuario(data.nombre || "");
       }
     } catch (e) {
       console.log("Error al obtener género:", e);
     }
   };
 
-
   useEffect(() => {
     inicializar();
 
     if (route?.params?.genero) {
-      setGenero(route.params.genero); // sigue soportando parámetro
+      setGenero(route.params.genero);
     }
 
-    // obtener género desde la base de datos
     if (auth.currentUser) {
       const uid = auth.currentUser.uid;
       obtenerGenero(uid);
@@ -188,7 +186,6 @@ export default function Anxiosimetro({ navigation, route }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
-
 
   const inicializar = async () => {
     try {
@@ -203,9 +200,7 @@ export default function Anxiosimetro({ navigation, route }) {
       if (route?.params?.start) {
         const now = new Date().toISOString();
         await AsyncStorage.setItem('inicioAnsiedad', now);
-
         await scheduleCongratsForDays(now, 30);
-
         startMonitoring(now);
         return;
       }
@@ -276,7 +271,7 @@ export default function Anxiosimetro({ navigation, route }) {
   return (
     <LinearGradient colors={['#f3e8ff', '#faf5ff']} style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        {/* NAV BAR (queda fija arriba), ahora si ya no se les va mover en el celular jejesfg*/}
+        {/* NAV BAR */}
         <View style={styles.navBar}>
           {[
             ['stats-chart-outline', 'Anxiósometro'],
@@ -306,7 +301,6 @@ export default function Anxiosimetro({ navigation, route }) {
           ))}
         </View>
 
-        
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
@@ -346,7 +340,6 @@ export default function Anxiosimetro({ navigation, route }) {
             );
           })}
 
-         
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
             <View style={[styles.whiteCard, { width: CARD_W }]}>
               <Image
@@ -372,9 +365,7 @@ export default function Anxiosimetro({ navigation, route }) {
                     onPress={async () => {
                       const now = new Date().toISOString();
                       await AsyncStorage.setItem('inicioAnsiedad', now);
-
                       await scheduleCongratsForDays(now, 30);
-
                       startMonitoring(now);
                     }}
                   >
@@ -392,10 +383,20 @@ export default function Anxiosimetro({ navigation, route }) {
                           hacerPop();
                           const now = new Date().toISOString();
                           await AsyncStorage.setItem('inicioAnsiedad', now);
-
                           await scheduleCongratsForDays(now, 30);
-
                           startMonitoring(now);
+
+                          try {
+                            await notificarAlertaAlEspecialista({
+                              origen: "anxiosimetro_apoyo",
+                              emocion: "Ansiedad (Necesito Apoyo)",
+                              animoScore: 2,
+                              notaClinica: "🚨 Presionó 'Necesito Apoyo' en el Anxiosímetro",
+                            });
+                          } catch (e) {
+                            console.warn("No se pudo enviar aviso al especialista:", e);
+                          }
+
                           navigation.navigate("PantallaEjercicios");
                         }}
                       >
@@ -437,11 +438,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // estilo para el Scroll vertical
   scrollContent: {
     alignItems: 'center',
     padding: 10,
-    paddingBottom: 30, // para que no se corte abajo
+    paddingBottom: 30,
     marginTop: 10,
   },
 
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     alignItems: 'center',
     elevation: 6,
-    marginBottom: 14, // para que el scroll tenga aire
+    marginBottom: 14,
   },
 
   image: {

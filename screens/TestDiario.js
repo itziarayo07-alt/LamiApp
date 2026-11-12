@@ -1,16 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { auth, db } from "../config/firebaseConfig";
+import { registrarTestDiarioYCompartir } from "../services/lamiSyncService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -246,7 +250,7 @@ const EMOCIONES = [
   },
 ];
 
-//  Mapeo del mood del test a la emoción del CalendarioEmocional
+// Mapeo del mood del test a la emoción del CalendarioEmocional
 function mapMoodToCalendarEmotion(moodId) {
   switch (moodId) {
     case "extasis":
@@ -452,7 +456,30 @@ export default function TestDiario({ navigation }) {
   const [selectedMood, setSelectedMood] = useState(null);
   const [answers, setAnswers] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const successAnim = useRef(new Animated.Value(0)).current;
+
+  // Datos dinámicos del especialista vinculado en Firestore
+  const [psicologoVinculado, setPsicologoVinculado] = useState(null);
+  const [compartirTerapeuta, setCompartirTerapeuta] = useState(true);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const unsub = onSnapshot(doc(db, "usuarios", uid), (snap) => {
+      if (snap.exists() && snap.data().psicologoId) {
+        setPsicologoVinculado({
+          id: snap.data().psicologoId,
+          nombre: snap.data().psicologoNombre || "tu especialista",
+        });
+      } else {
+        setPsicologoVinculado(null);
+      }
+    });
+
+    return () => unsub();
+  }, []);
 
   const currentQuestion = PREGUNTAS[currentIndex];
   const isMoodStep = currentQuestion.tipo === "mood";
@@ -477,7 +504,6 @@ export default function TestDiario({ navigation }) {
     irASiguiente();
   };
 
-  // ahora SOLO marca selección, no avanza
   const handleSelectScaleOption = (question, option) => {
     setAnswers((prev) => ({
       ...prev,
@@ -532,6 +558,9 @@ export default function TestDiario({ navigation }) {
   };
 
   const handleFinish = async () => {
+    if (guardando) return;
+    setGuardando(true);
+
     const { scoresByQuestion, totalScore } = calcularPuntajes();
 
     const payload = {
@@ -541,19 +570,28 @@ export default function TestDiario({ navigation }) {
       totalScore,
     };
 
-    console.log("RESULTADO COMPLETO TEST:", payload);
-
-    // Guardar emoción del día para el calendario
     try {
       await guardarEmocionEnCalendario(selectedMood);
+
+      // Sincroniza con Firestore y refleja en el Dashboard del terapeuta vinculado si está activado
+      const emocionLabel = selectedEmotion?.label || "Neutral";
+      await registrarTestDiarioYCompartir({
+        emocionPrincipal: emocionLabel,
+        respuestas: answers,
+        notaPersonal: `Test diario: ${emocionLabel} • Puntaje ${totalScore}/48`,
+        compartirConTerapeuta: Boolean(
+          psicologoVinculado && compartirTerapeuta
+        ),
+      });
     } catch (e) {
-      console.warn("Error al guardar emoción del día:", e);
+      console.warn("Error al guardar o sincronizar test diario:", e);
+    } finally {
+      setGuardando(false);
     }
 
     mostrarCartaExitoYNavegar(payload);
   };
 
-  // opciones con cambio de color (rosa) para todas las preguntas de escala
   const renderScaleQuestion = (question) => {
     const selectedId = answers[question.id];
 
@@ -587,6 +625,33 @@ export default function TestDiario({ navigation }) {
     );
   };
 
+  const renderToggleCompartir = () => {
+    if (!psicologoVinculado) return null;
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setCompartirTerapeuta(!compartirTerapeuta)}
+        style={styles.shareBox}
+      >
+        <Text style={styles.shareLabel} numberOfLines={1}>
+          Compartir con {psicologoVinculado.nombre}
+        </Text>
+
+        <View
+          style={[
+            styles.shareCheckbox,
+            compartirTerapeuta && styles.shareCheckboxActive,
+          ]}
+        >
+          {compartirTerapeuta && (
+            <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const isMoodContinueDisabled = !selectedMood;
   const canGoNextScale =
     currentQuestion.tipo === "scale" && !!answers[currentQuestion.id];
@@ -598,7 +663,11 @@ export default function TestDiario({ navigation }) {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() =>
+              currentIndex > 0
+                ? setCurrentIndex((prev) => prev - 1)
+                : navigation.goBack()
+            }
           >
             <Ionicons name="chevron-back" size={24} color="#4B2E83" />
           </TouchableOpacity>
@@ -615,7 +684,10 @@ export default function TestDiario({ navigation }) {
         {/* BODY */}
         <View style={styles.body}>
           {isMoodStep ? (
-            <>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.moodScrollContent}
+            >
               <View style={styles.questionHeader}>
                 <Text style={styles.questionMainTitle}>
                   {currentQuestion.titulo}
@@ -669,6 +741,9 @@ export default function TestDiario({ navigation }) {
                 </TouchableOpacity>
               )}
 
+              {/* Checkbox dinámico con el nombre del especialista vinculado */}
+              {renderToggleCompartir()}
+
               <View style={styles.footer}>
                 <TouchableOpacity
                   style={[
@@ -689,7 +764,7 @@ export default function TestDiario({ navigation }) {
                   </View>
                 </TouchableOpacity>
               </View>
-            </>
+            </ScrollView>
           ) : (
             <View style={styles.card}>
               <View style={styles.scaleQuestionWrapper}>
@@ -742,13 +817,22 @@ export default function TestDiario({ navigation }) {
                     </View>
                   )}
 
-                  {/* Botón Guardar en la 12 */}
+                  {/* Confirmación de compartir + Botón Guardar en la 12 */}
                   {isLastQuestion && (
                     <View style={styles.footer}>
+                      {renderToggleCompartir()}
+
                       <TouchableOpacity
-                        style={styles.primaryButton}
-                        activeOpacity={0.9}
-                        onPress={handleFinish}
+                        style={[
+                          styles.primaryButton,
+                          (!canGoNextScale || guardando) &&
+                            styles.primaryButtonDisabled,
+                        ]}
+                        activeOpacity={canGoNextScale ? 0.9 : 1}
+                        onPress={() => {
+                          if (!canGoNextScale || guardando) return;
+                          handleFinish();
+                        }}
                       >
                         <View style={styles.primaryButtonContent}>
                           <Ionicons
@@ -757,7 +841,9 @@ export default function TestDiario({ navigation }) {
                             color="#F9FAFB"
                             style={{ marginRight: 6 }}
                           />
-                          <Text style={styles.primaryButtonText}>Guardar</Text>
+                          <Text style={styles.primaryButtonText}>
+                            {guardando ? "Guardando..." : "Guardar"}
+                          </Text>
                         </View>
                       </TouchableOpacity>
                     </View>
@@ -794,6 +880,11 @@ export default function TestDiario({ navigation }) {
                 style={{ marginBottom: 6 }}
               />
               <Text style={styles.successTitle}>Datos registrados</Text>
+              {psicologoVinculado && compartirTerapeuta && (
+                <Text style={styles.successSubtitle}>
+                  Compartido con {psicologoVinculado.nombre}
+                </Text>
+              )}
             </Animated.View>
           </View>
         )}
@@ -844,6 +935,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     justifyContent: "center",
+  },
+  moodScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingBottom: 16,
   },
 
   card: {
@@ -988,7 +1084,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // opción base
   scaleOption: {
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -1000,7 +1095,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DDD6FE",
   },
-  // opción seleccionada (rosa)
   scaleOptionSelected: {
     backgroundColor: "#F472B6",
     borderColor: "#F472B6",
@@ -1022,8 +1116,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: "#F3E8FF",
     borderRadius: 14,
-    marginTop: 10,
-    marginBottom: 16,
+    marginTop: 6,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E9D5FF",
   },
@@ -1032,10 +1126,47 @@ const styles = StyleSheet.create({
     color: "#4B2E83",
     fontWeight: "600",
     textAlign: "center",
+    flexShrink: 1,
+  },
+
+  // Recuadro dinámico para compartir con el especialista vinculado
+  shareBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F6F2FF",
+    borderWidth: 1,
+    borderColor: "#E4D9FF",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  shareLabel: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#6D28D9",
+    flex: 1,
+    paddingRight: 10,
+  },
+  shareCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#7C3AED",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  shareCheckboxActive: {
+    backgroundColor: "#7C3AED",
+    borderColor: "#7C3AED",
   },
 
   footer: {
-    marginTop: 12,
+    marginTop: 10,
   },
   primaryButton: {
     backgroundColor: "#4B2E83",
@@ -1092,5 +1223,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
+  },
+  successSubtitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6D28D9",
+    marginTop: 4,
   },
 });

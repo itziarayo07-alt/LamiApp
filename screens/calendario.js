@@ -22,6 +22,7 @@ import * as Sharing from "expo-sharing";
 import { LineChart } from "react-native-chart-kit";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
+import { notificarAlertaAlEspecialista } from "../services/lamiSyncService";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -54,23 +55,18 @@ export default function CalendarioEmocional({ navigation }) {
     { label: "Calmado 😌", color: "#81C784", value: 4 },
   ];
 
-
   useEffect(() => {
     (async () => {
       try {
-        // emociones por día
         const s = await AsyncStorage.getItem("dayFeelings_v1");
         if (s) setDayFeelings(JSON.parse(s));
 
-        // notas por día
         const notesStr = await AsyncStorage.getItem("dayNotes_v1");
         if (notesStr) setDayNotes(JSON.parse(notesStr));
 
-        // leer si el test de personalidad ya se hizo
         const done = await AsyncStorage.getItem("testPersonalidadHecho");
         if (done === "SI") setPersonalityDone(true);
 
-        // leer resumen del resultado del test
         const resJson = await AsyncStorage.getItem(
           "testPersonalidadResultado_v1"
         );
@@ -88,45 +84,57 @@ export default function CalendarioEmocional({ navigation }) {
     })();
   }, []);
 
-  
   useEffect(() => {
     AsyncStorage.setItem("dayFeelings_v1", JSON.stringify(dayFeelings)).catch(
       (e) => console.warn("Error saving feelings:", e)
     );
   }, [dayFeelings]);
 
-  // guardar nots
   useEffect(() => {
     AsyncStorage.setItem("dayNotes_v1", JSON.stringify(dayNotes)).catch((e) =>
       console.warn("Error saving notes:", e)
     );
   }, [dayNotes]);
 
-  // guardar emotion (hasta 2 por día)
-  const saveFeeling = (date, emotion) => {
+  // Guardar emoción (hasta 2 por día) y alertar al especialista vinculado si es Ansiedad o Tristeza
+  const saveFeeling = async (date, emotion) => {
     if (!date) return Alert.alert("Selecciona una fecha primero");
 
     const existing = dayFeelings[date];
     let newValue;
 
     if (!existing) {
-      // primera emoción del día
       newValue = [emotion];
     } else if (Array.isArray(existing)) {
       if (existing.length === 1) {
-        // segunda emoción
         newValue = [...existing, emotion];
       } else {
-        // ya hay 2 → reemplazamos la segunda por la nueva
         newValue = [existing[0], emotion];
       }
     } else {
-      // dato viejo (una sola emoción como objeto)
       newValue = [existing, emotion];
     }
 
     const updated = { ...dayFeelings, [date]: newValue };
     setDayFeelings(updated);
+
+    // Si registra Ansioso, Triste o Muy Triste, avisar en tiempo real al terapeuta vinculado
+    const labelLower = (emotion.label || "").toLowerCase();
+    const esAnsiedadOTristeza =
+      labelLower.includes("ansios") || labelLower.includes("triste");
+
+    if (esAnsiedadOTristeza) {
+      try {
+        await notificarAlertaAlEspecialista({
+          origen: "calendario",
+          emocion: emotion.label,
+          animoScore: emotion.value || 2,
+          notaClinica: `📅 Registró "${emotion.label}" en su Calendario (${date})`,
+        });
+      } catch (e) {
+        console.warn("No se pudo sincronizar alerta del calendario:", e);
+      }
+    }
   };
 
   // Guardar nota del día seleccionado
@@ -147,7 +155,6 @@ export default function CalendarioEmocional({ navigation }) {
     Alert.alert("Nota guardada", "Tu nota del día se ha guardado.");
   };
 
-  // Chart data: promedio de valores si hay 2 emociones
   const sortedDates = Object.keys(dayFeelings).sort();
   const chartLabels = sortedDates.map((d) => d.slice(5));
   const chartValues = sortedDates.map((d) => {
@@ -184,7 +191,6 @@ export default function CalendarioEmocional({ navigation }) {
     },
   };
 
-  // PDF Export
   const exportToPDF = async () => {
     try {
       if (sortedDates.length === 0) {
@@ -293,7 +299,6 @@ export default function CalendarioEmocional({ navigation }) {
     <LinearGradient colors={["#f3e8ff", "#faf5ff"]} style={styles.screen}>
       <StatusBar backgroundColor="#7C3AED" barStyle="light-content" />
       <SafeAreaView style={{ flex: 1 }}>
-        
         <View style={styles.navBar}>
           {[
             ["stats-chart-outline", "Anxiósometro"],
@@ -319,7 +324,6 @@ export default function CalendarioEmocional({ navigation }) {
                 color={activeNav === i ? "#7C3AED" : "#9CA3AF"}
               />
 
-              
               <Text
                 style={[
                   styles.navLabelActive,
@@ -332,12 +336,10 @@ export default function CalendarioEmocional({ navigation }) {
           ))}
         </View>
 
-        
         <View style={styles.container}>
           <ScrollView contentContainerStyle={{ paddingBottom: 50 }}>
             <Text style={styles.title}>Calendario Emocional</Text>
 
-            {/* Calendario con día personalizado (dos colores) */}
             <Calendar
               dayComponent={({ date, state }) => {
                 const dateString = date.dateString;
@@ -365,7 +367,6 @@ export default function CalendarioEmocional({ navigation }) {
               }}
             />
 
-            {/* Selección de emociones */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Selecciona una emoción</Text>
 
@@ -408,7 +409,6 @@ export default function CalendarioEmocional({ navigation }) {
               </Text>
             </View>
 
-            {/* Nota del día */}
             {selectedDay && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
@@ -440,7 +440,6 @@ export default function CalendarioEmocional({ navigation }) {
               </View>
             )}
 
-            {/* Grafica */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Semana / Histórico</Text>
 
@@ -474,14 +473,12 @@ export default function CalendarioEmocional({ navigation }) {
               )}
             </View>
 
-            {/* Boton PDF, debemos probar en apk niñasss */}
             <View style={styles.actions}>
               <TouchableOpacity style={styles.pdfBtn} onPress={exportToPDF}>
                 <Text style={styles.pdfBtnText}>📄 Exportar reporte (PDF)</Text>
               </TouchableOpacity>
             </View>
 
-            {/*test de personalidad */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Tu test de personalidad</Text>
 
@@ -552,7 +549,6 @@ export default function CalendarioEmocional({ navigation }) {
   );
 }
 
-// dos colores en el calendario
 function DayWithEmotions({
   date,
   state,
@@ -632,14 +628,9 @@ function DayWithEmotions({
   );
 }
 
-//styles
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-
-  // CONTENEDOR BLANCO
   container: { flex: 1, backgroundColor: "#FFF", padding: 16 },
-
-  // NAV BAR (copiado de Anxiosimetro)
   navBar: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -650,8 +641,6 @@ const styles = StyleSheet.create({
   navItem: {
     alignItems: "center",
     width: screenWidth * 0.22,
-
- 
     height: 48,
     justifyContent: "center",
   },
@@ -661,7 +650,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "700",
   },
-
   title: {
     fontSize: 22,
     fontWeight: "700",
@@ -702,7 +690,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   pdfBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-
   noteInput: {
     minHeight: 80,
     borderRadius: 10,
@@ -732,8 +719,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
   },
-
-  // Día personalizado
   dayOuter: {
     alignItems: "center",
     justifyContent: "center",
@@ -761,8 +746,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
   },
-
-  // estilos test de personalidad
   personalityReminderBox: {
     marginTop: 8,
     padding: 14,
@@ -850,4 +833,3 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 });
-
