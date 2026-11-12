@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -11,7 +12,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { db } from "../config/firebaseConfig";
+import { auth, db } from "../config/firebaseConfig";
 
 // 1. VINCULAR PACIENTE CON PSICÓLOGO (ACTUALIZADA CON FOTO Y ESPECIALIDAD)
 export async function vincularConPsicologo(patientUid, codigoInput) {
@@ -47,7 +48,6 @@ export async function vincularConPsicologo(patientUid, codigoInput) {
 
 // 2. ENVIAR EJERCICIO O TAREA (Desde la App del Psicólogo hacia el Paciente)
 export async function enviarEjercicioAPaciente(patientUid, psicologoId, ejercicio) {
-  // ejercicio = { titulo, descripcion, duracion, enfoque, pasos: [...] }
   return await addDoc(collection(db, "usuarios", patientUid, "tareas_asignadas"), {
     ...ejercicio,
     psicologoId,
@@ -80,8 +80,7 @@ export async function completarEjercicioAsignado(patientUid, tareaId) {
     completadoEn: serverTimestamp(),
   });
 
-  // Marca al paciente como activo este mes para reducir la cuota del psicólogo a $0
-  const mesActual = new Date().toISOString().slice(0, 7); // "2026-11"
+  const mesActual = new Date().toISOString().slice(0, 7);
   await updateDoc(doc(db, "usuarios", patientUid), {
     activoEnMes: mesActual,
     ultimaActividad: serverTimestamp(),
@@ -117,5 +116,122 @@ export async function guardarNotaClinica(patientUid, psicologoId, textoNota) {
 export async function actualizarProtocoloPaciente(patientUid, nuevoProtocolo) {
   return await updateDoc(doc(db, "usuarios", patientUid), {
     protocoloClinico: nuevoProtocolo,
+  });
+}
+
+// 8. GUARDAR TEST DIARIO Y REFLEJARLO AL ESPECIALISTA VINCULADO (SI EL PACIENTE AUTORIZA)
+const MAPA_EMOCIONES = {
+  "Éxtasis": { animo: 10, estado: "estable" },
+  "Muy feliz": { animo: 9, estado: "estable" },
+  "Feliz": { animo: 8, estado: "estable" },
+  "Emoción": { animo: 8, estado: "estable" },
+  "Calma": { animo: 8, estado: "estable" },
+  "Neutral": { animo: 6, estado: "atencion" },
+  "Triste": { animo: 4, estado: "atencion" },
+  "Estrés": { animo: 4, estado: "atencion" },
+  "Muy triste": { animo: 2, estado: "urgente" },
+  "Ansiedad": { animo: 2, estado: "urgente" },
+};
+
+export async function registrarTestDiarioYCompartir({
+  emocionPrincipal,
+  respuestas = {},
+  notaPersonal = "",
+  compartirConTerapeuta = false,
+}) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Sesión no iniciada.");
+
+  const userRef = doc(db, "usuarios", uid);
+  const userSnap = await getDoc(userRef);
+  const userData = userSnap.exists() ? userSnap.data() : {};
+
+  const psicologoId = userData.psicologoId || null;
+  const compartidoEfectivo = Boolean(compartirConTerapeuta && psicologoId);
+
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const mesActual = new Date().toISOString().slice(0, 7);
+  const horaFormateada = new Date().toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const metricas = MAPA_EMOCIONES[emocionPrincipal] || {
+    animo: 6,
+    estado: "estable",
+  };
+
+  await addDoc(collection(db, "usuarios", uid, "checkins"), {
+    origen: "test_diario",
+    emocion: emocionPrincipal,
+    animoScore: metricas.animo,
+    estadoClinico: metricas.estado,
+    respuestas,
+    nota: notaPersonal,
+    compartidoConEspecialista: compartidoEfectivo,
+    psicologoId: compartidoEfectivo ? psicologoId : null,
+    fechaISO: hoyISO,
+    creadoEn: serverTimestamp(),
+  });
+
+  if (compartidoEfectivo) {
+    await updateDoc(userRef, {
+      ultimoAnimo: metricas.animo,
+      estadoClinico: metricas.estado,
+      ultimoCheckinNota:
+        notaPersonal.trim() ||
+        `Test diario: ${emocionPrincipal} (${metricas.animo}/10)`,
+      ultimoCheckinFecha: hoyISO,
+      horaUltimoCheckin: horaFormateada,
+      activoEnMes: mesActual,
+    });
+  }
+}
+
+// 9. NOTIFICAR AL ESPECIALISTA VINCULADO DESDE ANXIOSÍMETRO ("Necesito Apoyo") O CALENDARIO (Ansiedad / Tristeza)
+export async function notificarAlertaAlEspecialista({
+  origen, // "anxiosimetro_apoyo" | "calendario"
+  emocion = "Ansiedad",
+  animoScore = 2,
+  notaClinica,
+}) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+
+  const userRef = doc(db, "usuarios", uid);
+  const userSnap = await getDoc(userRef);
+  if (!userSnap.exists()) return;
+
+  const userData = userSnap.data();
+  const psicologoId = userData.psicologoId;
+
+  if (!psicologoId) return;
+
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const mesActual = new Date().toISOString().slice(0, 7);
+  const horaFormateada = new Date().toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  await addDoc(collection(db, "usuarios", uid, "checkins"), {
+    origen,
+    emocion,
+    animoScore,
+    estadoClinico: "urgente",
+    nota: notaClinica,
+    compartidoConEspecialista: true,
+    psicologoId,
+    fechaISO: hoyISO,
+    creadoEn: serverTimestamp(),
+  });
+
+  await updateDoc(userRef, {
+    ultimoAnimo: animoScore,
+    estadoClinico: "urgente",
+    ultimoCheckinNota: notaClinica,
+    ultimoCheckinFecha: hoyISO,
+    horaUltimoCheckin: horaFormateada,
+    activoEnMes: mesActual,
   });
 }
