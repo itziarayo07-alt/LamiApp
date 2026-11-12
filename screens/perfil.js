@@ -6,6 +6,7 @@ import {
   Dimensions,
   Image,
   Linking,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,7 @@ import {
   MaterialIcons,
 } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 
 import * as Device from "expo-device";
@@ -63,6 +65,11 @@ export default function ProfileScreen({ navigation }) {
   const [psicologoVinculado, setPsicologoVinculado] = useState(null);
   const [vinculando, setVinculando] = useState(false);
   const [psicologoFoto, setPsicologoFoto] = useState(null);
+
+  // Estados para escáner QR en Expo Go
+  const [modalEscanerQR, setModalEscanerQR] = useState(false);
+  const [qrEscaneado, setQrEscaneado] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   // Centro de ayuda
   const [showHelp, setShowHelp] = useState(false);
@@ -287,6 +294,55 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  // Abrir cámara para escanear QR del psicólogo
+  const abrirEscanerQR = async () => {
+    if (!cameraPermission?.granted) {
+      const res = await requestCameraPermission();
+      if (!res.granted) {
+        Alert.alert(
+          "Permiso de cámara",
+          "Activa el permiso de cámara para escanear el código QR de tu especialista."
+        );
+        return;
+      }
+    }
+    setQrEscaneado(false);
+    setModalEscanerQR(true);
+  };
+
+  // Procesar resultado del QR escaneado ("LAMI-LINK|PSI-492|uid" o "PSI-492")
+  const handleBarCodeScanned = async ({ data }) => {
+    if (qrEscaneado || vinculando) return;
+    setQrEscaneado(true);
+
+    const texto = String(data || "").trim().toUpperCase();
+    const codigoExtraido = texto.startsWith("LAMI-LINK|")
+      ? texto.split("|")[1] || ""
+      : texto;
+
+    setModalEscanerQR(false);
+    setCodigoPsicologo(codigoExtraido);
+
+    try {
+      setVinculando(true);
+      const res = await vincularConPsicologo(
+        auth.currentUser.uid,
+        codigoExtraido
+      );
+      setPsicologoVinculado(res.psicologoNombre);
+      setPsicologoFoto(res.psicologoFoto);
+      Alert.alert(
+        "¡Vinculación exitosa!",
+        `Ahora estás conectado con ${res.psicologoNombre}`
+      );
+    } catch (err) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setVinculando(false);
+      setQrEscaneado(false);
+    }
+  };
+
   const handleLogout = async () => {
     // Alerta de confirmación antes de cerrar sesión
     Alert.alert(
@@ -495,7 +551,6 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.sectionSubtitle}>
                 Toca una opción para actualizar cómo te sientes.
               </Text>
-              
 
               <View style={styles.chipsRow}>
                 {["Tranquila😌", "Nerviosa 😰", "Cansada 🥱"].map((item) => (
@@ -522,30 +577,75 @@ export default function ProfileScreen({ navigation }) {
                 ))}
               </View>
             </View>
+
             {/* VINCULACIÓN CON PSICÓLOGO */}
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Mi Especialista 🩺</Text>
 
               {psicologoVinculado ? (
-                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#F1F5F9", padding: 12, borderRadius: 16 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "#F1F5F9",
+                    padding: 12,
+                    borderRadius: 16,
+                  }}
+                >
                   {psicologoFoto ? (
                     <Image
                       source={{ uri: psicologoFoto }}
-                      style={{ width: 54, height: 54, borderRadius: 27, marginRight: 12, borderWidth: 2, borderColor: "#6192A4" }}
+                      style={{
+                        width: 54,
+                        height: 54,
+                        borderRadius: 27,
+                        marginRight: 12,
+                        borderWidth: 2,
+                        borderColor: "#6192A4",
+                      }}
                     />
                   ) : (
-                    <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: "#B3D3DA", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
-                      <Ionicons name="person-outline" size={26} color="#1E293B" />
+                    <View
+                      style={{
+                        width: 54,
+                        height: 54,
+                        borderRadius: 27,
+                        backgroundColor: "#B3D3DA",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons
+                        name="person-outline"
+                        size={26}
+                        color="#1E293B"
+                      />
                     </View>
                   )}
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, color: "#6192A4", fontWeight: "700" }}>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: "#6192A4",
+                        fontWeight: "700",
+                      }}
+                    >
                       ESPECIALISTA VINCULADO
                     </Text>
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: "#1E293B", marginTop: 2 }}>
+                    <Text
+                      style={{
+                        fontSize: 16,
+                        fontWeight: "700",
+                        color: "#1E293B",
+                        marginTop: 2,
+                      }}
+                    >
                       {psicologoVinculado}
                     </Text>
-                    <Text style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                    <Text
+                      style={{ fontSize: 12, color: "#475569", marginTop: 2 }}
+                    >
                       Tus indicaciones aparecerán en Checking.
                     </Text>
                   </View>
@@ -553,17 +653,31 @@ export default function ProfileScreen({ navigation }) {
               ) : (
                 <>
                   <Text style={styles.sectionSubtitle}>
-                    Ingresa el código que te dio tu psicólogo en consulta (ej. PSI-492).
+                    Ingresa el código que te dio tu psicólogo en consulta (ej.
+                    PSI-492) o escanea su código QR.
                   </Text>
                   <View style={styles.inputContainer}>
                     <TextInput
-                      style={[styles.input, { fontWeight: "700", letterSpacing: 2 }]}
+                      style={[
+                        styles.input,
+                        { fontWeight: "700", letterSpacing: 2 },
+                      ]}
                       placeholder="PSI-492"
                       placeholderTextColor="#9CA3AF"
                       autoCapitalize="characters"
                       value={codigoPsicologo}
                       onChangeText={setCodigoPsicologo}
                     />
+                    <TouchableOpacity
+                      onPress={abrirEscanerQR}
+                      style={styles.qrScanInlineBtn}
+                    >
+                      <Ionicons
+                        name="qr-code-outline"
+                        size={22}
+                        color="#7C3AED"
+                      />
+                    </TouchableOpacity>
                   </View>
 
                   <TouchableOpacity
@@ -571,20 +685,45 @@ export default function ProfileScreen({ navigation }) {
                     onPress={async () => {
                       try {
                         setVinculando(true);
-                        const res = await vincularConPsicologo(auth.currentUser.uid, codigoPsicologo);
+                        const res = await vincularConPsicologo(
+                          auth.currentUser.uid,
+                          codigoPsicologo
+                        );
                         setPsicologoVinculado(res.psicologoNombre);
                         setPsicologoFoto(res.psicologoFoto);
-                        Alert.alert("¡Vinculación exitosa!", `Ahora estás conectado con ${res.psicologoNombre}`);
+                        Alert.alert(
+                          "¡Vinculación exitosa!",
+                          `Ahora estás conectado con ${res.psicologoNombre}`
+                        );
                       } catch (err) {
                         Alert.alert("Error", err.message);
                       } finally {
                         setVinculando(false);
                       }
                     }}
-                    style={[styles.sessionButton, { marginTop: 12, marginBottom: 0 }]}
+                    style={[
+                      styles.sessionButton,
+                      { marginTop: 12, marginBottom: 8 },
+                    ]}
                   >
                     <Text style={styles.sessionButtonText}>
-                      {vinculando ? "Vinculando..." : "Vincular con mi psicólogo"}
+                      {vinculando
+                        ? "Vinculando..."
+                        : "Vincular con mi psicólogo"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={abrirEscanerQR}
+                    style={styles.qrScanButton}
+                  >
+                    <Ionicons
+                      name="qr-code-outline"
+                      size={18}
+                      color="#7C3AED"
+                    />
+                    <Text style={styles.qrScanButtonText}>
+                      Escanear QR en consulta
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -603,7 +742,11 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
               <View style={styles.inputContainer}>
-                <TextInput style={styles.input} value={name} onChangeText={setName} />
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                />
               </View>
 
               {/* CORREO */}
@@ -657,42 +800,44 @@ export default function ProfileScreen({ navigation }) {
 
               <Text style={styles.labelInline}>Meta diaria</Text>
               <View style={styles.chipsRow}>
-                {["3 chequeos al día", "5 chequeos al día", "Solo cuando lo necesite"].map(
-                  (item) => (
-                    <TouchableOpacity
-                      key={item}
-                      style={[
-                        styles.chipSmall,
-                        goal === item && styles.chipActiveColored,
-                      ]}
-                      onPress={async () => {
-                        setGoal(item);
-                        await savePreferences(item, notificationsOn);
+                {[
+                  "3 chequeos al día",
+                  "5 chequeos al día",
+                  "Solo cuando lo necesite",
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item}
+                    style={[
+                      styles.chipSmall,
+                      goal === item && styles.chipActiveColored,
+                    ]}
+                    onPress={async () => {
+                      setGoal(item);
+                      await savePreferences(item, notificationsOn);
 
-                        if (notificationsOn) {
-                          const ok = await ensureNotifPermission();
-                          if (!ok) {
-                            Alert.alert(
-                              "Permiso requerido",
-                              "Activa permisos de notificaciones para que te recordemos realizar los ejercicios."
-                            );
-                            return;
-                          }
-                          await scheduleForGoal(item);
+                      if (notificationsOn) {
+                        const ok = await ensureNotifPermission();
+                        if (!ok) {
+                          Alert.alert(
+                            "Permiso requerido",
+                            "Activa permisos de notificaciones para que te recordemos realizar los ejercicios."
+                          );
+                          return;
                         }
-                      }}
+                        await scheduleForGoal(item);
+                      }
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.chipTextSmall,
+                        goal === item && styles.chipTextActive,
+                      ]}
                     >
-                      <Text
-                        style={[
-                          styles.chipTextSmall,
-                          goal === item && styles.chipTextActive,
-                        ]}
-                      >
-                        {item}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                )}
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               <View style={[styles.preferenceRow, { marginTop: 20 }]}>
@@ -748,7 +893,9 @@ export default function ProfileScreen({ navigation }) {
 
               {/* Configuración */}
               <TouchableOpacity style={styles.menuItem} onPress={toggleConfig}>
-                <View style={[styles.iconBubble, { backgroundColor: "#e0f2fe" }]}>
+                <View
+                  style={[styles.iconBubble, { backgroundColor: "#e0f2fe" }]}
+                >
                   <Ionicons name="settings-sharp" size={18} color="#1D4ED8" />
                 </View>
 
@@ -788,7 +935,8 @@ export default function ProfileScreen({ navigation }) {
                     <Text style={styles.helpAnswer}>Versión 2.0.0</Text>
                     <Text style={styles.helpAnswer}> </Text>
                     <Text style={styles.helpAnswer}>
-                      Esta app fue creada con cariño para acompañarte, no para exigirte.
+                      Esta app fue creada con cariño para acompañarte, no para
+                      exigirte.
                     </Text>
                   </View>
 
@@ -820,7 +968,9 @@ export default function ProfileScreen({ navigation }) {
 
                       <TouchableOpacity
                         onPress={() =>
-                          setFeedbackMsg("Gracias por decirlo 🤍 Seguiremos mejorando para ti.")
+                          setFeedbackMsg(
+                            "Gracias por decirlo 🤍 Seguiremos mejorando para ti."
+                          )
                         }
                         style={{
                           backgroundColor: "#E5E7EB",
@@ -855,8 +1005,14 @@ export default function ProfileScreen({ navigation }) {
 
               {/* Centro de ayuda */}
               <TouchableOpacity style={styles.menuItem} onPress={toggleHelp}>
-                <View style={[styles.iconBubble, { backgroundColor: "#fef3c7" }]}>
-                  <Ionicons name="help-circle-outline" size={18} color="#B45309" />
+                <View
+                  style={[styles.iconBubble, { backgroundColor: "#fef3c7" }]}
+                >
+                  <Ionicons
+                    name="help-circle-outline"
+                    size={18}
+                    color="#B45309"
+                  />
                 </View>
 
                 <Text style={styles.menuText}>Centro de ayuda</Text>
@@ -873,36 +1029,47 @@ export default function ProfileScreen({ navigation }) {
 
               {showHelp && (
                 <View style={styles.helpContainer}>
-                  <Text style={styles.helpQuestion}>¿Cómo reinicio el contador?</Text>
+                  <Text style={styles.helpQuestion}>
+                    ¿Cómo reinicio el contador?
+                  </Text>
                   <Text style={styles.helpAnswer}>
-                    Puedes reiniciar el contador desde el botón de apoyo en la pantalla
-                    principal. El tiempo comenzará nuevamente desde cero.
+                    Puedes reiniciar el contador desde el botón de apoyo en la
+                    pantalla principal. El tiempo comenzará nuevamente desde
+                    cero.
                   </Text>
 
-                  <Text style={styles.helpQuestion}>¿Por qué no me llegan felicitaciones?</Text>
+                  <Text style={styles.helpQuestion}>
+                    ¿Por qué no me llegan felicitaciones?
+                  </Text>
                   <Text style={styles.helpAnswer}>
-                    Revisa que las notificaciones estén activadas y que el modo ahorro
-                    de batería no esté bloqueando la app.
+                    Revisa que las notificaciones estén activadas y que el modo
+                    ahorro de batería no esté bloqueando la app.
                   </Text>
 
-                  <Text style={styles.helpQuestion}>¿Qué pasa si cambio de celular?</Text>
+                  <Text style={styles.helpQuestion}>
+                    ¿Qué pasa si cambio de celular?
+                  </Text>
                   <Text style={styles.helpAnswer}>
-                    Los datos se guardan localmente en tu dispositivo. Al cambiar de
-                    celular o desinstalar la app, el contador se reiniciará.
+                    Los datos se guardan localmente en tu dispositivo. Al
+                    cambiar de celular o desinstalar la app, el contador se
+                    reiniciará.
                   </Text>
 
-                  <Text style={styles.helpQuestion}>¿Cómo funciona el calendario?</Text>
+                  <Text style={styles.helpQuestion}>
+                    ¿Cómo funciona el calendario?
+                  </Text>
                   <Text style={styles.helpAnswer}>
-                    El calendario muestra de forma visual los días que has avanzado y
-                    tu seguimiento.
+                    El calendario muestra de forma visual los días que has
+                    avanzado y tu seguimiento.
                   </Text>
 
                   <Text style={styles.helpQuestion}>
                     ¿Puedo volver a hacer el test de personalidad?
                   </Text>
                   <Text style={styles.helpAnswer}>
-                    No. Solo se puede responder una sola vez, mas adelante haremos
-                    mejoras para descubrir como va cambiando tu personalidad.
+                    No. Solo se puede responder una sola vez, mas adelante
+                    haremos mejoras para descubrir como va cambiando tu
+                    personalidad.
                   </Text>
 
                   <View style={styles.crisisBox}>
@@ -911,20 +1078,25 @@ export default function ProfileScreen({ navigation }) {
                     </Text>
 
                     <Text style={styles.helpAnswer}>
-                      Si estás pasando por un momento muy difícil o necesitas hablar con
-                      alguien profesional, hay apoyo gratuito y confidencial.
-                      Atención las 24 horas, los 365 días del año.
+                      Si estás pasando por un momento muy difícil o necesitas
+                      hablar con alguien profesional, hay apoyo gratuito y
+                      confidencial. Atención las 24 horas, los 365 días del año.
                     </Text>
 
                     <Text style={styles.crisisPhone}>
-                      📞 Línea de intervención en crisis psicológicas (Veracruz)
+                      📞 Línea de intervención en crisis psicológicas
+                      (Veracruz)
                     </Text>
 
-                    <TouchableOpacity onPress={() => Linking.openURL("tel:8002603100")}>
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL("tel:8002603100")}
+                    >
                       <Text style={styles.crisisNumber}>800 260 3100</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => Linking.openURL("tel:2288144465")}>
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL("tel:2288144465")}
+                    >
                       <Text style={styles.crisisNumber}>228 814 4465</Text>
                     </TouchableOpacity>
 
@@ -932,7 +1104,9 @@ export default function ProfileScreen({ navigation }) {
                       📞 Línea de la Vida (México)
                     </Text>
 
-                    <TouchableOpacity onPress={() => Linking.openURL("tel:8009112000")}>
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL("tel:8009112000")}
+                    >
                       <Text style={styles.crisisNumber}>800 911 2000</Text>
                     </TouchableOpacity>
 
@@ -944,8 +1118,13 @@ export default function ProfileScreen({ navigation }) {
               )}
 
               {/* Eliminar cuenta */}
-              <TouchableOpacity style={styles.menuItem} onPress={handleDeleteAccount}>
-                <View style={[styles.iconBubble, { backgroundColor: "#fee2e2" }]}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleDeleteAccount}
+              >
+                <View
+                  style={[styles.iconBubble, { backgroundColor: "#fee2e2" }]}
+                >
                   <Ionicons name="warning-outline" size={18} color="#DC2626" />
                 </View>
                 <Text style={[styles.menuText, { color: "#DC2626" }]}>
@@ -958,7 +1137,9 @@ export default function ProfileScreen({ navigation }) {
                 style={[styles.menuItem, { marginTop: 6 }]}
                 onPress={handleLogout}
               >
-                <View style={[styles.iconBubble, { backgroundColor: "#e5e7eb" }]}>
+                <View
+                  style={[styles.iconBubble, { backgroundColor: "#e5e7eb" }]}
+                >
                   <Ionicons name="log-out-outline" size={18} color="#111827" />
                 </View>
                 <Text style={[styles.menuText, { color: "#111827" }]}>
@@ -969,6 +1150,42 @@ export default function ProfileScreen({ navigation }) {
           </ScrollView>
         </View>
       </LinearGradient>
+
+      {/* MODAL DE ESCÁNER QR PARA VINCULAR CON PSICÓLOGO */}
+      <Modal
+        visible={modalEscanerQR}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalEscanerQR(false)}
+      >
+        <View style={styles.qrModalOverlay}>
+          <View style={styles.qrModalCard}>
+            <View style={styles.qrModalHeader}>
+              <Text style={styles.sectionTitle}>Escanear QR del Psicólogo</Text>
+              <TouchableOpacity onPress={() => setModalEscanerQR(false)}>
+                <Ionicons name="close" size={24} color="#4B5563" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.qrCameraBox}>
+              <CameraView
+                style={StyleSheet.absoluteFillObject}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={
+                  qrEscaneado ? undefined : handleBarCodeScanned
+                }
+              />
+              <View style={styles.qrTargetFrame} />
+            </View>
+
+            <Text style={styles.qrModalHint}>
+              Apunta la cámara al código QR que te muestra tu especialista en
+              consulta.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1104,6 +1321,70 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 14,
+  },
+
+  qrScanInlineBtn: {
+    padding: 6,
+  },
+  qrScanButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    borderRadius: 16,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  qrScanButtonText: {
+    color: "#7C3AED",
+    fontWeight: "700",
+    fontSize: 13.5,
+  },
+  qrModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  qrModalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 20,
+    alignItems: "center",
+    gap: 14,
+  },
+  qrModalHeader: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  qrCameraBox: {
+    width: 240,
+    height: 240,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 3,
+    borderColor: "#7C3AED",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  qrTargetFrame: {
+    width: 150,
+    height: 150,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  qrModalHint: {
+    fontSize: 12.5,
+    color: "#6B7280",
+    textAlign: "center",
   },
 
   section: {
@@ -1325,4 +1606,3 @@ const styles = StyleSheet.create({
     color: "#374151",
   },
 });
-

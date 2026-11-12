@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Provider as PaperProvider } from 'react-native-paper';
 
 import EjercicioDinamico from "./screens/EjercicioDinamico";
+import FlywheelQR from "./screens/psicologo/FlywheelQR";
 import PsicologoDashboard from "./screens/psicologo/PsicologoDashboard";
 import RegistroPsicologo from "./screens/psicologo/RegistroPsicologo";
 import SalaTeleconsulta from "./screens/psicologo/SalaTeleconsulta";
@@ -62,7 +63,8 @@ export default function App() {
           <Stack.Screen name="EjercicioDinamico" component={EjercicioDinamico} />
           <Stack.Screen name="PsicologoDashboard" component={PsicologoDashboard} />
           <Stack.Screen name="RegistroPsicologo" component={RegistroPsicologo} />
-          <Stack.Screen name="SalaTeleconsulta" component={SalaTeleconsulta} />   
+          <Stack.Screen name="SalaTeleconsulta" component={SalaTeleconsulta} /> 
+          <Stack.Screen name="FlywheelQR" component={FlywheelQR} />  
 
 
         </Stack.Navigator>
