@@ -7,6 +7,8 @@ import { Provider as PaperProvider } from 'react-native-paper';
 
 import PsicologoDashboard from "./screens/psicologo/PsicologoDashboard";
 import EjercicioDinamico from "./screens/EjercicioDinamico";
+import RegistroPsicologo from "./screens/psicologo/RegistroPsicologo";
+
 import Anxiosimetro from './screens/anxiosimetro';
 import Autoabrazo from "./screens/Autoabrazo";
 import Calendario from './screens/calendario';
@@ -58,6 +60,7 @@ export default function App() {
           <Stack.Screen name="Escaneo" component={Escaneo} />
           <Stack.Screen name="EjercicioDinamico" component={EjercicioDinamico} />
           <Stack.Screen name="PsicologoDashboard" component={PsicologoDashboard} />
+          <Stack.Screen name="RegistroPsicologo" component={RegistroPsicologo} />
 
 
 

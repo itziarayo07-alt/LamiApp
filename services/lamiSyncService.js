@@ -13,7 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 
-// 1. VINCULAR PACIENTE CON PSICÓLOGO (Desde perfil.js del paciente)
+// 1. VINCULAR PACIENTE CON PSICÓLOGO (ACTUALIZADA CON FOTO Y ESPECIALIDAD)
 export async function vincularConPsicologo(patientUid, codigoInput) {
   const codigoLimpio = codigoInput.trim().toUpperCase();
   const q = query(
@@ -32,12 +32,16 @@ export async function vincularConPsicologo(patientUid, codigoInput) {
   await updateDoc(doc(db, "usuarios", patientUid), {
     psicologoId: psicologoDoc.id,
     psicologoNombre: psicologoData.nombre || "Especialista Lami",
+    psicologoFoto: psicologoData.fotoPerfil || null,
+    psicologoEspecialidad: psicologoData.especialidad || "",
     vinculadoEn: serverTimestamp(),
   });
 
   return {
     psicologoId: psicologoDoc.id,
     psicologoNombre: psicologoData.nombre,
+    psicologoFoto: psicologoData.fotoPerfil || null,
+    psicologoEspecialidad: psicologoData.especialidad || "",
   };
 }
 

@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Image,
   Linking,
   SafeAreaView,
   ScrollView,
@@ -61,6 +62,7 @@ export default function ProfileScreen({ navigation }) {
   const [codigoPsicologo, setCodigoPsicologo] = useState("");
   const [psicologoVinculado, setPsicologoVinculado] = useState(null);
   const [vinculando, setVinculando] = useState(false);
+  const [psicologoFoto, setPsicologoFoto] = useState(null);
 
   // Centro de ayuda
   const [showHelp, setShowHelp] = useState(false);
@@ -275,6 +277,9 @@ export default function ProfileScreen({ navigation }) {
         setPhone(data.telefono ?? "");
         if (data.psicologoNombre) {
           setPsicologoVinculado(data.psicologoNombre);
+        }
+        if (data.psicologoFoto) {
+          setPsicologoFoto(data.psicologoFoto);
         }
       }
     } catch (error) {
@@ -522,16 +527,28 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.sectionTitle}>Mi Especialista 🩺</Text>
 
               {psicologoVinculado ? (
-                <View style={{ backgroundColor: "#EDE9FE", padding: 12, borderRadius: 14 }}>
-                  <Text style={{ fontSize: 12, color: "#6D28D9", fontWeight: "700" }}>
-                    VINCULADO EN LAMI
-                  </Text>
-                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#111827", marginTop: 2 }}>
-                    {psicologoVinculado}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: "#4B5563", marginTop: 4 }}>
-                    Tus ejercicios asignados aparecerán automáticamente en Checking.
-                  </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#F1F5F9", padding: 12, borderRadius: 16 }}>
+                  {psicologoFoto ? (
+                    <Image
+                      source={{ uri: psicologoFoto }}
+                      style={{ width: 54, height: 54, borderRadius: 27, marginRight: 12, borderWidth: 2, borderColor: "#6192A4" }}
+                    />
+                  ) : (
+                    <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: "#B3D3DA", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+                      <Ionicons name="person-outline" size={26} color="#1E293B" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 11, color: "#6192A4", fontWeight: "700" }}>
+                      ESPECIALISTA VINCULADO
+                    </Text>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: "#1E293B", marginTop: 2 }}>
+                      {psicologoVinculado}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                      Tus indicaciones aparecerán en Checking.
+                    </Text>
+                  </View>
                 </View>
               ) : (
                 <>
@@ -556,7 +573,8 @@ export default function ProfileScreen({ navigation }) {
                         setVinculando(true);
                         const res = await vincularConPsicologo(auth.currentUser.uid, codigoPsicologo);
                         setPsicologoVinculado(res.psicologoNombre);
-                        Alert.alert("¡Vinculación exitosa! 💜", `Ahora estás conectado con ${res.psicologoNombre}`);
+                        setPsicologoFoto(res.psicologoFoto);
+                        Alert.alert("¡Vinculación exitosa!", `Ahora estás conectado con ${res.psicologoNombre}`);
                       } catch (err) {
                         Alert.alert("Error", err.message);
                       } finally {
