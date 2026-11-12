@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,7 +17,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Calendar } from "react-native-calendars";
 
-import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { LineChart } from "react-native-chart-kit";
@@ -26,21 +26,61 @@ import { notificarAlertaAlEspecialista } from "../services/lamiSyncService";
 
 const screenWidth = Dimensions.get("window").width;
 
+const MESES_CORTOS = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic",
+];
+
 function getTodayKey() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatShortDate(isoDate, todayKey) {
+  if (isoDate === todayKey) return "Hoy";
+  const parts = isoDate.split("-");
+  if (parts.length !== 3) return isoDate;
+  const day = parts[2];
+  const monthIdx = parseInt(parts[1], 10) - 1;
+  return `${day} ${MESES_CORTOS[monthIdx] || parts[1]}`;
+}
+
+function getNormalizedEntries(rawNote) {
+  if (!rawNote) return [];
+  if (Array.isArray(rawNote)) return rawNote;
+  if (typeof rawNote === "string" && rawNote.trim() !== "") {
+    return [{ id: "legacy", texto: rawNote.trim(), hora: "" }];
+  }
+  return [];
 }
 
 export default function CalendarioEmocional({ navigation }) {
-  const [selectedDay, setSelectedDay] = useState(null);
+  const todayKey = getTodayKey();
+
+  const [selectedDay, setSelectedDay] = useState(todayKey);
   const [dayFeelings, setDayFeelings] = useState({});
   const [dayNotes, setDayNotes] = useState({});
-  const [currentNote, setCurrentNote] = useState("");
+  const [newNoteText, setNewNoteText] = useState("");
+  const [notaGuardadaModal, setNotaGuardadaModal] = useState(false);
+  const [exportandoPDF, setExportandoPDF] = useState(false);
+
   const [personalityDone, setPersonalityDone] = useState(false);
   const [personalityResult, setPersonalityResult] = useState(null);
-  const [activeNav, setActiveNav] = useState(1); // 1 = Calendario
+  const [activeNav, setActiveNav] = useState(1);
   const chartRef = useRef();
-
-  const todayKey = getTodayKey();
 
   const emotions = [
     { label: "Éxtasis 🤩", color: "#FFB74D", value: 6 },
@@ -59,7 +99,22 @@ export default function CalendarioEmocional({ navigation }) {
     (async () => {
       try {
         const s = await AsyncStorage.getItem("dayFeelings_v1");
-        if (s) setDayFeelings(JSON.parse(s));
+        if (s) {
+          const parsed = JSON.parse(s);
+          const cleaned = {};
+          Object.keys(parsed).forEach((k) => {
+            const arr = Array.isArray(parsed[k]) ? parsed[k] : [parsed[k]];
+            const valid = arr.filter(
+              (item) =>
+                item &&
+                typeof item.color === "string" &&
+                item.color.startsWith("#") &&
+                item.color.length >= 4
+            );
+            if (valid.length > 0) cleaned[k] = valid;
+          });
+          setDayFeelings(cleaned);
+        }
 
         const notesStr = await AsyncStorage.getItem("dayNotes_v1");
         if (notesStr) setDayNotes(JSON.parse(notesStr));
@@ -96,29 +151,32 @@ export default function CalendarioEmocional({ navigation }) {
     );
   }, [dayNotes]);
 
-  // Guardar emoción (hasta 2 por día) y alertar al especialista vinculado si es Ansiedad o Tristeza
   const saveFeeling = async (date, emotion) => {
     if (!date) return Alert.alert("Selecciona una fecha primero");
 
     const existing = dayFeelings[date];
-    let newValue;
+    const validExisting = (
+      Array.isArray(existing) ? existing : existing ? [existing] : []
+    ).filter(
+      (item) =>
+        item &&
+        typeof item.color === "string" &&
+        item.color.startsWith("#") &&
+        item.color.length >= 4
+    );
 
-    if (!existing) {
+    let newValue;
+    if (validExisting.length === 0) {
       newValue = [emotion];
-    } else if (Array.isArray(existing)) {
-      if (existing.length === 1) {
-        newValue = [...existing, emotion];
-      } else {
-        newValue = [existing[0], emotion];
-      }
+    } else if (validExisting.length === 1) {
+      newValue = [...validExisting, emotion];
     } else {
-      newValue = [existing, emotion];
+      newValue = [validExisting[0], emotion];
     }
 
     const updated = { ...dayFeelings, [date]: newValue };
     setDayFeelings(updated);
 
-    // Si registra Ansioso, Triste o Muy Triste, avisar en tiempo real al terapeuta vinculado
     const labelLower = (emotion.label || "").toLowerCase();
     const esAnsiedadOTristeza =
       labelLower.includes("ansios") || labelLower.includes("triste");
@@ -137,27 +195,59 @@ export default function CalendarioEmocional({ navigation }) {
     }
   };
 
-  // Guardar nota del día seleccionado
-  const saveNoteForSelectedDay = () => {
+  const addNoteForToday = () => {
     if (!selectedDay) {
       return Alert.alert("Selecciona una fecha primero");
     }
     if (selectedDay !== todayKey) {
+      return;
+    }
+
+    const trimmed = newNoteText.trim();
+    if (!trimmed) {
       return Alert.alert(
-        "Nota no editable",
-        "Solo puedes modificar la nota del día actual."
+        "Escribe algo primero",
+        "Añade un pensamiento o recordatorio antes de guardar."
       );
     }
 
-    const trimmed = currentNote.trim();
-    const updated = { ...dayNotes, [selectedDay]: trimmed };
+    const horaActual = new Date().toLocaleTimeString("es-MX", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const entradasPrevias = getNormalizedEntries(dayNotes[todayKey]);
+    const nuevaEntrada = {
+      id: `${Date.now()}`,
+      texto: trimmed,
+      hora: horaActual,
+    };
+
+    const updated = {
+      ...dayNotes,
+      [todayKey]: [...entradasPrevias, nuevaEntrada],
+    };
+
     setDayNotes(updated);
-    Alert.alert("Nota guardada", "Tu nota del día se ha guardado.");
+    setNewNoteText("");
+    setNotaGuardadaModal(true);
   };
 
   const sortedDates = Object.keys(dayFeelings).sort();
-  const chartLabels = sortedDates.map((d) => d.slice(5));
-  const chartValues = sortedDates.map((d) => {
+  const recentDates = sortedDates.slice(-7);
+
+  const chartLabels = recentDates.map((d) => formatShortDate(d, todayKey));
+  const chartValues = recentDates.map((d) => {
+    const f = dayFeelings[d];
+    if (Array.isArray(f)) {
+      if (f.length === 0) return 0;
+      const sum = f.reduce((acc, e) => acc + (e.value || 0), 0);
+      return Number((sum / f.length).toFixed(1));
+    }
+    return Number((f?.value || 0).toFixed(1));
+  });
+
+  const allValues = sortedDates.map((d) => {
     const f = dayFeelings[d];
     if (Array.isArray(f)) {
       if (f.length === 0) return 0;
@@ -167,44 +257,106 @@ export default function CalendarioEmocional({ navigation }) {
     return f?.value || 0;
   });
 
-  const chartData = {
-    labels: chartLabels.length ? chartLabels : ["-"],
-    datasets: [{ data: chartValues.length ? chartValues : [0] }],
-  };
-
   const weeklyAvg =
-    chartValues.length > 0
-      ? (chartValues.reduce((a, b) => a + b, 0) / chartValues.length).toFixed(2)
+    allValues.length > 0
+      ? (allValues.reduce((a, b) => a + b, 0) / allValues.length).toFixed(1)
       : "N/A";
+
+  const ultimoDiaRegistrado = sortedDates[sortedDates.length - 1];
+  const ultimaEmocionRaw = ultimoDiaRegistrado
+    ? dayFeelings[ultimoDiaRegistrado]
+    : null;
+  const ultimaEmocionTexto = Array.isArray(ultimaEmocionRaw)
+    ? ultimaEmocionRaw.map((e) => e.label).join(" + ")
+    : ultimaEmocionRaw?.label || "";
+  const ultimoValor =
+    chartValues.length > 0 ? chartValues[chartValues.length - 1] : null;
+  const esAlertaReciente =
+    ultimaEmocionTexto.toLowerCase().includes("ansios") ||
+    ultimaEmocionTexto.toLowerCase().includes("triste") ||
+    ultimaEmocionTexto.toLowerCase().includes("estres");
+
+  const chartData = {
+    labels: chartLabels.length ? chartLabels : ["Hoy"],
+    datasets: [
+      {
+        data: chartValues.length ? chartValues : [0],
+        color: (opacity = 1) => `rgba(14, 165, 164, ${opacity})`,
+        strokeWidth: 3,
+      },
+      {
+        data: [6],
+        withDots: false,
+        color: () => "transparent",
+        strokeWidth: 0,
+      },
+      {
+        data: [0],
+        withDots: false,
+        color: () => "transparent",
+        strokeWidth: 0,
+      },
+    ],
+  };
 
   const chartConfig = {
     backgroundColor: "#FFFFFF",
     backgroundGradientFrom: "#FFFFFF",
     backgroundGradientTo: "#FFFFFF",
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(124, 58, 237, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+    fillShadowGradientFrom: "#14B8A6",
+    fillShadowGradientFromOpacity: 0.22,
+    fillShadowGradientTo: "#FFFFFF",
+    fillShadowGradientToOpacity: 0.0,
+    decimalPlaces: 1,
+    color: (opacity = 1) => `rgba(14, 165, 164, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`,
+    propsForBackgroundLines: {
+      strokeDasharray: "",
+      stroke: "#F1F5F9",
+      strokeWidth: 1,
+    },
     propsForDots: {
       r: "5",
-      strokeWidth: "2",
-      stroke: "#7C3AED",
+      strokeWidth: "2.5",
+      stroke: "#0D9488",
+      fill: "#FFFFFF",
     },
   };
 
+  // Exportar reporte PDF con respaldo nativo para Expo Go y APK
   const exportToPDF = async () => {
+    if (exportandoPDF) return;
+
+    if (sortedDates.length === 0) {
+      return Alert.alert(
+        "No hay datos",
+        "Registra al menos una emoción en el calendario para exportar tu reporte PDF."
+      );
+    }
+
     try {
-      if (sortedDates.length === 0) {
-        return Alert.alert(
-          "No hay datos",
-          "Registra al menos una emoción para exportar PDF."
-        );
+      setExportandoPDF(true);
+
+      let chartImgHtml = "";
+      try {
+        if (chartRef.current?.capture) {
+          const dataUri = await Promise.race([
+            chartRef.current.capture(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Timeout captura")), 2500)
+            ),
+          ]);
+
+          if (typeof dataUri === "string" && dataUri.startsWith("data:image")) {
+            chartImgHtml = `
+              <h2 style="color:#1E293B; margin-top:20px; font-size:16px;">Curva de Evolución</h2>
+              <img src="${dataUri}" style="width:100%; max-height:240px; object-fit:contain; border-radius:12px; border:1px solid #E2E8F0;" />
+            `;
+          }
+        }
+      } catch (captureErr) {
+        console.warn("Captura de gráfica omitida en PDF:", captureErr);
       }
-
-      const uri = await chartRef.current.capture();
-
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: "base64",
-      });
 
       const rowsHtml = sortedDates
         .map((d) => {
@@ -213,74 +365,99 @@ export default function CalendarioEmocional({ navigation }) {
           let valueNumber = 0;
 
           if (Array.isArray(f)) {
-            const labelsArray = f.map((e) => e.label);
-            labelsText = labelsArray.join(" + ");
-            if (f.length > 0) {
-              const sum = f.reduce((acc, e) => acc + (e.value || 0), 0);
-              valueNumber = sum / f.length;
+            const valid = f.filter((e) => e && e.label);
+            labelsText = valid.map((e) => e.label).join(" + ");
+            if (valid.length > 0) {
+              const sum = valid.reduce((acc, e) => acc + (e.value || 0), 0);
+              valueNumber = sum / valid.length;
             }
           } else if (f) {
-            labelsText = f.label;
+            labelsText = f.label || "";
             valueNumber = f.value || 0;
           }
 
-          const note = dayNotes[d] || "";
+          const entries = getNormalizedEntries(dayNotes[d]);
+          const note = entries
+            .map((e) =>
+              e.hora
+                ? `<strong>[${escapeHtml(e.hora)}]</strong> ${escapeHtml(e.texto)}`
+                : escapeHtml(e.texto)
+            )
+            .join("<br/>");
 
           return `<tr>
-          <td style="padding:8px;border:1px solid #ddd;">${d}</td>
-          <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(
-            labelsText
-          )}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center;">${valueNumber.toFixed(
-            2
-          )}</td>
-          <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(
-            note
-          )}</td>
-        </tr>`;
+            <td style="padding:10px; border:1px solid #E2E8F0; font-weight:bold; white-space:nowrap;">${d}</td>
+            <td style="padding:10px; border:1px solid #E2E8F0;">${escapeHtml(labelsText)}</td>
+            <td style="padding:10px; border:1px solid #E2E8F0; text-align:center;">${valueNumber.toFixed(1)} / 6</td>
+            <td style="padding:10px; border:1px solid #E2E8F0;">${note || "-"}</td>
+          </tr>`;
         })
         .join("");
 
       const html = `
-    <html>
-      <head><meta charset="utf-8"/></head>
-      <body style="font-family: Arial; padding:20px; color:#222;">
-        <h1 style="color:#333;">Reporte Emocional</h1>
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8"/>
+            <style>
+              body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #1E293B; }
+              table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 10px; }
+              th { background: #F8FAFC; padding: 10px; border: 1px solid #E2E8F0; text-align: left; color: #475569; }
+            </style>
+          </head>
+          <body>
+            <div style="background:#F5F3FF; padding:16px 20px; border-radius:14px; border-left:5px solid #7C3AED;">
+              <h1 style="margin:0; color:#4C1D95; font-size:22px;">Reporte Emocional • Lami</h1>
+              <p style="margin:4px 0 0; color:#64748B; font-size:13px;">Generado el ${new Date().toLocaleDateString("es-MX")}</p>
+            </div>
 
-        <h2>Promedio general</h2>
-        <p style="font-size:20px; font-weight:bold; color:#7C3AED;">
-          ⭐ ${weeklyAvg}
-        </p>
-        
-        <h2>Gráfica</h2>
-        <img src="data:image/png;base64,${base64}" style="width:100%; border-radius:8px;" />
+            <div style="margin-top:18px; padding:14px; background:#F0FDFA; border-radius:12px; border:1px solid #CCFBF1;">
+              <span style="font-size:13px; color:#0F766E; font-weight:bold;">PROMEDIO GENERAL DE BIENESTAR:</span>
+              <span style="font-size:20px; font-weight:bold; color:#0D9488; margin-left:8px;">${weeklyAvg} / 6.0</span>
+            </div>
 
-        <h2 style="margin-top:24px;">Historial registrado</h2>
-        <table style="border-collapse:collapse; width:100%; font-size:14px;">
-          <thead>
-            <tr>
-              <th style="padding:8px;border-bottom:2px solid #ccc;text-align:left;">Fecha</th>
-              <th style="padding:8px;border-bottom:2px solid #ccc;text-align:left;">Emoción(es)</th>
-              <th style="padding:8px;border-bottom:2px solid #ccc;">Valor</th>
-              <th style="padding:8px;border-bottom:2px solid #ccc;text-align:left;">Nota</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
+            ${chartImgHtml}
 
-        <p style="margin-top:40px; color:#999; font-size:12px;">
-          Reporte generado el ${new Date().toLocaleDateString()}
-        </p>
-      </body>
-    </html>
-    `;
+            <h2 style="margin-top:24px; color:#1E293B; font-size:16px;">Historial Registrado</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Emoción(es)</th>
+                  <th style="text-align:center;">Puntaje</th>
+                  <th>Bitácora del día</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </body>
+        </html>
+      `;
 
       const { uri: pdfUri } = await Print.printToFileAsync({ html });
 
-      await Sharing.shareAsync(pdfUri);
+      try {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(pdfUri, {
+            UTI: ".pdf",
+            mimeType: "application/pdf",
+            dialogTitle: "Guardar o compartir Reporte Emocional",
+          });
+        } else {
+          await Print.printAsync({ html });
+        }
+      } catch (shareErr) {
+        // Respaldo para Expo Go en Android: abre el visor de impresión / Guardar como PDF
+        await Print.printAsync({ html });
+      }
     } catch (e) {
       console.error("PDF Error:", e);
-      Alert.alert("Error al generar PDF", String(e));
+      Alert.alert(
+        "Error al generar PDF",
+        e?.message || "No se pudo crear el archivo PDF."
+      );
+    } finally {
+      setExportandoPDF(false);
     }
   };
 
@@ -294,11 +471,15 @@ export default function CalendarioEmocional({ navigation }) {
   }
 
   const isTodaySelected = selectedDay === todayKey;
+  const entradasDiaSeleccionado = selectedDay
+    ? getNormalizedEntries(dayNotes[selectedDay])
+    : [];
 
   return (
     <LinearGradient colors={["#f3e8ff", "#faf5ff"]} style={styles.screen}>
       <StatusBar backgroundColor="#7C3AED" barStyle="light-content" />
       <SafeAreaView style={{ flex: 1 }}>
+        {/* BARRA SUPERIOR */}
         <View style={styles.navBar}>
           {[
             ["stats-chart-outline", "Anxiósometro"],
@@ -311,7 +492,6 @@ export default function CalendarioEmocional({ navigation }) {
               style={styles.navItem}
               onPress={() => {
                 setActiveNav(i);
-
                 if (i === 0) navigation.navigate("Anxiosimetro");
                 if (i === 1) navigation.navigate("Calendario");
                 if (i === 2) navigation.navigate("Checking");
@@ -323,7 +503,6 @@ export default function CalendarioEmocional({ navigation }) {
                 size={26}
                 color={activeNav === i ? "#7C3AED" : "#9CA3AF"}
               />
-
               <Text
                 style={[
                   styles.navLabelActive,
@@ -337,15 +516,23 @@ export default function CalendarioEmocional({ navigation }) {
         </View>
 
         <View style={styles.container}>
-          <ScrollView contentContainerStyle={{ paddingBottom: 50 }}>
+          <ScrollView
+            contentContainerStyle={{ paddingBottom: 50 }}
+            showsVerticalScrollIndicator={false}
+          >
             <Text style={styles.title}>Calendario Emocional</Text>
 
+            {/* CALENDARIO CON CÍRCULOS DE COLOR POR EMOCIÓN */}
             <Calendar
+              current={todayKey}
+              extraData={{ dayFeelings, selectedDay, dayNotes }}
               dayComponent={({ date, state }) => {
                 const dateString = date.dateString;
                 const emotionsForDay = dayFeelings[dateString];
                 const isSelected = selectedDay === dateString;
                 const isToday = dateString === todayKey;
+                const hasNotes =
+                  getNormalizedEntries(dayNotes[dateString]).length > 0;
 
                 return (
                   <DayWithEmotions
@@ -354,9 +541,10 @@ export default function CalendarioEmocional({ navigation }) {
                     emotionsForDay={emotionsForDay}
                     isSelected={isSelected}
                     isToday={isToday}
+                    hasNotes={hasNotes}
                     onPress={() => {
                       setSelectedDay(dateString);
-                      setCurrentNote(dayNotes[dateString] || "");
+                      setNewNoteText("");
                     }}
                   />
                 );
@@ -367,8 +555,11 @@ export default function CalendarioEmocional({ navigation }) {
               }}
             />
 
+            {/* SELECCIÓN DE EMOCIONES */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Selecciona una emoción</Text>
+              <Text style={styles.sectionTitle}>
+                Selecciona una emoción {selectedDay ? `(${selectedDay})` : ""}
+              </Text>
 
               <View style={styles.emotionsGrid}>
                 {emotions.map((e) => {
@@ -404,44 +595,128 @@ export default function CalendarioEmocional({ navigation }) {
                 })}
               </View>
               <Text style={{ marginTop: 6, fontSize: 12, color: "#6B7280" }}>
-                Puedes registrar hasta dos emociones por día. Si agregas más, se
-                reemplazará la segunda.
+                Puedes registrar hasta dos emociones por día. El círculo se
+                pintará con los colores elegidos.
               </Text>
             </View>
 
+            {/* BITÁCORA INMUTABLE DEL DÍA */}
             {selectedDay && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  Nota del día ({selectedDay})
-                </Text>
-                <TextInput
-                  style={[
-                    styles.noteInput,
-                    !isTodaySelected && { backgroundColor: "#F3F4F6" },
-                  ]}
-                  multiline
-                  placeholder="Escribe algo que quieras recordar de este día..."
-                  value={currentNote}
-                  onChangeText={setCurrentNote}
-                  editable={isTodaySelected}
-                />
-                {isTodaySelected ? (
-                  <TouchableOpacity
-                    style={styles.saveNoteBtn}
-                    onPress={saveNoteForSelectedDay}
-                  >
-                    <Text style={styles.saveNoteBtnText}>Guardar nota</Text>
-                  </TouchableOpacity>
+              <View style={styles.journalCard}>
+                <View style={styles.journalHeaderRow}>
+                  <View style={styles.journalTitleRow}>
+                    <View style={styles.journalIconCircle}>
+                      <Ionicons
+                        name="journal-outline"
+                        size={17}
+                        color="#7C3AED"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.journalTitle}>
+                        Bitácora del{" "}
+                        {isTodaySelected
+                          ? `día (${selectedDay})`
+                          : selectedDay}
+                      </Text>
+                      <Text style={styles.journalSubtitle}>
+                        {isTodaySelected
+                          ? "Tus notas guardadas se conservan intactas; puedes añadir más."
+                          : "Historial guardado de este día (solo lectura)."}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.lockBadge}>
+                    <Ionicons name="lock-closed" size={11} color="#6D28D9" />
+                    <Text style={styles.lockBadgeText}>Inmutable</Text>
+                  </View>
+                </View>
+
+                {entradasDiaSeleccionado.length > 0 ? (
+                  <View style={styles.entriesList}>
+                    {entradasDiaSeleccionado.map((item, idx) => (
+                      <View key={item.id || idx} style={styles.savedEntryCard}>
+                        <View style={styles.savedEntryHeader}>
+                          <View style={styles.entryDot} />
+                          <Text style={styles.savedEntryMeta}>
+                            {item.hora
+                              ? `Guardada a las ${item.hora}`
+                              : `Registro #${idx + 1}`}
+                          </Text>
+                          <Ionicons
+                            name="checkmark-done"
+                            size={14}
+                            color="#0D9488"
+                          />
+                        </View>
+                        <Text style={styles.savedEntryText}>{item.texto}</Text>
+                      </View>
+                    ))}
+                  </View>
                 ) : (
-                  <Text style={styles.noteReadonlyHint}>
-                    Solo puedes editar la nota del día actual.
-                  </Text>
+                  <View style={styles.emptyJournalBox}>
+                    <Text style={styles.emptyJournalText}>
+                      {isTodaySelected
+                        ? "Aún no has escrito en tu bitácora hoy. Escribe abajo para guardar tu primer registro."
+                        : "No se registraron notas en esta fecha."}
+                    </Text>
+                  </View>
+                )}
+
+                {isTodaySelected && (
+                  <View style={{ marginTop: 12 }}>
+                    <TextInput
+                      style={styles.noteInput}
+                      multiline
+                      placeholder="Añade un pensamiento nuevo de hoy..."
+                      placeholderTextColor="#9CA3AF"
+                      value={newNoteText}
+                      onChangeText={setNewNoteText}
+                    />
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={addNoteForToday}
+                      style={{ alignSelf: "flex-end", marginTop: 10 }}
+                    >
+                      <LinearGradient
+                        colors={["#7C3AED", "#6366F1"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.saveNoteBtn}
+                      >
+                        <Ionicons
+                          name="add-circle-outline"
+                          size={16}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.saveNoteBtnText}>
+                          {entradasDiaSeleccionado.length > 0
+                            ? "Agregar otra nota"
+                            : "Guardar en bitácora"}
+                        </Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             )}
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Semana / Histórico</Text>
+            {/* GRÁFICA CURVA DE EVOLUCIÓN */}
+            <View style={styles.chartCard}>
+              <View style={styles.chartHeaderRow}>
+                <View>
+                  <Text style={styles.chartMainTitle}>Curva de Evolución</Text>
+                  <Text style={styles.chartSubTitle}>
+                    Bienestar registrado (escala 1 a 6)
+                  </Text>
+                </View>
+
+                <View style={styles.legendPill}>
+                  <View style={styles.legendDot} />
+                  <Text style={styles.legendText}>Ánimo</Text>
+                </View>
+              </View>
 
               {sortedDates.length === 0 ? (
                 <Text style={styles.emptyText}>
@@ -453,32 +728,79 @@ export default function CalendarioEmocional({ navigation }) {
                     ref={chartRef}
                     options={{
                       format: "png",
-                      quality: 1,
-                      result: "tmpfile",
+                      quality: 0.9,
+                      result: "data-uri",
                     }}
                   >
-                    <LineChart
-                      data={chartData}
-                      width={Math.max(screenWidth - 40, 280)}
-                      height={220}
-                      chartConfig={chartConfig}
-                      bezier
-                      fromZero
-                      style={{ borderRadius: 12 }}
-                    />
+                    <View style={{ backgroundColor: "#FFFFFF", paddingTop: 6 }}>
+                      <LineChart
+                        data={chartData}
+                        width={Math.max(screenWidth - 64, 260)}
+                        height={210}
+                        fromZero
+                        segments={6}
+                        yAxisInterval={1}
+                        chartConfig={chartConfig}
+                        bezier
+                        style={{
+                          borderRadius: 12,
+                          marginLeft: -12,
+                        }}
+                      />
+                    </View>
                   </ViewShot>
 
-                  <Text style={styles.avgText}>Promedio: ⭐ {weeklyAvg}</Text>
+                  <View
+                    style={[
+                      styles.insightBanner,
+                      esAlertaReciente
+                        ? styles.insightBannerAlert
+                        : styles.insightBannerCalm,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        esAlertaReciente ? "alert-circle" : "sparkles-outline"
+                      }
+                      size={18}
+                      color={esAlertaReciente ? "#E11D48" : "#0D9488"}
+                    />
+                    <Text
+                      style={[
+                        styles.insightBannerText,
+                        { color: esAlertaReciente ? "#9F1239" : "#115E59" },
+                      ]}
+                    >
+                      <Text style={{ fontWeight: "800" }}>
+                        Promedio: {weeklyAvg}/6 •{" "}
+                      </Text>
+                      Último registro (
+                      {formatShortDate(ultimoDiaRegistrado, todayKey)}):{" "}
+                      {ultimaEmocionTexto} ({ultimoValor}/6).
+                    </Text>
+                  </View>
                 </>
               )}
             </View>
 
+            {/* BOTÓN EXPORTAR PDF ACTIVO */}
             <View style={styles.actions}>
-              <TouchableOpacity style={styles.pdfBtn} onPress={exportToPDF}>
-                <Text style={styles.pdfBtnText}>📄 Exportar reporte (PDF)</Text>
+              <TouchableOpacity
+                style={[styles.pdfBtn, exportandoPDF && { opacity: 0.7 }]}
+                onPress={exportToPDF}
+                disabled={exportandoPDF}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="document-text-outline" size={19} color="#FFF" />
+                <Text style={styles.pdfBtnText}>
+                  {exportandoPDF
+                    ? "Generando reporte PDF..."
+                    : "Exportar reporte (PDF)"}
+                </Text>
               </TouchableOpacity>
             </View>
 
+            {/* TEST DE PERSONALIDAD */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Tu test de personalidad</Text>
 
@@ -486,7 +808,7 @@ export default function CalendarioEmocional({ navigation }) {
                 <View style={styles.personalityReminderBox}>
                   <Text style={styles.personalityReminderText}>
                     No olvides realizar el test de personalidad. Te ayudará a
-                    entender mejor cómo eres emocionalmente 💕
+                    entender mejor cómo eres emocionalmente.
                   </Text>
                 </View>
               ) : (
@@ -537,52 +859,91 @@ export default function CalendarioEmocional({ navigation }) {
 
                   <Text style={styles.personalityResultNote}>
                     Este test solo se responde una vez para cuidar tu proceso
-                    emocional 💜
+                    emocional.
                   </Text>
                 </View>
               )}
             </View>
           </ScrollView>
         </View>
+
+        {/* MODAL CREATIVO DE NOTA GUARDADA */}
+        <Modal
+          visible={notaGuardadaModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNotaGuardadaModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <LinearGradient
+                colors={["#7C3AED", "#14B8A6"]}
+                style={styles.modalIconRing}
+              >
+                <Ionicons name="bookmark" size={26} color="#FFFFFF" />
+              </LinearGradient>
+
+              <Text style={styles.modalBadge}>BITÁCORA PROTEGIDA</Text>
+              <Text style={styles.modalTitle}>
+                Tu nota del día se ha guardado
+              </Text>
+              <Text style={styles.modalBody}>
+                Este pensamiento quedó resguardado en tu historial de hoy. No se
+                puede editar ni borrar, pero puedes seguir agregando más notas
+                cuando lo necesites.
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={{ width: "100%", marginTop: 8 }}
+                onPress={() => setNotaGuardadaModal(false)}
+              >
+                <LinearGradient
+                  colors={["#7C3AED", "#6366F1"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalBtn}
+                >
+                  <Text style={styles.modalBtnText}>Continuar</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );
 }
 
+// Círculo de cada día pintado directamente con el color de la emoción (1 color o mitad y mitad)
 function DayWithEmotions({
   date,
   state,
   emotionsForDay,
   isSelected,
   isToday,
+  hasNotes,
   onPress,
 }) {
   const dayNumber = date.day;
   const isDisabled = state === "disabled";
 
-  let firstColor = null;
-  let secondColor = null;
+  const validColors = (
+    Array.isArray(emotionsForDay) ? emotionsForDay : [emotionsForDay]
+  )
+    .map((item) => item?.color)
+    .filter((c) => typeof c === "string" && c.startsWith("#") && c.length >= 4);
 
-  if (emotionsForDay) {
-    if (Array.isArray(emotionsForDay)) {
-      if (emotionsForDay.length === 1) {
-        firstColor = emotionsForDay[0]?.color;
-      } else if (emotionsForDay.length >= 2) {
-        firstColor = emotionsForDay[0]?.color;
-        secondColor = emotionsForDay[1]?.color;
-      }
-    } else {
-      firstColor = emotionsForDay?.color;
-    }
-  }
-
-  const hasColor = !!firstColor || !!secondColor;
+  const firstColor = validColors[0] || null;
+  const secondColor = validColors[1] || null;
+  const hasColor = validColors.length > 0;
 
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={isDisabled}
-      style={{ paddingVertical: 2 }}
+      activeOpacity={0.75}
+      style={styles.dayTouchable}
     >
       <View
         style={[
@@ -591,38 +952,44 @@ function DayWithEmotions({
           isToday && styles.dayOuterToday,
         ]}
       >
-        <View style={styles.dayInner}>
-          {hasColor && !secondColor && (
-            <View
-              style={[
-                StyleSheet.absoluteFillObject,
-                { backgroundColor: firstColor, borderRadius: 16 },
-              ]}
-            />
-          )}
-
-          {hasColor && secondColor && (
-            <View
-              style={[
-                StyleSheet.absoluteFillObject,
-                { flexDirection: "row", borderRadius: 16, overflow: "hidden" },
-              ]}
-            >
-              <View style={{ flex: 1, backgroundColor: firstColor }} />
-              <View style={{ flex: 1, backgroundColor: secondColor }} />
+        {firstColor && secondColor ? (
+          <View style={styles.daySplitCircle}>
+            <View style={{ flex: 1, backgroundColor: firstColor }} />
+            <View style={{ flex: 1, backgroundColor: secondColor }} />
+            <View style={styles.dayNumberOverlay}>
+              <Text style={[styles.dayText, styles.dayTextColored]}>
+                {dayNumber}
+              </Text>
             </View>
-          )}
-
-          <Text
+          </View>
+        ) : (
+          <View
             style={[
-              styles.dayText,
-              isDisabled && { color: "#D1D5DB" },
-              hasColor && { color: "#F9FAFB" },
+              styles.daySolidCircle,
+              firstColor && { backgroundColor: firstColor },
             ]}
           >
-            {dayNumber}
-          </Text>
-        </View>
+            <Text
+              style={[
+                styles.dayText,
+                isToday && !hasColor && { color: "#7C3AED", fontWeight: "800" },
+                isDisabled && { color: "#D1D5DB" },
+                hasColor && styles.dayTextColored,
+              ]}
+            >
+              {dayNumber}
+            </Text>
+          </View>
+        )}
+
+        {hasNotes && (
+          <View
+            style={[
+              styles.noteIndicatorDot,
+              hasColor && { backgroundColor: "#FFFFFF" },
+            ]}
+          />
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -675,77 +1042,339 @@ const styles = StyleSheet.create({
   },
   emotionText: { color: "#333", fontSize: 14 },
   emptyText: { color: "#666", fontStyle: "italic" },
-  avgText: {
-    marginTop: 10,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#7C3AED",
-  },
-  actions: { marginTop: 22, alignItems: "center" },
-  pdfBtn: {
-    backgroundColor: "#7C3AED",
-    paddingVertical: 14,
-    paddingHorizontal: 26,
-    borderRadius: 12,
-    elevation: 4,
-  },
-  pdfBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  noteInput: {
-    minHeight: 80,
-    borderRadius: 10,
+
+  // Bitácora creativa e inmutable
+  journalCard: {
+    marginTop: 18,
+    backgroundColor: "#FAF8FF",
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
+    borderColor: "#E9D5FF",
+  },
+  journalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 12,
+  },
+  journalTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  journalIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#EDE9FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  journalTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1E1B4B",
+  },
+  journalSubtitle: {
+    fontSize: 11.5,
+    color: "#6B7280",
+    marginTop: 1,
+  },
+  lockBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EDE9FE",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#6D28D9",
+  },
+  entriesList: {
+    gap: 8,
+  },
+  savedEntryCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 12,
+    borderLeftWidth: 3.5,
+    borderLeftColor: "#7C3AED",
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  savedEntryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  entryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#14B8A6",
+  },
+  savedEntryMeta: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  savedEntryText: {
+    fontSize: 13.5,
+    color: "#1E293B",
+    lineHeight: 19,
+  },
+  emptyJournalBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  emptyJournalText: {
+    fontSize: 12.5,
+    color: "#6B7280",
+    fontStyle: "italic",
+  },
+  noteInput: {
+    minHeight: 76,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
     textAlignVertical: "top",
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFFFFF",
+    color: "#111827",
   },
   saveNoteBtn: {
-    marginTop: 8,
-    alignSelf: "flex-end",
-    backgroundColor: "#7C3AED",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 999,
   },
   saveNoteBtnText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: 13,
   },
-  noteReadonlyHint: {
-    marginTop: 6,
+
+  // Gráfica curva de evolución
+  chartCard: {
+    marginTop: 18,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  chartHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  chartMainTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  chartSubTitle: {
     fontSize: 12,
-    color: "#6B7280",
+    color: "#64748B",
+    marginTop: 1,
+  },
+  legendPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F0FDFA",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#14B8A6",
+  },
+  legendText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#0F766E",
+  },
+  insightBanner: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  insightBannerCalm: {
+    backgroundColor: "#F0FDFA",
+    borderColor: "#CCFBF1",
+  },
+  insightBannerAlert: {
+    backgroundColor: "#FFF1F2",
+    borderColor: "#FECDD3",
+  },
+  insightBannerText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  actions: { marginTop: 22, alignItems: "center" },
+  pdfBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#7C3AED",
+    paddingVertical: 14,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+    elevation: 4,
+  },
+  pdfBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
+  // Círculos de días del calendario
+  dayTouchable: {
+    paddingVertical: 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
   dayOuter: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
   },
   dayOuterSelected: {
-    borderRadius: 999,
-    padding: 2,
-    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    borderWidth: 2,
+    borderColor: "#7C3AED",
+    backgroundColor: "rgba(124, 58, 237, 0.08)",
   },
   dayOuterToday: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#7C3AED",
-    borderRadius: 999,
   },
-  dayInner: {
+  daySolidCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
+  },
+  daySplitCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    flexDirection: "row",
     overflow: "hidden",
+    position: "relative",
+  },
+  dayNumberOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
   },
   dayText: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: "600",
     color: "#111827",
   },
+  dayTextColored: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.22)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  noteIndicatorDot: {
+    position: "absolute",
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#7C3AED",
+  },
+
+  // Modal creativo nota guardada
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 24,
+    alignItems: "center",
+  },
+  modalIconRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  modalBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#7C3AED",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
+  },
+  modalBody: {
+    fontSize: 13,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  modalBtn: {
+    paddingVertical: 13,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+  modalBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  // Estilos test de personalidad
   personalityReminderBox: {
     marginTop: 8,
     padding: 14,

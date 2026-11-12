@@ -6,6 +6,7 @@ import {
   Dimensions,
   Image,
   Linking,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -28,15 +29,14 @@ import { Picker } from "@react-native-picker/picker";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 
-import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 
 // para respetar status bar (batería/hora) y NO pegarse arriba
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-//importamos la base de datos
+// importamos la base de datos
 import { deleteUser, signOut } from "firebase/auth";
-import { deleteDoc, doc, getDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebaseConfig";
 import { vincularConPsicologo } from "../services/lamiSyncService";
 
@@ -60,10 +60,18 @@ export default function ProfileScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [language, setLanguage] = useState("es");
+
+  // Estados de especialista vinculado
   const [codigoPsicologo, setCodigoPsicologo] = useState("");
+  const [psicologoId, setPsicologoId] = useState(null);
   const [psicologoVinculado, setPsicologoVinculado] = useState(null);
-  const [vinculando, setVinculando] = useState(false);
+  const [psicologoEspecialidad, setPsicologoEspecialidad] = useState("");
   const [psicologoFoto, setPsicologoFoto] = useState(null);
+  const [psicologoDetalle, setPsicologoDetalle] = useState(null);
+  const [modalInfoPsicologo, setModalInfoPsicologo] = useState(false);
+  const [modalConfirmDesvincular, setModalConfirmDesvincular] = useState(false);
+  const [vinculando, setVinculando] = useState(false);
+  const [desvinculando, setDesvinculando] = useState(false);
 
   // Estados para escáner QR en Expo Go
   const [modalEscanerQR, setModalEscanerQR] = useState(false);
@@ -99,9 +107,6 @@ export default function ProfileScreen({ navigation }) {
     }).start();
 
     setShowConfig(!showConfig);
-
-    // opcional: cuando abres/cierra config, limpia el mensaje
-    // setFeedbackMsg("");
   };
 
   const rotateConfigChevron = configRotateAnim.interpolate({
@@ -138,7 +143,7 @@ export default function ProfileScreen({ navigation }) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`; // "YYYY-MM-DD"
+    return `${y}-${m}-${d}`;
   };
 
   const getYesterdayKey = () => {
@@ -147,7 +152,6 @@ export default function ProfileScreen({ navigation }) {
     return getLocalDateKey(d);
   };
 
-  // cargar contadores al entrar a Perfil
   const loadCounters = async () => {
     const streakSaved = await AsyncStorage.getItem("@calm_streak");
     const sessionsSaved = await AsyncStorage.getItem("@sessions_count");
@@ -156,7 +160,6 @@ export default function ProfileScreen({ navigation }) {
     setSessionsCount(sessionsSaved ? Number(sessionsSaved) : 0);
   };
 
-  //preferencias: cargar
   const loadPreferences = async () => {
     const raw = await AsyncStorage.getItem(PREFS_KEY);
     if (!raw) return;
@@ -172,7 +175,6 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  // preferencias: guardar
   const savePreferences = async (nextGoal, nextNotificationsOn) => {
     await AsyncStorage.setItem(
       PREFS_KEY,
@@ -180,61 +182,66 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
-  // notificaciones: permisos
   const ensureNotifPermission = async () => {
-    if (!Device.isDevice) {
-      // emulador: puede variar, pero seguimos
+    try {
+      const { status: existing } = await Notifications.getPermissionsAsync();
+      if (existing === "granted") return true;
+
+      const { status } = await Notifications.requestPermissionsAsync();
+      return status === "granted";
+    } catch (e) {
+      return false;
     }
-
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    if (existing === "granted") return true;
-
-    const { status } = await Notifications.requestPermissionsAsync();
-    return status === "granted";
   };
 
-  //notificaciones: cancelar
   const cancelScheduled = async () => {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    await AsyncStorage.removeItem(NOTIF_IDS_KEY);
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      await AsyncStorage.removeItem(NOTIF_IDS_KEY);
+    } catch (e) {
+      console.log("Notificaciones canceladas omitidas en Expo Go");
+    }
   };
 
-  // notificaciones: programar según meta
   const scheduleForGoal = async (nextGoal) => {
-    await cancelScheduled();
+    try {
+      await cancelScheduled();
 
-    if (nextGoal === "Solo cuando lo necesite") return;
+      if (nextGoal === "Solo cuando lo necesite") return;
 
-    const times3 = [
-      { hour: 10, minute: 0 },
-      { hour: 15, minute: 0 },
-      { hour: 20, minute: 0 },
-    ];
+      const times3 = [
+        { hour: 10, minute: 0 },
+        { hour: 15, minute: 0 },
+        { hour: 20, minute: 0 },
+      ];
 
-    const times5 = [
-      { hour: 9, minute: 0 },
-      { hour: 12, minute: 0 },
-      { hour: 15, minute: 0 },
-      { hour: 18, minute: 0 },
-      { hour: 21, minute: 0 },
-    ];
+      const times5 = [
+        { hour: 9, minute: 0 },
+        { hour: 12, minute: 0 },
+        { hour: 15, minute: 0 },
+        { hour: 18, minute: 0 },
+        { hour: 21, minute: 0 },
+      ];
 
-    const times = nextGoal === "5 chequeos al día" ? times5 : times3;
+      const times = nextGoal === "5 chequeos al día" ? times5 : times3;
 
-    const ids = [];
-    for (let i = 0; i < times.length; i++) {
-      const t = times[i];
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Chequeo suave 💜",
-          body: "¿Cómo te sientes ahora mismo? Respira y revisemos juntas.",
-        },
-        trigger: { hour: t.hour, minute: t.minute, repeats: true },
-      });
-      ids.push(id);
+      const ids = [];
+      for (let i = 0; i < times.length; i++) {
+        const t = times[i];
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Chequeo suave 💜",
+            body: "¿Cómo te sientes ahora mismo? Respira y revisemos juntas.",
+          },
+          trigger: { hour: t.hour, minute: t.minute, repeats: true },
+        });
+        ids.push(id);
+      }
+
+      await AsyncStorage.setItem(NOTIF_IDS_KEY, JSON.stringify(ids));
+    } catch (e) {
+      console.log("Programación de notificaciones omitida en Expo Go");
     }
-
-    await AsyncStorage.setItem(NOTIF_IDS_KEY, JSON.stringify(ids));
   };
 
   useFocusEffect(
@@ -245,7 +252,6 @@ export default function ProfileScreen({ navigation }) {
     }, [])
   );
 
-  // racha: registrar “Tranquila” 1 vez por día
   const registerCalmDay = async () => {
     const today = getLocalDateKey();
     const yesterday = getYesterdayKey();
@@ -267,7 +273,6 @@ export default function ProfileScreen({ navigation }) {
     setCalmStreak(streak);
   };
 
-  // sesiones: sumar 1 al tocar el button
   const addSession = async () => {
     const saved = await AsyncStorage.getItem("@sessions_count");
     const current = saved ? Number(saved) : 0;
@@ -275,6 +280,18 @@ export default function ProfileScreen({ navigation }) {
 
     await AsyncStorage.setItem("@sessions_count", String(next));
     setSessionsCount(next);
+  };
+
+  const loadPsicologoDetalle = async (idPsi) => {
+    if (!idPsi) return;
+    try {
+      const psiSnap = await getDoc(doc(db, "psicologos", idPsi));
+      if (psiSnap.exists()) {
+        setPsicologoDetalle(psiSnap.data());
+      }
+    } catch (e) {
+      console.log("Error cargando detalle del psicólogo:", e);
+    }
   };
 
   const loadProfileData = async () => {
@@ -291,15 +308,63 @@ export default function ProfileScreen({ navigation }) {
         setName(data.nombre ?? "");
         setEmail(data.correo ?? user.email);
         setPhone(data.telefono ?? "");
-        if (data.psicologoNombre) {
-          setPsicologoVinculado(data.psicologoNombre);
-        }
-        if (data.psicologoFoto) {
-          setPsicologoFoto(data.psicologoFoto);
+
+        if (data.psicologoId) {
+          setPsicologoId(data.psicologoId);
+          setPsicologoVinculado(data.psicologoNombre || "Especialista Lami");
+          setPsicologoEspecialidad(data.psicologoEspecialidad || "");
+          setPsicologoFoto(data.psicologoFoto || null);
+          loadPsicologoDetalle(data.psicologoId);
+        } else {
+          setPsicologoId(null);
+          setPsicologoVinculado(null);
+          setPsicologoEspecialidad("");
+          setPsicologoFoto(null);
+          setPsicologoDetalle(null);
         }
       }
     } catch (error) {
       console.log("Error cargando perfil:", error);
+    }
+  };
+
+  // Abre modal bonito de confirmación para desvincular
+  const abrirConfirmacionDesvincular = () => {
+    setModalInfoPsicologo(false);
+    setModalConfirmDesvincular(true);
+  };
+
+  // Ejecuta la desvinculación en Firestore
+  const confirmarDesvincularPsicologo = async () => {
+    try {
+      setDesvinculando(true);
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      await updateDoc(doc(db, "usuarios", uid), {
+        psicologoId: null,
+        psicologoNombre: null,
+        psicologoFoto: null,
+        psicologoEspecialidad: null,
+      });
+
+      setPsicologoId(null);
+      setPsicologoVinculado(null);
+      setPsicologoEspecialidad("");
+      setPsicologoFoto(null);
+      setPsicologoDetalle(null);
+      setCodigoPsicologo("");
+      setModalConfirmDesvincular(false);
+      setModalInfoPsicologo(false);
+
+      Alert.alert(
+        "Cuenta desvinculada",
+        "Ya no estás conectada con ningún especialista. Puedes vincular otro código cuando quieras."
+      );
+    } catch (err) {
+      Alert.alert("Error", "No se pudo desvincular: " + err.message);
+    } finally {
+      setDesvinculando(false);
     }
   };
 
@@ -340,8 +405,11 @@ export default function ProfileScreen({ navigation }) {
         auth.currentUser.uid,
         codigoExtraido
       );
+      setPsicologoId(res.psicologoId);
       setPsicologoVinculado(res.psicologoNombre);
+      setPsicologoEspecialidad(res.psicologoEspecialidad || "");
       setPsicologoFoto(res.psicologoFoto);
+      loadPsicologoDetalle(res.psicologoId);
       Alert.alert(
         "¡Vinculación exitosa!",
         `Ahora estás conectado con ${res.psicologoNombre}`
@@ -355,7 +423,6 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    // Alerta de confirmación antes de cerrar sesión
     Alert.alert(
       "Cerrar sesión",
       "¿Deseas cerrar sesión?",
@@ -369,14 +436,12 @@ export default function ProfileScreen({ navigation }) {
           text: "Sí",
           onPress: async () => {
             try {
-              await signOut(auth); // cierra sesión en Firebase
+              await signOut(auth);
 
-              // Limpiar estados locales
               setName("");
               setEmail("");
               setPhone("");
 
-              // Navegar y borrar historial
               navigation.reset({
                 index: 0,
                 routes: [{ name: "Login" }],
@@ -589,81 +654,96 @@ export default function ProfileScreen({ navigation }) {
               </View>
             </View>
 
-            {/* VINCULACIÓN CON PSICÓLOGO */}
+            {/* VINCULACIÓN CON PSICÓLOGO (SIN FLECHITA > INNECESARIA) */}
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Mi Especialista 🩺</Text>
+              <View style={styles.especialistaHeaderRow}>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                  Mi Especialista 🩺
+                </Text>
+                {psicologoVinculado && (
+                  <View style={styles.activeLinkPill}>
+                    <View style={styles.activeLinkDot} />
+                    <Text style={styles.activeLinkText}>Enlace activo</Text>
+                  </View>
+                )}
+              </View>
 
               {psicologoVinculado ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: "#F1F5F9",
-                    padding: 12,
-                    borderRadius: 16,
-                  }}
-                >
-                  {psicologoFoto ? (
-                    <Image
-                      source={{ uri: psicologoFoto }}
-                      style={{
-                        width: 54,
-                        height: 54,
-                        borderRadius: 27,
-                        marginRight: 12,
-                        borderWidth: 2,
-                        borderColor: "#6192A4",
+                <View style={{ marginTop: 10 }}>
+                  <LinearGradient
+                    colors={["#F8F7FF", "#F0F9FF"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.especialistaCard}
+                  >
+                    <View style={styles.avatarRing}>
+                      {psicologoFoto ? (
+                        <Image
+                          source={{ uri: psicologoFoto }}
+                          style={styles.especialistaAvatar}
+                        />
+                      ) : (
+                        <View style={styles.especialistaAvatarPlaceholder}>
+                          <Ionicons name="medkit" size={24} color="#7C3AED" />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.especialistaTag}>
+                        ACOMPAÑAMIENTO CLÍNICO
+                      </Text>
+                      <Text style={styles.especialistaName}>
+                        {psicologoVinculado}
+                      </Text>
+                      <Text style={styles.especialistaSpec} numberOfLines={1}>
+                        {psicologoDetalle?.especialidad ||
+                          psicologoEspecialidad ||
+                          "Psicología Clínica • Red Lami"}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+
+                  {/* Botones de acción: Ver perfil y Desvincular */}
+                  <View style={styles.especialistaActionsRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        if (psicologoId && !psicologoDetalle) {
+                          loadPsicologoDetalle(psicologoId);
+                        }
+                        setModalInfoPsicologo(true);
                       }}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 54,
-                        height: 54,
-                        borderRadius: 27,
-                        backgroundColor: "#B3D3DA",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        marginRight: 12,
-                      }}
+                      style={styles.verInfoBtn}
                     >
                       <Ionicons
                         name="person-outline"
-                        size={26}
-                        color="#1E293B"
+                        size={16}
+                        color="#6D28D9"
                       />
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: "#6192A4",
-                        fontWeight: "700",
-                      }}
+                      <Text style={styles.verInfoBtnText}>Ver perfil</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      disabled={desvinculando}
+                      onPress={abrirConfirmacionDesvincular}
+                      style={styles.desvincularBtn}
                     >
-                      ESPECIALISTA VINCULADO
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: "700",
-                        color: "#1E293B",
-                        marginTop: 2,
-                      }}
-                    >
-                      {psicologoVinculado}
-                    </Text>
-                    <Text
-                      style={{ fontSize: 12, color: "#475569", marginTop: 2 }}
-                    >
-                      Tus indicaciones aparecerán en Checking.
-                    </Text>
+                      <Ionicons
+                        name="unlink-outline"
+                        size={16}
+                        color="#E11D48"
+                      />
+                      <Text style={styles.desvincularBtnText}>
+                        {desvinculando ? "Desvinculando..." : "Desvincular"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ) : (
                 <>
-                  <Text style={styles.sectionSubtitle}>
+                  <Text style={[styles.sectionSubtitle, { marginTop: 6 }]}>
                     Ingresa el código que te dio tu psicólogo en consulta (ej.
                     PSI-492) o escanea su código QR.
                   </Text>
@@ -700,8 +780,13 @@ export default function ProfileScreen({ navigation }) {
                           auth.currentUser.uid,
                           codigoPsicologo
                         );
+                        setPsicologoId(res.psicologoId);
                         setPsicologoVinculado(res.psicologoNombre);
+                        setPsicologoEspecialidad(
+                          res.psicologoEspecialidad || ""
+                        );
                         setPsicologoFoto(res.psicologoFoto);
+                        loadPsicologoDetalle(res.psicologoId);
                         Alert.alert(
                           "¡Vinculación exitosa!",
                           `Ahora estás conectado con ${res.psicologoNombre}`
@@ -951,7 +1036,6 @@ export default function ProfileScreen({ navigation }) {
                     </Text>
                   </View>
 
-                  {/* ✅ FEEDBACK FUNCIONAL */}
                   <View style={{ marginTop: 16 }}>
                     <Text style={styles.helpQuestion}>
                       ¿Te resultó útil esta información?
@@ -1120,10 +1204,6 @@ export default function ProfileScreen({ navigation }) {
                     >
                       <Text style={styles.crisisNumber}>800 911 2000</Text>
                     </TouchableOpacity>
-
-                    <Text style={styles.crisisFooter}>
-                      No tienes que pasar por esto sola 🤍
-                    </Text>
                   </View>
                 </View>
               )}
@@ -1161,6 +1241,232 @@ export default function ProfileScreen({ navigation }) {
           </ScrollView>
         </View>
       </LinearGradient>
+
+      {/* MODAL DETALLE DEL ESPECIALISTA VINCULADO */}
+      <Modal
+        visible={modalInfoPsicologo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalInfoPsicologo(false)}
+      >
+        <View style={styles.infoModalOverlay}>
+          <View style={styles.infoModalCard}>
+            <LinearGradient
+              colors={["#F3E8FF", "#E0F2FE"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.infoModalTopBanner}
+            >
+              <TouchableOpacity
+                onPress={() => setModalInfoPsicologo(false)}
+                style={styles.infoModalClose}
+              >
+                <Ionicons name="close" size={20} color="#4C1D95" />
+              </TouchableOpacity>
+
+              <View style={styles.infoModalAvatarRing}>
+                {psicologoFoto ? (
+                  <Image
+                    source={{ uri: psicologoFoto }}
+                    style={styles.infoModalAvatar}
+                  />
+                ) : (
+                  <View style={styles.infoModalAvatarPlaceholder}>
+                    <Ionicons name="medkit" size={32} color="#7C3AED" />
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.infoModalBadge}>
+                <View style={styles.activeLinkDot} />
+                <Text style={styles.infoModalBadgeText}>
+                  ESPECIALISTA VINCULADO
+                </Text>
+              </View>
+
+              <Text style={styles.infoModalName}>{psicologoVinculado}</Text>
+              <Text style={styles.infoModalSpec}>
+                {psicologoDetalle?.especialidad ||
+                  psicologoEspecialidad ||
+                  "Psicología Clínica • Red Lami"}
+              </Text>
+            </LinearGradient>
+
+            <View style={styles.infoModalBody}>
+              <View style={styles.infoModalDetailsBox}>
+                {psicologoDetalle?.cedula && (
+                  <View style={styles.infoDetailRow}>
+                    <View style={styles.detailIconCircle}>
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={16}
+                        color="#7C3AED"
+                      />
+                    </View>
+                    <Text style={styles.infoDetailText}>
+                      Cédula profesional:{" "}
+                      <Text style={{ fontWeight: "700", color: "#1E293B" }}>
+                        {psicologoDetalle.cedula}
+                      </Text>
+                    </Text>
+                  </View>
+                )}
+
+                {psicologoDetalle?.codigoVinculacion && (
+                  <View style={styles.infoDetailRow}>
+                    <View style={styles.detailIconCircle}>
+                      <Ionicons name="key-outline" size={16} color="#7C3AED" />
+                    </View>
+                    <Text style={styles.infoDetailText}>
+                      Código de enlace:{" "}
+                      <Text style={{ fontWeight: "700", color: "#1E293B" }}>
+                        {psicologoDetalle.codigoVinculacion}
+                      </Text>
+                    </Text>
+                  </View>
+                )}
+
+                {psicologoDetalle?.correo && (
+                  <View style={styles.infoDetailRow}>
+                    <View style={styles.detailIconCircle}>
+                      <Ionicons name="mail-outline" size={16} color="#7C3AED" />
+                    </View>
+                    <Text style={styles.infoDetailText}>
+                      {psicologoDetalle.correo}
+                    </Text>
+                  </View>
+                )}
+
+                {psicologoDetalle?.telefono && (
+                  <TouchableOpacity
+                    onPress={() =>
+                      Linking.openURL(`tel:${psicologoDetalle.telefono}`)
+                    }
+                    style={styles.infoDetailRow}
+                  >
+                    <View style={styles.detailIconCircle}>
+                      <Ionicons name="call-outline" size={16} color="#7C3AED" />
+                    </View>
+                    <Text
+                      style={[
+                        styles.infoDetailText,
+                        {
+                          textDecorationLine: "underline",
+                          color: "#6D28D9",
+                          fontWeight: "600",
+                        },
+                      ]}
+                    >
+                      {psicologoDetalle.telefono}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                <View style={styles.infoDetailRow}>
+                  <View
+                    style={[
+                      styles.detailIconCircle,
+                      { backgroundColor: "#CCFBF1" },
+                    ]}
+                  >
+                    <Ionicons name="sync-outline" size={16} color="#0D9488" />
+                  </View>
+                  <Text style={styles.infoDetailText}>
+                    Recibe tus tests compartidos, alertas del anxiósometro y
+                    registros de ansiedad o tristeza del calendario.
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={desvinculando}
+                onPress={abrirConfirmacionDesvincular}
+                style={styles.infoModalUnlinkBtn}
+              >
+                <Ionicons name="unlink-outline" size={18} color="#E11D48" />
+                <Text style={styles.infoModalUnlinkText}>
+                  {desvinculando
+                    ? "Desvinculando..."
+                    : "Desvincular especialista"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL BONITO DE CONFIRMACIÓN PARA DESVINCULAR ESPECIALISTA */}
+      <Modal
+        visible={modalConfirmDesvincular}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalConfirmDesvincular(false)}
+      >
+        <View style={styles.unlinkOverlay}>
+          <View style={styles.unlinkCard}>
+            <LinearGradient
+              colors={["#FFF1F2", "#FCE7F3"]}
+              style={styles.unlinkIconCircle}
+            >
+              <Ionicons name="unlink" size={28} color="#E11D48" />
+            </LinearGradient>
+
+            <Text style={styles.unlinkBadge}>GESTIÓN DE VÍNCULO</Text>
+            <Text style={styles.unlinkTitle}>Desvincular especialista</Text>
+
+            <Text style={styles.unlinkBody}>
+              ¿Estás segura de que deseas desvincular tu cuenta de{" "}
+              <Text style={{ fontWeight: "800", color: "#1E1B4B" }}>
+                {psicologoVinculado}
+              </Text>
+              ?
+            </Text>
+
+            <View style={styles.unlinkWarningBox}>
+              <Ionicons
+                name="shield-outline"
+                size={16}
+                color="#9F1239"
+                style={{ marginTop: 1 }}
+              />
+              <Text style={styles.unlinkWarningText}>
+                Dejará de recibir tus registros emocionales, tests diarios y
+                alertas. Podrás volver a vincularte cuando quieras.
+              </Text>
+            </View>
+
+            <View style={styles.unlinkBtnsRow}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={desvinculando}
+                onPress={() => setModalConfirmDesvincular(false)}
+                style={styles.unlinkCancelBtn}
+              >
+                <Text style={styles.unlinkCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={desvinculando}
+                onPress={confirmarDesvincularPsicologo}
+                style={styles.unlinkConfirmBtn}
+              >
+                <LinearGradient
+                  colors={["#F43F5E", "#E11D48"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.unlinkConfirmGradient}
+                >
+                  <Text style={styles.unlinkConfirmText}>
+                    {desvinculando ? "Desvinculando..." : "Sí, desvincular"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ESCÁNER QR A PANTALLA COMPLETA PARA VINCULAR CON PSICÓLOGO */}
       {modalEscanerQR && (
@@ -1218,7 +1524,9 @@ export default function ProfileScreen({ navigation }) {
                 borderRadius: 16,
               }}
             >
-              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>
+              <Text
+                style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}
+              >
                 Escanear QR del Psicólogo
               </Text>
               <TouchableOpacity
@@ -1402,6 +1710,355 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  // Tarjeta y acciones del especialista vinculado
+  especialistaHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  activeLinkPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  activeLinkDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#10B981",
+  },
+  activeLinkText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#065F46",
+  },
+  especialistaCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+  },
+  avatarRing: {
+    padding: 2.5,
+    borderRadius: 32,
+    backgroundColor: "#DDD6FE",
+    marginRight: 12,
+  },
+  especialistaAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+  },
+  especialistaAvatarPlaceholder: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#F5F3FF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  especialistaTag: {
+    fontSize: 10,
+    color: "#7C3AED",
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  especialistaName: {
+    fontSize: 16.5,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    marginTop: 2,
+  },
+  especialistaSpec: {
+    fontSize: 12.5,
+    color: "#475569",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  especialistaActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  verInfoBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  verInfoBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6D28D9",
+  },
+  desvincularBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: "#FFF1F2",
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+  },
+  desvincularBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#E11D48",
+  },
+
+  // Modal detalle del especialista
+  infoModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  infoModalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  infoModalTopBanner: {
+    paddingTop: 18,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  infoModalClose: {
+    alignSelf: "flex-end",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.75)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoModalAvatarRing: {
+    padding: 3.5,
+    borderRadius: 48,
+    backgroundColor: "#FFFFFF",
+    marginBottom: 10,
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  infoModalAvatar: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+  },
+  infoModalAvatarPlaceholder: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: "#F5F3FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoModalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 6,
+  },
+  infoModalBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#6D28D9",
+    letterSpacing: 0.5,
+  },
+  infoModalName: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    textAlign: "center",
+  },
+  infoModalSpec: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569",
+    textAlign: "center",
+    marginTop: 2,
+  },
+  infoModalBody: {
+    padding: 20,
+  },
+  infoModalDetailsBox: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 14,
+    gap: 11,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 16,
+  },
+  infoDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  detailIconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "#EDE9FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoDetailText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#475569",
+    lineHeight: 18,
+  },
+  infoModalUnlinkBtn: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 999,
+    backgroundColor: "#FFF1F2",
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+  },
+  infoModalUnlinkText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#E11D48",
+  },
+
+  // Modal bonito de confirmación para desvincular
+  unlinkOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 22,
+  },
+  unlinkCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  unlinkIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+  },
+  unlinkBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#E11D48",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  unlinkTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    textAlign: "center",
+  },
+  unlinkBody: {
+    fontSize: 13.5,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  unlinkWarningBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#FFF1F2",
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+  },
+  unlinkWarningText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#9F1239",
+    lineHeight: 17,
+  },
+  unlinkBtnsRow: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+  },
+  unlinkCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 999,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unlinkCancelText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  unlinkConfirmBtn: {
+    flex: 1,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  unlinkConfirmGradient: {
+    paddingVertical: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unlinkConfirmText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+
   qrScanInlineBtn: {
     padding: 6,
   },
@@ -1420,51 +2077,6 @@ const styles = StyleSheet.create({
     color: "#7C3AED",
     fontWeight: "700",
     fontSize: 13.5,
-  },
-  qrModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  qrModalCard: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 20,
-    alignItems: "center",
-    gap: 14,
-  },
-  qrModalHeader: {
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  qrCameraBox: {
-    width: 240,
-    height: 240,
-    borderRadius: 22,
-    overflow: "hidden",
-    borderWidth: 3,
-    borderColor: "#7C3AED",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qrTargetFrame: {
-    position: "absolute",
-    width: 150,
-    height: 150,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  qrModalHint: {
-    fontSize: 12.5,
-    color: "#6B7280",
-    textAlign: "center",
   },
 
   section: {
@@ -1678,11 +2290,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
     textDecorationLine: "underline",
-  },
-
-  crisisFooter: {
-    fontSize: 12,
-    marginTop: 8,
-    color: "#374151",
   },
 });
