@@ -53,6 +53,13 @@ const ejerciciosIniciales = [
     duracion: "5 minutos",
   },
   {
+    id: 4,
+    titulo: "Técnica cognitiva ABCDE",
+    descripcion:
+      "Diagnostica tus pensamientos automáticos (A-B-C), debátelos (D-E) y obtén tu interpretación clínica.",
+    duracion: "5 - 8 minutos",
+  },
+  {
     id: 5,
     titulo: "Autoabrazo consciente",
     descripcion:
@@ -69,6 +76,7 @@ const imagenesEjercicios = {
   1: require("../assets/respracion.gif"), // Respiración 4-7-8
   2: require("../assets/corporal.png"), // Escaneo corporal
   3: require("../assets/sentidos.jpg"), // Anclaje con los sentidos
+  4: require("../assets/ilustrar.jpg"), // Técnica cognitiva ABCDE
   5: require("../assets/autoabrazo.jpg"), // Autoabrazo consciente
 };
 
@@ -252,9 +260,11 @@ export default function CheckingScreen({ navigation }) {
     }
   };
 
-  const handleEmpezarEjercicio = async (item) => {
+const handleEmpezarEjercicio = async (item) => {
     console.log("Ejercicio seleccionado:", item.titulo);
 
+    // Temporalmente desactivado el bloqueo de 2 horas para pruebas
+    /*
     const now = new Date();
     const hiddenUntil = new Date(
       now.getTime() + 2 * 60 * 60 * 1000
@@ -271,27 +281,34 @@ export default function CheckingScreen({ navigation }) {
       );
 
       setHiddenMap(map);
-
-      if (item.id === 1) {
-        navigation.navigate("Respiracion");
-        return;
-      }
-
-      if (item.id === 2) {
-        navigation.navigate("Escaneo");
-      }
-
-      if (item.id === 3) {
-        navigation.navigate("Sentidos");
-        return;
-      }
-
-      if (item.id === 5) {
-        navigation.navigate("Autoabrazo");
-        return;
-      }
     } catch (e) {
       console.log("Error ocultando ejercicio:", e);
+    }
+    */
+
+    if (item.id === 1) {
+      navigation.navigate("Respiracion");
+      return;
+    }
+
+    if (item.id === 2) {
+      navigation.navigate("Escaneo");
+      return;
+    }
+
+    if (item.id === 3) {
+      navigation.navigate("Sentidos");
+      return;
+    }
+
+    if (item.id === 4) {
+      navigation.navigate("TecnicaABCDE");
+      return;
+    }
+
+    if (item.id === 5) {
+      navigation.navigate("Autoabrazo");
+      return;
     }
   };
 
@@ -335,12 +352,8 @@ export default function CheckingScreen({ navigation }) {
     navigation.navigate("PantallaRapida");
   };
 
-  const now = new Date();
-  const visibleEjercicios = ejercicios.filter((e) => {
-    const hiddenUntil = hiddenMap[e.id];
-    if (!hiddenUntil) return true;
-    return new Date(hiddenUntil) <= now;
-  });
+  // Mostramos todos los ejercicios sin filtrar durante las pruebas
+  const visibleEjercicios = ejercicios;
 
   const canGoTestDiario = !testRealizadoHoy && puedeHacerTestHoy;
 
