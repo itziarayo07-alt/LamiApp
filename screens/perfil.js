@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   Alert,
@@ -6,7 +6,6 @@ import {
   Dimensions,
   Image,
   Linking,
-  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -69,7 +68,17 @@ export default function ProfileScreen({ navigation }) {
   // Estados para escáner QR en Expo Go
   const [modalEscanerQR, setModalEscanerQR] = useState(false);
   const [qrEscaneado, setQrEscaneado] = useState(false);
+  const [camaraLista, setCamaraLista] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
+  useEffect(() => {
+    if (!modalEscanerQR) {
+      setCamaraLista(false);
+      return;
+    }
+    const timer = setTimeout(() => setCamaraLista(true), 150);
+    return () => clearTimeout(timer);
+  }, [modalEscanerQR]);
 
   // Centro de ayuda
   const [showHelp, setShowHelp] = useState(false);
@@ -307,6 +316,7 @@ export default function ProfileScreen({ navigation }) {
       }
     }
     setQrEscaneado(false);
+    setCamaraLista(false);
     setModalEscanerQR(true);
   };
 
@@ -320,6 +330,7 @@ export default function ProfileScreen({ navigation }) {
       ? texto.split("|")[1] || ""
       : texto;
 
+    setCamaraLista(false);
     setModalEscanerQR(false);
     setCodigoPsicologo(codigoExtraido);
 
@@ -1151,41 +1162,109 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </LinearGradient>
 
-      {/* MODAL DE ESCÁNER QR PARA VINCULAR CON PSICÓLOGO */}
-      <Modal
-        visible={modalEscanerQR}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModalEscanerQR(false)}
-      >
-        <View style={styles.qrModalOverlay}>
-          <View style={styles.qrModalCard}>
-            <View style={styles.qrModalHeader}>
-              <Text style={styles.sectionTitle}>Escanear QR del Psicólogo</Text>
-              <TouchableOpacity onPress={() => setModalEscanerQR(false)}>
-                <Ionicons name="close" size={24} color="#4B5563" />
+      {/* ESCÁNER QR A PANTALLA COMPLETA PARA VINCULAR CON PSICÓLOGO */}
+      {modalEscanerQR && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "#000000",
+            zIndex: 999,
+            elevation: 20,
+          }}
+        >
+          {camaraLista && cameraPermission?.granted && (
+            <CameraView
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: SCREEN_WIDTH,
+                height: Dimensions.get("window").height,
+              }}
+              facing="back"
+              active={modalEscanerQR}
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={
+                qrEscaneado ? undefined : handleBarCodeScanned
+              }
+            />
+          )}
+
+          {/* Capa superior con guía visual y botón cerrar */}
+          <SafeAreaView
+            style={{
+              flex: 1,
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: 24,
+              paddingTop: insets.top + 12,
+            }}
+          >
+            <View
+              style={{
+                width: "100%",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                backgroundColor: "rgba(15, 23, 42, 0.65)",
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderRadius: 16,
+              }}
+            >
+              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>
+                Escanear QR del Psicólogo
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setCamaraLista(false);
+                  setModalEscanerQR(false);
+                }}
+              >
+                <Ionicons name="close" size={26} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.qrCameraBox}>
-              <CameraView
-                style={StyleSheet.absoluteFillObject}
-                facing="back"
-                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                onBarcodeScanned={
-                  qrEscaneado ? undefined : handleBarCodeScanned
-                }
-              />
-              <View style={styles.qrTargetFrame} />
-            </View>
+            <View
+              pointerEvents="none"
+              style={{
+                width: 230,
+                height: 230,
+                borderRadius: 24,
+                borderWidth: 3,
+                borderColor: "#A374CC",
+                backgroundColor: "rgba(255,255,255,0.05)",
+              }}
+            />
 
-            <Text style={styles.qrModalHint}>
-              Apunta la cámara al código QR que te muestra tu especialista en
-              consulta.
-            </Text>
-          </View>
+            <View
+              style={{
+                backgroundColor: "rgba(15, 23, 42, 0.72)",
+                paddingHorizontal: 18,
+                paddingVertical: 12,
+                borderRadius: 16,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 13,
+                  textAlign: "center",
+                }}
+              >
+                Apunta la cámara al código QR que te muestra tu especialista en
+                consulta.
+              </Text>
+            </View>
+          </SafeAreaView>
         </View>
-      </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -1374,6 +1453,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   qrTargetFrame: {
+    position: "absolute",
     width: 150,
     height: 150,
     borderRadius: 18,

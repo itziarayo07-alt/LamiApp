@@ -3,14 +3,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../config/firebaseConfig";
@@ -35,51 +35,6 @@ const PAQUETES = [
   { id: "profesional", nombre: "Profesional", limite: 30, precio: 599 },
   { id: "consultorio", nombre: "Consultorio", limite: 100, precio: 1299 },
 ];
-
-// Genera una matriz visual determinista 17x17 con patrones de búsqueda QR reales
-// basada en el código único del psicólogo para que cada terapeuta tenga su QR único
-function generarMatrizQR(texto) {
-  const size = 17;
-  const grid = Array.from({ length: size }, () => Array(size).fill(0));
-
-  const colocarFinder = (r0, c0) => {
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        const esBorde = r === 0 || r === 4 || c === 0 || c === 4;
-        const esCentro = r >= 1 && r <= 3 && c >= 1 && c <= 3 && !(r === 1 && c === 1) && !(r === 1 && c === 3) && !(r === 3 && c === 1) && !(r === 3 && c === 3);
-        grid[r0 + r][c0 + c] = esBorde || (r === 2 && c === 2) ? 1 : 0;
-      }
-    }
-  };
-
-  colocarFinder(0, 0);
-  colocarFinder(0, size - 5);
-  colocarFinder(size - 5, 0);
-
-  let hash = 2166136261;
-  for (let i = 0; i < texto.length; i++) {
-    hash ^= texto.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  for (let r = 0; r < size; r++) {
-    for (let c = 0; c < size; c++) {
-      const enFinderSupIzq = r < 6 && c < 6;
-      const enFinderSupDer = r < 6 && c >= size - 6;
-      const enFinderInfIzq = r >= size - 6 && c < 6;
-      const enCentroLogo = r >= 6 && r <= 10 && c >= 6 && c <= 10;
-
-      if (enFinderSupIzq || enFinderSupDer || enFinderInfIzq || enCentroLogo) {
-        continue;
-      }
-
-      hash ^= (r * 31 + c * 17 + texto.length) * 2654435761;
-      grid[r][c] = Math.abs(hash) % 3 === 0 ? 1 : 0;
-    }
-  }
-
-  return grid;
-}
 
 export default function FlywheelQR({ navigation }) {
   const [perfilPsicologo, setPerfilPsicologo] = useState(null);
@@ -133,7 +88,9 @@ export default function FlywheelQR({ navigation }) {
 
   // Payload real que codifica el QR para vincular al paciente
   const payloadQR = `LAMI-LINK|${codigoVinculacion}|${psicologoId}`;
-  const matrizQR = useMemo(() => generarMatrizQR(payloadQR), [payloadQR]);
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&color=1E293B&bgcolor=FFFFFF&data=${encodeURIComponent(
+    payloadQR
+  )}`;
 
   // Cálculos dinámicos del Sistema Flywheel (idénticos al prototipo HTML)
   const pacientesActivosMes = useMemo(
@@ -306,38 +263,24 @@ export default function FlywheelQR({ navigation }) {
             style={styles.qrOuterFrame}
           >
             <View style={styles.qrInnerWhite}>
-              <View style={styles.qrGridContainer}>
-                {matrizQR.map((fila, rIdx) => (
-                  <View key={rIdx} style={styles.qrRow}>
-                    {fila.map((celda, cIdx) => {
-                      const esCentro =
-                        rIdx >= 6 && rIdx <= 10 && cIdx >= 6 && cIdx <= 10;
-                      if (esCentro) {
-                        return (
-                          <View key={cIdx} style={styles.qrCellBlank} />
-                        );
-                      }
-                      return (
-                        <View
-                          key={cIdx}
-                          style={[
-                            styles.qrCell,
-                            celda === 1
-                              ? styles.qrCellFilled
-                              : styles.qrCellEmpty,
-                          ]}
-                        />
-                      );
-                    })}
-                  </View>
-                ))}
+              <View
+                style={{
+                  position: "relative",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Image
+                  source={{ uri: qrImageUrl }}
+                  style={{ width: 185, height: 185, borderRadius: 12 }}
+                />
 
                 {/* Emblema central flotante */}
                 <LinearGradient
                   colors={[PALETTE.purpleVibrant, PALETTE.indigoMuted]}
-                  style={styles.qrCenterEmblem}
+                  style={[styles.qrCenterEmblem, { top: 70, left: 70 }]}
                 >
-                  <Ionicons name="pulse" size={22} color="#FFFFFF" />
+                  <Ionicons name="pulse" size={20} color="#FFFFFF" />
                 </LinearGradient>
               </View>
             </View>
