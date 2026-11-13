@@ -10,6 +10,7 @@ import PantallaRapida from '../screens/PantallaRapida';
 import Perfil from '../screens/perfil';
 import Respiracion from '../screens/Respiracion';
 import Sentidos from '../screens/Sentidos';
+import TecnicaABCDE from '../screens/TecnicaABCDE';
 import Test from '../screens/test';
 import TestDiario from '../screens/TestDiario';
 import TestPersonalidad from '../screens/TestPersonalidad';
@@ -30,6 +31,7 @@ export default function AppStack() {
       <Stack.Screen name="InfoAnsiedad" component={InfoAnsiedad} />
       <Stack.Screen name="Respiracion" component={Respiracion} />
       <Stack.Screen name="Sentidos" component={Sentidos} />
+      <Stack.Screen name="TecnicaABCDE" component={TecnicaABCDE} />
       <Stack.Screen name="Autoabrazo" component={Autoabrazo} />
       <Stack.Screen name="Escaneo" component={Escaneo} />
     </Stack.Navigator>
