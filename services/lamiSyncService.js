@@ -46,17 +46,39 @@ export async function vincularConPsicologo(patientUid, codigoInput) {
   };
 }
 
-// 2. ENVIAR EJERCICIO O TAREA (Desde la App del Psicólogo hacia el Paciente)
-export async function enviarEjercicioAPaciente(patientUid, psicologoId, ejercicio) {
-  return await addDoc(collection(db, "usuarios", patientUid, "tareas_asignadas"), {
-    ...ejercicio,
-    psicologoId,
-    completado: false,
-    creadoEn: serverTimestamp(),
-  });
+// 1.1 ELIMINAR EJERCICIO ASIGNADO (Desde el panel del psicólogo)
+import { deleteDoc } from "firebase/firestore";
+
+export async function eliminarEjercicioAsignado(patientUid, tareaId) {
+  return await deleteDoc(
+    doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId)
+  );
 }
 
-// 3. ESCUCHAR EN TIEMPO REAL LO QUE MANDA EL PSICÓLOGO (En CheckingScreen.js del paciente)
+// 2. ENVIAR EJERCICIO O TAREA PERSONALIZADA (Desde la App del Psicólogo hacia el Paciente)
+export async function enviarEjercicioAPaciente(
+  patientUid,
+  psicologoId,
+  ejercicio
+) {
+  return await addDoc(
+    collection(db, "usuarios", patientUid, "tareas_asignadas"),
+    {
+      ...ejercicio,
+      psicologoId,
+      frecuenciaTipo: ejercicio.frecuenciaTipo || "unica", // "unica" | "recurrente"
+      intervaloHoras: ejercicio.intervaloHoras || null,
+      frecuenciaLabel: ejercicio.frecuenciaLabel || "Única vez",
+      completado: false,
+      vecesCompletado: 0,
+      proximoDisponibleISO: null,
+      registrosRespuestas: [],
+      creadoEn: serverTimestamp(),
+    }
+  );
+}
+
+// 3. ESCUCHAR EN TIEMPO REAL LO QUE MANDA EL PSICÓLOGO (En CheckingScreen.js y PsicologoDashboard)
 export function escucharTareasDelPsicologo(patientUid, callback) {
   const q = query(
     collection(db, "usuarios", patientUid, "tareas_asignadas"),
@@ -73,17 +95,77 @@ export function escucharTareasDelPsicologo(patientUid, callback) {
   });
 }
 
-// 4. MARCAR EJERCICIO COMPLETADO (Alimenta el Flywheel $0 MXN del psicólogo)
-export async function completarEjercicioAsignado(patientUid, tareaId) {
-  await updateDoc(doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId), {
-    completado: true,
+// 4. MARCAR EJERCICIO COMPLETADO + GUARDAR RESPUESTAS Y GESTIONAR RECURRENCIA
+export async function completarEjercicioAsignado(
+  patientUid,
+  tareaId,
+  respuestasMap = {},
+  tareaData = {}
+) {
+  const tareaRef = doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId);
+  const snap = await getDoc(tareaRef);
+  const actual = snap.exists() ? snap.data() : tareaData;
+
+  const pasos =
+    actual.pasos && actual.pasos.length > 0
+      ? actual.pasos
+      : [
+          {
+            tipo: "pregunta",
+            label: "¿Cómo te sentiste al realizar esta indicación?",
+          },
+        ];
+
+  const detalleRespuestas = pasos.map((paso, idx) => ({
+    paso: paso.label,
+    tipo: paso.tipo || "pregunta",
+    valor:
+      respuestasMap[idx] !== undefined && respuestasMap[idx] !== ""
+        ? respuestasMap[idx]
+        : paso.tipo === "instruccion"
+        ? "Completado ✓"
+        : "Sin respuesta",
+  }));
+
+  const ahora = new Date();
+  const nuevoRegistro = {
+    id: Date.now().toString(),
+    fechaISO: ahora.toISOString(),
+    respuestas: detalleRespuestas,
+  };
+
+  const historialPrevio = Array.isArray(actual.registrosRespuestas)
+    ? actual.registrosRespuestas
+    : [];
+  const esRecurrente = actual.frecuenciaTipo === "recurrente";
+  const horas = Number(actual.intervaloHoras || 24);
+
+  const proximoISO = esRecurrente
+    ? new Date(ahora.getTime() + horas * 60 * 60 * 1000).toISOString()
+    : null;
+
+  await updateDoc(tareaRef, {
+    completado: esRecurrente ? false : true,
+    ultimaVezCompletadoISO: ahora.toISOString(),
+    proximoDisponibleISO: proximoISO,
+    vecesCompletado: Number(actual.vecesCompletado || 0) + 1,
+    registrosRespuestas: [nuevoRegistro, ...historialPrevio],
     completadoEn: serverTimestamp(),
   });
 
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = ahora.toISOString().slice(0, 7);
+  const hoyISO = ahora.toISOString().slice(0, 10);
+  const horaFormateada = ahora.toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   await updateDoc(doc(db, "usuarios", patientUid), {
     activoEnMes: mesActual,
     ultimaActividad: serverTimestamp(),
+    ultimoCheckinFecha: hoyISO,
+    horaUltimoCheckin: horaFormateada,
+    ultimoCheckinNota: `Completó ejercicio: ${actual.titulo || "Personalizado"}`,
   });
 }
 

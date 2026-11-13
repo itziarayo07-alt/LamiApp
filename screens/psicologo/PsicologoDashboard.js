@@ -930,18 +930,31 @@ export default function PsicologoDashboard({ navigation }) {
                       </Text>
                     </View>
 
-                    <View
+                    <TouchableOpacity
                       style={[
                         styles.tasksPill,
-                        { backgroundColor: cfg.pillBg },
+                        {
+                          backgroundColor: "#EDE9FE",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        },
                       ]}
+                      onPress={() =>
+                        irAPantalla("EjerciciosPsicologo", { paciente: pac })
+                      }
                     >
+                      <Ionicons
+                        name="create-outline"
+                        size={13}
+                        color="#5B21B6"
+                      />
                       <Text
-                        style={[styles.tasksPillText, { color: cfg.pillText }]}
+                        style={[styles.tasksPillText, { color: "#5B21B6" }]}
                       >
-                        {pac.porcentajeTareas}% tareas
+                        Personalizar ejercicios
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </TouchableOpacity>

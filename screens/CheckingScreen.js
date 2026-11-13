@@ -501,69 +501,174 @@ const handleEmpezarEjercicio = async (item) => {
             </TouchableOpacity>
           </View>
 
-          {/* LISTA DE EJERCICIOS */}
-          {/* 👇 PEGA ESTE BLOQUE AQUÍ (ANTES DE LISTA DE EJERCICIOS) */}
-          {tareasPsicologo
-            .filter((t) => !t.completado)
-            .map((tarea) => (
+          {/* LISTA DE EJERCICIOS: SI EL PSICÓLOGO ASIGNÓ EJERCICIOS PERSONALIZADOS, SE OCULTAN LOS POR DEFECTO */}
+          {tareasPsicologo.length > 0 ? (
+            <>
               <View
-                key={tarea.id}
-                style={[styles.card, { borderColor: "#7C3AED", borderWidth: 2 }]}
+                style={{
+                  backgroundColor: "#EDE9FE",
+                  borderRadius: 14,
+                  padding: 12,
+                  marginBottom: 12,
+                  borderWidth: 1,
+                  borderColor: "#C4B5FD",
+                }}
               >
                 <Text
                   style={{
-                    fontSize: 11,
-                    fontWeight: "700",
-                    color: "#7C3AED",
-                    marginBottom: 4,
+                    fontSize: 13,
+                    fontWeight: "800",
+                    color: "#4C1D95",
                   }}
                 >
-                  🩺 ASIGNADO POR TU PSICÓLOGO •{" "}
-                  {tarea.enfoque?.toUpperCase() || "TERAPIA"}
+                  🩺 Plan de Ejercicios Personalizado por tu Especialista
                 </Text>
-                <Text style={styles.cardTitulo}>{tarea.titulo}</Text>
-                <Text style={styles.cardDescripcion}>{tarea.descripcion}</Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: "#5B21B6",
+                    marginTop: 2,
+                  }}
+                >
+                  Tu psicólogo configuró estos ejercicios especialmente para tu
+                  proceso terapéutico.
+                </Text>
+              </View>
+
+              {tareasPsicologo.map((tarea) => {
+                const esRecurrente = tarea.frecuenciaTipo === "recurrente";
+                const ahoraMs = Date.now();
+                const proximoMs = tarea.proximoDisponibleISO
+                  ? new Date(tarea.proximoDisponibleISO).getTime()
+                  : 0;
+                const enEsperaRecurrente =
+                  esRecurrente && proximoMs > ahoraMs;
+                const yaCompletadoUnico =
+                  !esRecurrente && Boolean(tarea.completado);
+                const deshabilitado =
+                  enEsperaRecurrente || yaCompletadoUnico;
+
+                let textoTiempoRestante = "";
+                if (enEsperaRecurrente) {
+                  const diffHoras = Math.ceil(
+                    (proximoMs - ahoraMs) / (1000 * 60 * 60)
+                  );
+                  textoTiempoRestante =
+                    diffHoras <= 1
+                      ? "Disponible en menos de 1 hora"
+                      : diffHoras < 24
+                      ? `Disponible en ${diffHoras} horas`
+                      : `Disponible en ${Math.ceil(diffHoras / 24)} día(s)`;
+                }
+
+                return (
+                  <View
+                    key={tarea.id}
+                    style={[
+                      styles.card,
+                      {
+                        borderColor: deshabilitado ? "#D1D5DB" : "#7C3AED",
+                        borderWidth: 2,
+                        opacity: deshabilitado ? 0.85 : 1,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "800",
+                          color: "#7C3AED",
+                        }}
+                      >
+                        🩺 {tarea.enfoque?.toUpperCase() || "TERAPIA"}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "700",
+                          color: esRecurrente ? "#047857" : "#6D28D9",
+                          backgroundColor: esRecurrente
+                            ? "#D1FAE5"
+                            : "#EDE9FE",
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 999,
+                        }}
+                      >
+                        {tarea.frecuenciaLabel ||
+                          (esRecurrente ? "Recurrente" : "Única vez")}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.cardTitulo}>{tarea.titulo}</Text>
+                    <Text style={styles.cardDescripcion}>
+                      {tarea.descripcion}
+                    </Text>
+                    <Text style={styles.cardDuracion}>
+                      ⏱ Duración: {tarea.duracion || "5 min"} •{" "}
+                      {tarea.pasos?.length || 1} paso(s)
+                      {tarea.vecesCompletado > 0
+                        ? ` • Realizado ${tarea.vecesCompletado} vez/veces`
+                        : ""}
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.boton,
+                        deshabilitado && { backgroundColor: "#9CA3AF" },
+                      ]}
+                      disabled={deshabilitado}
+                      onPress={() =>
+                        navigation.navigate("EjercicioDinamico", { tarea })
+                      }
+                    >
+                      <Text style={styles.botonTexto}>
+                        {yaCompletadoUnico
+                          ? "Ejercicio completado ✓"
+                          : enEsperaRecurrente
+                          ? `Realizado ✓ • ${textoTiempoRestante}`
+                          : "Realizar ejercicio personalizado"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </>
+          ) : (
+            visibleEjercicios.map((item) => (
+              <View key={item.id} style={styles.card}>
+                <View style={styles.cardImageBox}>
+                  <Image
+                    source={imagenesEjercicios[item.id]}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                </View>
+
+                <Text style={styles.cardTitulo}>{item.titulo}</Text>
+                <Text style={styles.cardDescripcion}>{item.descripcion}</Text>
                 <Text style={styles.cardDuracion}>
-                  Duración: {tarea.duracion || "5 min"}
+                  Duración: {item.duracion}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.boton}
-                  onPress={() =>
-                    navigation.navigate("EjercicioDinamico", { tarea })
-                  }
+                  onPress={() => handleEmpezarEjercicio(item)}
+                  activeOpacity={0.9}
                 >
-                  <Text style={styles.botonTexto}>
-                    Realizar ejercicio asignado
-                  </Text>
+                  <Text style={styles.botonTexto}>Empezar ejercicio</Text>
                 </TouchableOpacity>
               </View>
-            ))}
-          {visibleEjercicios.map((item) => (
-            <View key={item.id} style={styles.card}>
-              <View style={styles.cardImageBox}>
-                <Image
-                  source={imagenesEjercicios[item.id]}
-                  style={styles.cardImage}
-                  resizeMode="cover"
-                />
-              </View>
-
-              <Text style={styles.cardTitulo}>{item.titulo}</Text>
-              <Text style={styles.cardDescripcion}>{item.descripcion}</Text>
-              <Text style={styles.cardDuracion}>
-                Duración: {item.duracion}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.boton}
-                onPress={() => handleEmpezarEjercicio(item)}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.botonTexto}>Empezar ejercicio</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+            ))
+          )}
         </ScrollView>
       </SafeAreaView>
     </View>
