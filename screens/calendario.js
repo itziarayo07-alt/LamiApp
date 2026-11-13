@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -14,17 +14,21 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Calendar } from "react-native-calendars";
 
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { LineChart } from "react-native-chart-kit";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
+import { auth, db } from "../config/firebaseConfig";
 import { notificarAlertaAlEspecialista } from "../services/lamiSyncService";
 
 const screenWidth = Dimensions.get("window").width;
+const CITAS_STORAGE_KEY = "@citas_agendadas_v1";
 
 const MESES_CORTOS = [
   "Ene",
@@ -73,6 +77,7 @@ export default function CalendarioEmocional({ navigation }) {
   const [selectedDay, setSelectedDay] = useState(todayKey);
   const [dayFeelings, setDayFeelings] = useState({});
   const [dayNotes, setDayNotes] = useState({});
+  const [dayAppointments, setDayAppointments] = useState({});
   const [newNoteText, setNewNoteText] = useState("");
   const [notaGuardadaModal, setNotaGuardadaModal] = useState(false);
   const [exportandoPDF, setExportandoPDF] = useState(false);
@@ -94,6 +99,89 @@ export default function CalendarioEmocional({ navigation }) {
     { label: "Emocionado 🤩", color: "#F06292", value: 5 },
     { label: "Calmado 😌", color: "#81C784", value: 4 },
   ];
+
+  // Carga citas locales + solicitudes/citas sincronizadas desde Firestore
+  const loadAppointments = async () => {
+    try {
+      const merged = {};
+
+      // 1. Citas confirmadas guardadas localmente desde Perfil
+      const citasRaw = await AsyncStorage.getItem(CITAS_STORAGE_KEY);
+      if (citasRaw) {
+        const parsed = JSON.parse(citasRaw);
+        Object.keys(parsed).forEach((fecha) => {
+          merged[fecha] = Array.isArray(parsed[fecha]) ? [...parsed[fecha]] : [];
+        });
+      }
+
+      // 2. Sincronizar con solicitudes_sesion en Firestore (pendientes o confirmadas)
+      const user = auth.currentUser;
+      if (user) {
+        const q = query(
+          collection(db, "solicitudes_sesion"),
+          where("pacienteId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        snap.forEach((docSnap) => {
+          const sol = docSnap.data();
+          if (sol.estado === "sin_disponibilidad") return;
+
+          // Si ya tiene fechaCita se coloca en esa fecha; si sigue pendiente, se muestra hoy como aviso
+          const fechaTarget = sol.fechaCita || todayKey;
+          const modRaw = (
+            sol.modalidadConfirmada ||
+            sol.modalidadSolicitada ||
+            "presencial"
+          ).toLowerCase();
+          const esOnline = modRaw === "online" || modRaw === "en línea";
+
+          const ub = sol.ubicacionConfirmada;
+          const lugarStr = esOnline
+            ? "Videollamada en Sala de Teleconsulta Lami"
+            : ub
+            ? `${ub.nombreLugar || "Consultorio privado"} • ${ub.direccion}${
+                ub.pisoConsultorio ? ` (${ub.pisoConsultorio})` : ""
+              }${ub.ciudad ? `, ${ub.ciudad}` : ""}`
+            : sol.lugarCita || "Consulta presencial (ubicación al confirmar)";
+
+          const itemCita = {
+            id: docSnap.id,
+            fecha: fechaTarget,
+            hora: sol.horaCita || "Por confirmar horario",
+            psicologoId: sol.psicologoId || "",
+            psicologoNombre: sol.psicologoNombre || "Especialista",
+            modalidad: esOnline ? "Online" : "Presencial",
+            esOnline,
+            estado: sol.estado || "pendiente",
+            lugar: lugarStr,
+            mensajeTerapeuta: sol.respuestaTerapeuta || sol.mensaje || "",
+          };
+
+          const listaDia = Array.isArray(merged[fechaTarget])
+            ? merged[fechaTarget]
+            : [];
+          const yaExiste = listaDia.some((c) => c.id === docSnap.id);
+          if (!yaExiste) {
+            merged[fechaTarget] = [...listaDia, itemCita];
+          } else {
+            merged[fechaTarget] = listaDia.map((c) =>
+              c.id === docSnap.id ? { ...c, ...itemCita } : c
+            );
+          }
+        });
+      }
+
+      setDayAppointments(merged);
+    } catch (e) {
+      console.warn("Error cargando citas en calendario:", e);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAppointments();
+    }, [])
+  );
 
   useEffect(() => {
     (async () => {
@@ -118,6 +206,8 @@ export default function CalendarioEmocional({ navigation }) {
 
         const notesStr = await AsyncStorage.getItem("dayNotes_v1");
         if (notesStr) setDayNotes(JSON.parse(notesStr));
+
+        await loadAppointments();
 
         const done = await AsyncStorage.getItem("testPersonalidadHecho");
         if (done === "SI") setPersonalityDone(true);
@@ -231,6 +321,23 @@ export default function CalendarioEmocional({ navigation }) {
     setDayNotes(updated);
     setNewNoteText("");
     setNotaGuardadaModal(true);
+  };
+
+  // Unirse a la videollamada de teleconsulta
+  const handleUnirseVideollamada = (cita) => {
+    try {
+      navigation.navigate("SalaTeleconsulta", {
+        citaId: cita.id,
+        psicologoId: cita.psicologoId,
+        psicologoNombre: cita.psicologoNombre,
+        rol: "paciente",
+      });
+    } catch (e) {
+      Alert.alert(
+        "Sala de Teleconsulta",
+        `Conectando a la videollamada con ${cita.psicologoNombre}...`
+      );
+    }
   };
 
   const sortedDates = Object.keys(dayFeelings).sort();
@@ -447,7 +554,6 @@ export default function CalendarioEmocional({ navigation }) {
           await Print.printAsync({ html });
         }
       } catch (shareErr) {
-        // Respaldo para Expo Go en Android: abre el visor de impresión / Guardar como PDF
         await Print.printAsync({ html });
       }
     } catch (e) {
@@ -474,6 +580,10 @@ export default function CalendarioEmocional({ navigation }) {
   const entradasDiaSeleccionado = selectedDay
     ? getNormalizedEntries(dayNotes[selectedDay])
     : [];
+  const citasDiaSeleccionado =
+    selectedDay && Array.isArray(dayAppointments[selectedDay])
+      ? dayAppointments[selectedDay]
+      : [];
 
   return (
     <LinearGradient colors={["#f3e8ff", "#faf5ff"]} style={styles.screen}>
@@ -522,10 +632,15 @@ export default function CalendarioEmocional({ navigation }) {
           >
             <Text style={styles.title}>Calendario Emocional</Text>
 
-            {/* CALENDARIO CON CÍRCULOS DE COLOR POR EMOCIÓN */}
+            {/* CALENDARIO CON CÍRCULOS DE COLOR E INSIGNIA DESTACADA DE CITA */}
             <Calendar
               current={todayKey}
-              extraData={{ dayFeelings, selectedDay, dayNotes }}
+              extraData={{
+                dayFeelings,
+                selectedDay,
+                dayNotes,
+                dayAppointments,
+              }}
               dayComponent={({ date, state }) => {
                 const dateString = date.dateString;
                 const emotionsForDay = dayFeelings[dateString];
@@ -533,6 +648,9 @@ export default function CalendarioEmocional({ navigation }) {
                 const isToday = dateString === todayKey;
                 const hasNotes =
                   getNormalizedEntries(dayNotes[dateString]).length > 0;
+                const citasDelDia = Array.isArray(dayAppointments[dateString])
+                  ? dayAppointments[dateString]
+                  : [];
 
                 return (
                   <DayWithEmotions
@@ -542,6 +660,7 @@ export default function CalendarioEmocional({ navigation }) {
                     isSelected={isSelected}
                     isToday={isToday}
                     hasNotes={hasNotes}
+                    citasDelDia={citasDelDia}
                     onPress={() => {
                       setSelectedDay(dateString);
                       setNewNoteText("");
@@ -554,6 +673,130 @@ export default function CalendarioEmocional({ navigation }) {
                 arrowColor: "#7C3AED",
               }}
             />
+
+            {/* NOTA DESTACADA DE CITA CON TERAPEUTA (PRESENCIAL / ONLINE + BOTÓN VIDEOLLAMADA) */}
+            {citasDiaSeleccionado.length > 0 && (
+              <View style={styles.citaSectionCard}>
+                <View style={styles.citaSectionHeader}>
+                  <View style={styles.citaHeaderIconCircle}>
+                    <Ionicons name="medkit" size={16} color="#FFFFFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.citaSectionTitle}>
+                      Sesión con tu terapeuta ({selectedDay})
+                    </Text>
+                    <Text style={styles.citaSectionSubtitle}>
+                      Detalles de tu consulta programada
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ gap: 10 }}>
+                  {citasDiaSeleccionado.map((cita, idx) => {
+                    const modLower = (cita.modalidad || "").toLowerCase();
+                    const esOnline =
+                      cita.esOnline ||
+                      modLower === "online" ||
+                      modLower === "en línea";
+                    const esPendiente = cita.estado === "pendiente";
+
+                    return (
+                      <View key={cita.id || idx} style={styles.citaItemCard}>
+                        <View style={styles.citaItemTopRow}>
+                          <Text style={styles.citaPsiName}>
+                            {cita.psicologoNombre}
+                          </Text>
+
+                          <View
+                            style={[
+                              styles.citaModalidadBadge,
+                              esOnline
+                                ? styles.citaBadgeOnline
+                                : styles.citaBadgePresencial,
+                            ]}
+                          >
+                            <Ionicons
+                              name={
+                                esOnline
+                                  ? "videocam-outline"
+                                  : "business-outline"
+                              }
+                              size={12}
+                              color={esOnline ? "#0F766E" : "#4338CA"}
+                            />
+                            <Text
+                              style={[
+                                styles.citaModalidadBadgeText,
+                                { color: esOnline ? "#0F766E" : "#4338CA" },
+                              ]}
+                            >
+                              {esOnline ? "Modalidad Online" : "Presencial"}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <Text style={styles.citaTimeText}>
+                          ⏰ {cita.hora}{" "}
+                          {esPendiente
+                            ? "• Solicitud pendiente de confirmar"
+                            : "• Cita confirmada"}
+                        </Text>
+
+                        {/* Nota clara indicando si es presencial (con dirección) o en línea */}
+                        <View style={styles.citaNotaBox}>
+                          <Ionicons
+                            name={
+                              esOnline
+                                ? "laptop-outline"
+                                : "location-outline"
+                            }
+                            size={15}
+                            color={esOnline ? "#0D9488" : "#4F46E5"}
+                            style={{ marginTop: 1 }}
+                          />
+                          <Text style={styles.citaNotaText}>
+                            {esOnline
+                              ? "Tu sesión es en modalidad Online. Únete desde aquí cuando llegue la hora de tu consulta."
+                              : `Tu sesión es Presencial: ${cita.lugar}`}
+                          </Text>
+                        </View>
+
+                        {cita.mensajeTerapeuta ? (
+                          <Text style={styles.citaTerapeutaMsg}>
+                            💬 "{cita.mensajeTerapeuta}"
+                          </Text>
+                        ) : null}
+
+                        {/* Botón Unirse a la videollamada */}
+                        {esOnline && (
+                          <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() => handleUnirseVideollamada(cita)}
+                            style={{ marginTop: 6 }}
+                          >
+                            <LinearGradient
+                              colors={["#0D9488", "#0284C7"]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 0 }}
+                              style={styles.joinCallBtn}
+                            >
+                              <Ionicons
+                                name="videocam"
+                                size={17}
+                                color="#FFFFFF"
+                              />
+                              <Text style={styles.joinCallBtnText}>
+                                Unirse a la videollamada
+                              </Text>
+                            </LinearGradient>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {/* SELECCIÓN DE EMOCIONES */}
             <View style={styles.section}>
@@ -915,7 +1158,7 @@ export default function CalendarioEmocional({ navigation }) {
   );
 }
 
-// Círculo de cada día pintado directamente con el color de la emoción (1 color o mitad y mitad)
+// Círculo de cada día + insignia sobresaliente si tiene cita con el terapeuta
 function DayWithEmotions({
   date,
   state,
@@ -923,6 +1166,7 @@ function DayWithEmotions({
   isSelected,
   isToday,
   hasNotes,
+  citasDelDia = [],
   onPress,
 }) {
   const dayNumber = date.day;
@@ -938,6 +1182,17 @@ function DayWithEmotions({
   const secondColor = validColors[1] || null;
   const hasColor = validColors.length > 0;
 
+  const tieneCita = citasDelDia.length > 0;
+  const tieneCitaConfirmada = citasDelDia.some(
+    (c) => c.estado !== "pendiente"
+  );
+  const tieneCitaOnline = citasDelDia.some(
+    (c) =>
+      c.esOnline ||
+      (c.modalidad || "").toLowerCase() === "online" ||
+      (c.modalidad || "").toLowerCase() === "en línea"
+  );
+
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -950,6 +1205,10 @@ function DayWithEmotions({
           styles.dayOuter,
           isSelected && styles.dayOuterSelected,
           isToday && styles.dayOuterToday,
+          tieneCita &&
+            (tieneCitaConfirmada
+              ? styles.dayOuterCitaConfirmada
+              : styles.dayOuterCitaPendiente),
         ]}
       >
         {firstColor && secondColor ? (
@@ -973,12 +1232,35 @@ function DayWithEmotions({
               style={[
                 styles.dayText,
                 isToday && !hasColor && { color: "#7C3AED", fontWeight: "800" },
+                tieneCita &&
+                  !hasColor && {
+                    color: tieneCitaConfirmada ? "#0F766E" : "#B45309",
+                    fontWeight: "900",
+                  },
                 isDisabled && { color: "#D1D5DB" },
                 hasColor && styles.dayTextColored,
               ]}
             >
               {dayNumber}
             </Text>
+          </View>
+        )}
+
+        {/* Insignia sobresaliente en la esquina superior derecha cuando hay sesión */}
+        {tieneCita && (
+          <View
+            style={[
+              styles.citaCornerBadge,
+              {
+                backgroundColor: tieneCitaConfirmada ? "#0D9488" : "#F59E0B",
+              },
+            ]}
+          >
+            <Ionicons
+              name={tieneCitaOnline ? "videocam" : "medkit"}
+              size={8}
+              color="#FFFFFF"
+            />
           </View>
         )}
 
@@ -1031,6 +1313,123 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 10,
   },
+
+  // Tarjeta destacada de sesión con terapeuta debajo del calendario
+  citaSectionCard: {
+    marginTop: 14,
+    backgroundColor: "#F0FDFA",
+    borderRadius: 22,
+    padding: 15,
+    borderWidth: 1.5,
+    borderColor: "#5EEAD4",
+    shadowColor: "#0D9488",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  citaSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  citaHeaderIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    backgroundColor: "#0D9488",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  citaSectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F766E",
+  },
+  citaSectionSubtitle: {
+    fontSize: 11.5,
+    color: "#115E59",
+  },
+  citaItemCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#CCFBF1",
+    gap: 6,
+  },
+  citaItemTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  citaPsiName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1E293B",
+    flex: 1,
+  },
+  citaModalidadBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  citaBadgeOnline: {
+    backgroundColor: "#CCFBF1",
+  },
+  citaBadgePresencial: {
+    backgroundColor: "#EEF2FF",
+  },
+  citaModalidadBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  citaTimeText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#0D9488",
+  },
+  citaNotaBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    backgroundColor: "#F8FAFC",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  citaNotaText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: "#334155",
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  citaTerapeutaMsg: {
+    fontSize: 12,
+    color: "#64748B",
+    fontStyle: "italic",
+  },
+  joinCallBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    borderRadius: 14,
+  },
+  joinCallBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13.5,
+    fontWeight: "800",
+  },
+
   emotionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   emotionBtn: {
     paddingVertical: 10,
@@ -1256,18 +1655,19 @@ const styles = StyleSheet.create({
   },
   pdfBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
 
-  // Círculos de días del calendario
+  // Círculos de días del calendario + insignia sobresaliente de cita
   dayTouchable: {
     paddingVertical: 2,
     alignItems: "center",
     justifyContent: "center",
   },
   dayOuter: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 39,
+    height: 39,
+    borderRadius: 19.5,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
   },
   dayOuterSelected: {
     borderWidth: 2,
@@ -1277,6 +1677,29 @@ const styles = StyleSheet.create({
   dayOuterToday: {
     borderWidth: 1.5,
     borderColor: "#7C3AED",
+  },
+  dayOuterCitaConfirmada: {
+    borderWidth: 2,
+    borderColor: "#0D9488",
+    backgroundColor: "rgba(13, 148, 136, 0.12)",
+  },
+  dayOuterCitaPendiente: {
+    borderWidth: 2,
+    borderColor: "#F59E0B",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+  },
+  citaCornerBadge: {
+    position: "absolute",
+    top: -1,
+    right: -1,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+    elevation: 3,
   },
   daySolidCircle: {
     width: 32,

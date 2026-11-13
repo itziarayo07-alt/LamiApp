@@ -2,34 +2,32 @@ import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    onSnapshot,
-    query,
-    serverTimestamp,
-    where,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  where,
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    Linking,
-    Modal,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../config/firebaseConfig";
 import { escucharMisPacientes } from "../../services/lamiSyncService";
 
-// Paleta oficial Lami (Inversión Aurora Lavanda + Teal Clínico)
 const PALETTE = {
   tealDeep: "#6192A4",
   tealMid: "#8BC1D1",
@@ -72,9 +70,17 @@ const MINUTOS_LISTA = ["00", "10", "15", "20", "30", "40", "45", "50"];
 
 const OBJETIVOS_TERAPEUTICOS = [
   { id: "calma", label: "Regulación emocional y calma", icon: "heart-outline" },
-  { id: "crisis", label: "Abordaje de crisis y respiración", icon: "pulse-outline" },
+  {
+    id: "crisis",
+    label: "Abordaje de crisis y respiración",
+    icon: "pulse-outline",
+  },
   { id: "cognitiva", label: "Reestructuración cognitiva", icon: "bulb-outline" },
-  { id: "progreso", label: "Seguimiento de progreso semanal", icon: "trending-up-outline" },
+  {
+    id: "progreso",
+    label: "Seguimiento de progreso semanal",
+    icon: "trending-up-outline",
+  },
   { id: "otro", label: "Otro enfoque personalizado", icon: "create-outline" },
 ];
 
@@ -86,25 +92,19 @@ export default function AgendaPsicologo({ navigation }) {
   const [pacientes, setPacientes] = useState([]);
   const [citasFirestore, setCitasFirestore] = useState([]);
 
-  // Paciente activo seleccionado arriba
   const [pacienteActivoKey, setPacienteActivoKey] = useState(null);
-
-  // Cita seleccionada en la lista para mostrar opción de eliminar
   const [citaSeleccionadaId, setCitaSeleccionadaId] = useState(null);
 
-  // Modalidad global del consultorio ("consultorio" | "online")
   const [modalidadGlobal, setModalidadGlobal] = useState("consultorio");
   const [direccionConsultorio, setDireccionConsultorio] = useState(
     "Torre Médica #402, Consultorio 4B"
   );
   const [editandoDireccion, setEditandoDireccion] = useState(false);
 
-  // Día seleccionado en la tira semanal
   const [diaSeleccionado, setDiaSeleccionado] = useState("jue");
 
-  // Modal para crear nueva cita (Inicio + Término)
   const [modalNuevaCita, setModalNuevaCita] = useState(false);
-  const [turnoHorario, setTurnoHorario] = useState("manana"); // "manana" | "tarde"
+  const [turnoHorario, setTurnoHorario] = useState("manana");
   const [horaInicio, setHoraInicio] = useState("08");
   const [minutoInicio, setMinutoInicio] = useState("00");
   const [horaFin, setHoraFin] = useState("08");
@@ -116,12 +116,10 @@ export default function AgendaPsicologo({ navigation }) {
   const [otroEnfoqueTexto, setOtroEnfoqueTexto] = useState("");
   const [guardandoCita, setGuardandoCita] = useState(false);
 
-  // Modal bonito de confirmación
   const [citaConfirmadaModal, setCitaConfirmadaModal] = useState(null);
 
   const psicologoId = auth.currentUser?.uid || "PSI-DEMO-492";
 
-  // 1. Perfil del psicólogo
   useEffect(() => {
     if (!auth.currentUser?.uid) return;
     const unsubPerfil = onSnapshot(
@@ -130,7 +128,9 @@ export default function AgendaPsicologo({ navigation }) {
         if (snap.exists()) {
           const data = snap.data();
           setPerfilPsicologo(data);
-          if (data.direccionConsultorio) {
+          if (data.ubicacion?.direccion) {
+            setDireccionConsultorio(data.ubicacion.direccion);
+          } else if (data.direccionConsultorio) {
             setDireccionConsultorio(data.direccionConsultorio);
           }
         }
@@ -139,7 +139,6 @@ export default function AgendaPsicologo({ navigation }) {
     return () => unsubPerfil();
   }, []);
 
-  // 2. Pacientes reales vinculados mediante código QR
   useEffect(() => {
     const unsubPac = escucharMisPacientes(psicologoId, (lista) => {
       const reales = lista || [];
@@ -154,7 +153,6 @@ export default function AgendaPsicologo({ navigation }) {
     return () => unsubPac && unsubPac();
   }, [psicologoId]);
 
-  // 3. Citas reales guardadas en Firestore
   useEffect(() => {
     if (!auth.currentUser?.uid) return;
     const q = query(
@@ -183,7 +181,6 @@ export default function AgendaPsicologo({ navigation }) {
     .join("")
     .toUpperCase();
 
-  // Objeto del paciente seleccionado actualmente
   const pacienteSeleccionado = useMemo(() => {
     if (pacientes.length === 0) return null;
     const idx = pacientes.findIndex(
@@ -192,13 +189,11 @@ export default function AgendaPsicologo({ navigation }) {
     return idx >= 0 ? pacientes[idx] : pacientes[0];
   }, [pacientes, pacienteActivoKey]);
 
-  // Formato final de horario con hora de inicio y término (ej. "08:00 - 08:50 AM")
   const horarioFormateado = useMemo(() => {
     const sufijo = turnoHorario === "manana" ? "AM" : "PM";
     return `${horaInicio}:${minutoInicio} - ${horaFin}:${minutoFin} ${sufijo}`;
   }, [horaInicio, minutoInicio, horaFin, minutoFin, turnoHorario]);
 
-  // Filtrar citas del día seleccionado
   const agendaDelDia = useMemo(() => {
     return citasFirestore.filter((item) => item.diaKey === diaSeleccionado);
   }, [citasFirestore, diaSeleccionado]);
@@ -206,7 +201,6 @@ export default function AgendaPsicologo({ navigation }) {
   const infoDiaActual =
     DIAS_SEMANA.find((d) => d.key === diaSeleccionado) || DIAS_SEMANA[3];
 
-  // Compartir ubicación Maps o enlace online
   const handleCompartirUbicacion = async () => {
     try {
       const mensaje =
@@ -214,7 +208,7 @@ export default function AgendaPsicologo({ navigation }) {
           ? `📍 Ubicación de nuestra consulta con ${nombreMostrar}:\n${direccionConsultorio}\n\nGoogle Maps: https://maps.google.com/?q=${encodeURIComponent(
               direccionConsultorio
             )}`
-          : `🎥 Enlace para nuestra sesión online con ${nombreMostrar}:\nhttps://meet.google.com\n\nTe espero puntual en tu espacio seguro Lami.`;
+          : `🎥 Enlace para nuestra sesión online con ${nombreMostrar}:\nSala de Teleconsulta Lami\n\nTe espero puntual en tu espacio seguro Lami.`;
 
       await Share.share({ message: mensaje });
     } catch (_) {
@@ -222,13 +216,12 @@ export default function AgendaPsicologo({ navigation }) {
     }
   };
 
-  // Compartir pase de cita confirmada
   const handleCompartirPaseCita = async (cita) => {
     try {
       const detalleLugar =
         cita.modalidad === "presencial"
           ? `📍 Presencial: ${direccionConsultorio}`
-          : `🎥 Videollamada Lami: https://meet.google.com`;
+          : `🎥 Videollamada en Sala de Teleconsulta Lami`;
 
       await Share.share({
         message: `✨ Cita Confirmada en Lami\nPaciente: ${cita.pacienteNombre}\nDía: ${cita.diaLabel}\nHorario: ${cita.horario}\n${detalleLugar}\nEnfoque: ${cita.motivo}`,
@@ -236,28 +229,16 @@ export default function AgendaPsicologo({ navigation }) {
     } catch (_) {}
   };
 
-  // Unirse a videollamada
-  const handleUnirseVideollamada = async (cita) => {
-    const url = cita.enlaceReunion || "https://meet.google.com";
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert(
-          "Videollamada Lami",
-          `Sala lista para ${cita.pacienteNombre}`
-        );
-      }
-    } catch (_) {
-      Alert.alert(
-        "Videollamada Lami",
-        `Iniciando sala con ${cita.pacienteNombre}`
-      );
-    }
+  const handleUnirseVideollamada = (cita) => {
+    navigation.navigate("SalaTeleconsulta", {
+      paciente: {
+        uid: cita.pacienteId || "general",
+        nombre: cita.pacienteNombre,
+        protocoloClinico: cita.motivo,
+      },
+    });
   };
 
-  // Iniciar sesión presencial -> abrir expediente del paciente vinculado
   const handleIniciarPresencial = (cita) => {
     const pacienteMatch =
       pacientes.find(
@@ -272,7 +253,6 @@ export default function AgendaPsicologo({ navigation }) {
     navigation.navigate("ExpedientePaciente", { paciente: pacienteMatch });
   };
 
-  // Eliminar cita seleccionada
   const handleEliminarCita = (cita) => {
     Alert.alert(
       "Eliminar cita",
@@ -307,7 +287,6 @@ export default function AgendaPsicologo({ navigation }) {
     );
   };
 
-  // Guardar nueva cita vinculada al paciente seleccionado
   const handleGuardarNuevaCita = async () => {
     if (!pacienteSeleccionado) {
       Alert.alert(
@@ -330,9 +309,12 @@ export default function AgendaPsicologo({ navigation }) {
           pacienteSeleccionado.nombre?.toLowerCase()
       ).length;
 
+      const pacienteTargetId =
+        pacienteSeleccionado.id || pacienteSeleccionado.uid || null;
+
       const nueva = {
         psicologoId: auth.currentUser?.uid || "PSI-DEMO-492",
-        pacienteId: pacienteSeleccionado.id || pacienteSeleccionado.uid || null,
+        pacienteId: pacienteTargetId,
         diaKey: diaSeleccionado,
         diaLabel: infoDiaActual.labelCompleto,
         tipo: "cita",
@@ -352,13 +334,37 @@ export default function AgendaPsicologo({ navigation }) {
           nuevaModalidad === "presencial"
             ? "Recordatorio + Maps listo"
             : "Recordatorio 1h activado",
-        ubicacion: "Consultorio 4B",
-        enlaceReunion: "https://meet.google.com",
+        ubicacion:
+          perfilPsicologo?.ubicacion?.pisoConsultorio || direccionConsultorio,
         createdAt: serverTimestamp(),
       };
 
       if (auth.currentUser?.uid) {
         await addDoc(collection(db, "citas_psicologo"), nueva);
+
+        if (pacienteTargetId) {
+          const esPresencial = nuevaModalidad === "presencial";
+          await addDoc(collection(db, "solicitudes_sesion"), {
+            pacienteId: pacienteTargetId,
+            pacienteNombre: pacienteSeleccionado.nombre || "Paciente Lami",
+            psicologoId: auth.currentUser.uid,
+            psicologoNombre: nombreMostrar,
+            modalidadSolicitada: esPresencial ? "presencial" : "online",
+            modalidadConfirmada: esPresencial ? "presencial" : "online",
+            fechaCita: new Date().toISOString().slice(0, 10),
+            horaCita: horarioFormateado,
+            ubicacionConfirmada: esPresencial
+              ? perfilPsicologo?.ubicacion || {
+                  nombreLugar: "Consultorio",
+                  direccion: direccionConsultorio,
+                  ciudad: "",
+                }
+              : null,
+            respuestaTerapeuta: `Sesión programada (${infoDiaActual.labelCompleto} • ${horarioFormateado}): ${motivoFinal}`,
+            estado: "confirmada",
+            creadoEn: serverTimestamp(),
+          });
+        }
       } else {
         setCitasFirestore((prev) => [
           ...prev,
@@ -382,9 +388,6 @@ export default function AgendaPsicologo({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      {/* ============================================================ */}
-      {/* CABECERA INMERSIVA AURORA LAVANDA & ÍNDIGO                   */}
-      {/* ============================================================ */}
       <LinearGradient
         colors={[PALETTE.indigoMuted, PALETTE.purpleVibrant]}
         start={{ x: 0, y: 0 }}
@@ -394,7 +397,6 @@ export default function AgendaPsicologo({ navigation }) {
         <View style={styles.heroBubbleOne} />
         <View style={styles.heroBubbleTwo} />
 
-        {/* Fila Superior: Doctor + Código + Botón Nueva Cita */}
         <View style={styles.heroTopRow}>
           <View style={styles.heroDoctorInfo}>
             <TouchableOpacity
@@ -444,7 +446,6 @@ export default function AgendaPsicologo({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Tarjeta Destacada: Paciente Seleccionado Actualmente */}
         <View style={styles.selectedPatientBanner}>
           {pacienteSeleccionado ? (
             <>
@@ -489,7 +490,6 @@ export default function AgendaPsicologo({ navigation }) {
           )}
         </View>
 
-        {/* Selector Rápido Horizontal de Pacientes Vinculados */}
         {pacientes.length > 0 && (
           <ScrollView
             horizontal
@@ -541,14 +541,10 @@ export default function AgendaPsicologo({ navigation }) {
         )}
       </LinearGradient>
 
-      {/* ============================================================ */}
-      {/* CUERPO DE LA AGENDA                                          */}
-      {/* ============================================================ */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. TIRA SEMANAL DE CALENDARIO */}
         <View style={styles.weekStripCard}>
           {DIAS_SEMANA.map((item) => {
             const seleccionado = diaSeleccionado === item.key;
@@ -595,7 +591,6 @@ export default function AgendaPsicologo({ navigation }) {
           })}
         </View>
 
-        {/* 2. BARRA COMPACTA DE MODALIDAD DEL CONSULTORIO */}
         <View style={styles.modalityCompactCard}>
           <View style={styles.modalityToggleRow}>
             <TouchableOpacity
@@ -692,14 +687,13 @@ export default function AgendaPsicologo({ navigation }) {
                 <Text style={styles.locationMiniText} numberOfLines={1}>
                   {modalidadGlobal === "consultorio"
                     ? direccionConsultorio
-                    : "Sala Virtual Lami • Enlace listo para compartir"}
+                    : "Sala Virtual Lami • Lista para teleconsulta"}
                 </Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {/* 3. ENCABEZADO DEL DÍA */}
         <View style={styles.dayHeaderRow}>
           <Text style={styles.dayHeadingText}>{infoDiaActual.labelCompleto}</Text>
           <View style={styles.summaryBadge}>
@@ -710,7 +704,6 @@ export default function AgendaPsicologo({ navigation }) {
           </View>
         </View>
 
-        {/* 4. LISTADO DE CITAS REALES (TOCA UNA CITA PARA VER EL BOTÓN DE ELIMINAR) */}
         {agendaDelDia.length === 0 ? (
           <View style={styles.emptyAgendaCard}>
             <LinearGradient
@@ -904,7 +897,6 @@ export default function AgendaPsicologo({ navigation }) {
                     )}
                   </View>
 
-                  {/* BARRA DE ELIMINACIÓN AL SELECCIONAR LA CITA */}
                   {estaSeleccionada && (
                     <View style={styles.deleteBarRow}>
                       <Text style={styles.deleteHintText}>
@@ -933,9 +925,6 @@ export default function AgendaPsicologo({ navigation }) {
         )}
       </ScrollView>
 
-      {/* ============================================================ */}
-      {/* MODAL DE NUEVA CITA (INICIO + TÉRMINO + PICKERS CORREGIDOS)   */}
-      {/* ============================================================ */}
       <Modal
         visible={modalNuevaCita}
         transparent
@@ -961,7 +950,6 @@ export default function AgendaPsicologo({ navigation }) {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 14 }}
             >
-              {/* 1. PACIENTE SELECCIONADO VISIBLEMENTE Y SELECTOR FUNCIONAL */}
               <Text style={styles.inputLabel}>Paciente seleccionado</Text>
               {pacienteSeleccionado && (
                 <LinearGradient
@@ -1023,7 +1011,6 @@ export default function AgendaPsicologo({ navigation }) {
                 </ScrollView>
               )}
 
-              {/* 2. TURNO + HORA DE INICIO Y HORA DE TÉRMINO */}
               <View style={styles.hourHeaderRow}>
                 <Text style={styles.inputLabel}>Horario de la sesión</Text>
                 <View style={styles.hourPreviewPill}>
@@ -1088,7 +1075,6 @@ export default function AgendaPsicologo({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* HORA DE INICIO */}
               <Text style={styles.subSectionTimeLabel}>Hora de inicio</Text>
               <View style={styles.pickersRow}>
                 <View style={styles.pickerBox}>
@@ -1101,7 +1087,11 @@ export default function AgendaPsicologo({ navigation }) {
                       dropdownIconColor={PALETTE.purpleVibrant}
                     >
                       {HORAS_LISTA.map((h) => (
-                        <Picker.Item key={`ini-h-${h}`} label={`${h} hrs`} value={h} />
+                        <Picker.Item
+                          key={`ini-h-${h}`}
+                          label={`${h} hrs`}
+                          value={h}
+                        />
                       ))}
                     </Picker>
                   </View>
@@ -1117,14 +1107,17 @@ export default function AgendaPsicologo({ navigation }) {
                       dropdownIconColor={PALETTE.tealDeep}
                     >
                       {MINUTOS_LISTA.map((m) => (
-                        <Picker.Item key={`ini-m-${m}`} label={`:${m} min`} value={m} />
+                        <Picker.Item
+                          key={`ini-m-${m}`}
+                          label={`:${m} min`}
+                          value={m}
+                        />
                       ))}
                     </Picker>
                   </View>
                 </View>
               </View>
 
-              {/* HORA DE TÉRMINO */}
               <Text style={styles.subSectionTimeLabel}>Hora de término</Text>
               <View style={styles.pickersRow}>
                 <View style={styles.pickerBox}>
@@ -1137,7 +1130,11 @@ export default function AgendaPsicologo({ navigation }) {
                       dropdownIconColor={PALETTE.purpleVibrant}
                     >
                       {HORAS_LISTA.map((h) => (
-                        <Picker.Item key={`fin-h-${h}`} label={`${h} hrs`} value={h} />
+                        <Picker.Item
+                          key={`fin-h-${h}`}
+                          label={`${h} hrs`}
+                          value={h}
+                        />
                       ))}
                     </Picker>
                   </View>
@@ -1153,14 +1150,17 @@ export default function AgendaPsicologo({ navigation }) {
                       dropdownIconColor={PALETTE.tealDeep}
                     >
                       {MINUTOS_LISTA.map((m) => (
-                        <Picker.Item key={`fin-m-${m}`} label={`:${m} min`} value={m} />
+                        <Picker.Item
+                          key={`fin-m-${m}`}
+                          label={`:${m} min`}
+                          value={m}
+                        />
                       ))}
                     </Picker>
                   </View>
                 </View>
               </View>
 
-              {/* 3. MODALIDAD */}
               <Text style={styles.inputLabel}>Modalidad de consulta</Text>
               <View style={styles.modalModalityRow}>
                 <TouchableOpacity
@@ -1218,7 +1218,6 @@ export default function AgendaPsicologo({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* 4. ENFOQUE DE LA SESIÓN */}
               <Text style={styles.inputLabel}>Enfoque de la sesión</Text>
               <View style={styles.objetivosVerticalList}>
                 {OBJETIVOS_TERAPEUTICOS.map((item) => {
@@ -1298,9 +1297,6 @@ export default function AgendaPsicologo({ navigation }) {
         </View>
       </Modal>
 
-      {/* ============================================================ */}
-      {/* MENSAJE BONITO DE CONFIRMACIÓN DE CITA                       */}
-      {/* ============================================================ */}
       <Modal
         visible={!!citaConfirmadaModal}
         transparent
@@ -1418,9 +1414,6 @@ export default function AgendaPsicologo({ navigation }) {
         </View>
       </Modal>
 
-      {/* ============================================================ */}
-      {/* BARRA INFERIOR DE 5 ICONOS (CON AGENDA ACTIVA)               */}
-      {/* ============================================================ */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.navItem}
@@ -1495,8 +1488,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: PALETTE.indigoMuted,
   },
-
-  /* Hero Header Lavanda & Índigo */
   heroHeader: {
     paddingHorizontal: 18,
     paddingTop: 10,
@@ -1609,8 +1600,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: PALETTE.purpleVibrant,
   },
-
-  /* Banner Paciente Seleccionado */
   selectedPatientBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1674,8 +1663,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-
-  /* Chips horizontales en cabecera */
   heroPatientsScroll: {
     gap: 8,
     paddingTop: 2,
@@ -1709,8 +1696,6 @@ const styles = StyleSheet.create({
     color: PALETTE.purpleVibrant,
     fontWeight: "800",
   },
-
-  /* Cuerpo */
   scrollContent: {
     padding: 16,
     paddingBottom: 34,
@@ -1718,8 +1703,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: 13,
   },
-
-  /* Tira Semanal */
   weekStripCard: {
     backgroundColor: PALETTE.cardWhite,
     borderRadius: 22,
@@ -1783,8 +1766,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#CBD5E1",
     marginTop: 1,
   },
-
-  /* Modalidad Compacta */
   modalityCompactCard: {
     backgroundColor: PALETTE.cardWhite,
     borderRadius: 20,
@@ -1852,8 +1833,6 @@ const styles = StyleSheet.create({
     borderBottomColor: PALETTE.tealDeep,
     paddingVertical: 1,
   },
-
-  /* Encabezado Día */
   dayHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1875,8 +1854,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: PALETTE.purpleVibrant,
   },
-
-  /* Tarjeta Cita */
   appointmentCard: {
     backgroundColor: PALETTE.cardWhite,
     borderRadius: 22,
@@ -1989,8 +1966,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-
-  /* Barra Eliminar Cita */
   deleteBarRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2021,8 +1996,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#DC2626",
   },
-
-  /* Estado Vacío */
   emptyAgendaCard: {
     backgroundColor: PALETTE.cardWhite,
     borderRadius: 24,
@@ -2064,8 +2037,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-
-  /* Modal Nueva Cita */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.55)",
@@ -2163,8 +2134,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: PALETTE.textDark,
   },
-
-  /* Selector Horario con Inicio y Término sin recorte */
   hourHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2252,7 +2221,6 @@ const styles = StyleSheet.create({
     width: "100%",
     color: PALETTE.textDark,
   },
-
   modalModalityRow: {
     flexDirection: "row",
     gap: 10,
@@ -2282,8 +2250,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: PALETTE.textDark,
   },
-
-  /* Enfoque de sesión en lista vertical limpia + Otro */
   objetivosVerticalList: {
     gap: 8,
   },
@@ -2331,7 +2297,6 @@ const styles = StyleSheet.create({
     color: PALETTE.textDark,
     backgroundColor: "#FFFFFF",
   },
-
   saveCitaBtn: {
     flexDirection: "row",
     justifyContent: "center",
@@ -2345,8 +2310,6 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     fontWeight: "800",
   },
-
-  /* Modal Confirmación Bonito */
   confirmOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.6)",
@@ -2456,8 +2419,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-
-  /* Barra Inferior */
   bottomBar: {
     flexDirection: "row",
     alignItems: "center",

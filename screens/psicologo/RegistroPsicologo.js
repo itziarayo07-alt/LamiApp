@@ -50,6 +50,15 @@ export default function RegistroPsicologo({ navigation }) {
   const [cedulaProfesional, setCedulaProfesional] = useState("");
   const [especialidad, setEspecialidad] = useState("Ansiedad y Estrés");
   const [modalidad, setModalidad] = useState("presencial");
+
+  // Campos de ubicación (solo si es presencial o híbrida)
+  const [tipoLugar, setTipoLugar] = useState("consultorio_privado"); // "consultorio_privado" | "hospital_clinica"
+  const [nombreLugar, setNombreLugar] = useState(""); // Ej. Hospital Español / Torre Médica (opcional si es privado)
+  const [ciudad, setCiudad] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [pisoConsultorio, setPisoConsultorio] = useState("");
+  const [referencia, setReferencia] = useState("");
+
   const [correo, setCorreo] = useState("");
   const [telefono, setTelefono] = useState("");
   const [password, setPassword] = useState("");
@@ -149,6 +158,29 @@ export default function RegistroPsicologo({ navigation }) {
       return;
     }
 
+    const requiereDireccion =
+      modalidad === "presencial" || modalidad === "hybrid";
+
+    if (requiereDireccion) {
+      if (!ciudad.trim() || !direccion.trim()) {
+        mostrarAviso(
+          "UBICACIÓN DE CONSULTA",
+          "Falta la dirección del consultorio",
+          "Como atiendes de forma presencial o híbrida, indica al menos la ciudad y la dirección donde recibes a tus pacientes."
+        );
+        return;
+      }
+
+      if (tipoLugar === "hospital_clinica" && !nombreLugar.trim()) {
+        mostrarAviso(
+          "CLÍNICA U HOSPITAL",
+          "Nombre del centro médico requerido",
+          "Indica el nombre del hospital, clínica o torre médica donde se encuentra tu consultorio."
+        );
+        return;
+      }
+    }
+
     if (password !== confirmarPassword) {
       mostrarAviso(
         "CREDENCIALES",
@@ -195,6 +227,25 @@ export default function RegistroPsicologo({ navigation }) {
       const uid = cred.user.uid;
       const codigoVinculacion = generarCodigoEspecialista();
 
+      const ubicacionData = requiereDireccion
+        ? {
+            tipoLugar,
+            nombreLugar:
+              tipoLugar === "hospital_clinica"
+                ? nombreLugar.trim()
+                : nombreLugar.trim() || "Consultorio privado independiente",
+            ciudad: ciudad.trim(),
+            ciudadKey: ciudad
+              .trim()
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, ""),
+            direccion: direccion.trim(),
+            pisoConsultorio: pisoConsultorio.trim(),
+            referencia: referencia.trim(),
+          }
+        : null;
+
       await setDoc(doc(db, "psicologos", uid), {
         nombre: `${nombre.trim()} ${apellidos.trim()}`,
         nombres: nombre.trim(),
@@ -204,6 +255,9 @@ export default function RegistroPsicologo({ navigation }) {
         estadoValidacion: "en_revision",
         especialidad,
         modalidad,
+        ubicacion: ubicacionData,
+        calificacionPromedio: 5.0,
+        totalResenas: 0,
         correo: correo.trim(),
         telefono: telefono.trim(),
         fotoPerfil: fotoBase64 || null,
@@ -234,6 +288,9 @@ export default function RegistroPsicologo({ navigation }) {
       setCargando(false);
     }
   };
+
+  const esPresencialOHibrido =
+    modalidad === "presencial" || modalidad === "hybrid";
 
   return (
     <LinearGradient
@@ -277,7 +334,8 @@ export default function RegistroPsicologo({ navigation }) {
             {/* ENCABEZADO */}
             <Text style={styles.heroTitle}>Alta de Especialista</Text>
             <Text style={styles.heroSubtitle}>
-              Configura tu perfil clínico para vincular y acompañar a tus pacientes
+              Configura tu perfil clínico para vincular y acompañar a tus
+              pacientes
             </Text>
 
             {/* TARJETA PRINCIPAL */}
@@ -445,6 +503,191 @@ export default function RegistroPsicologo({ navigation }) {
                   <Picker.Item label="100% Online" value="online" />
                 </Picker>
               </View>
+
+              {/* UBICACIÓN DEL CONSULTORIO (SI ES PRESENCIAL O HÍBRIDA) */}
+              {esPresencialOHibrido && (
+                <View style={styles.locationCard}>
+                  <View style={styles.locationHeaderRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color="#7E83C2"
+                    />
+                    <Text style={styles.locationHeaderTitle}>
+                      Ubicación de consulta presencial
+                    </Text>
+                  </View>
+
+                  <Text style={styles.locationHint}>
+                    Ayuda a pacientes cercanos en tu ciudad a encontrarte y
+                    llegar fácilmente.
+                  </Text>
+
+                  {/* Selector: Consultorio privado vs Hospital/Clínica */}
+                  <View style={styles.tipoLugarRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => setTipoLugar("consultorio_privado")}
+                      style={[
+                        styles.tipoLugarBtn,
+                        tipoLugar === "consultorio_privado" &&
+                          styles.tipoLugarBtnActive,
+                      ]}
+                    >
+                      <Ionicons
+                        name="home-outline"
+                        size={15}
+                        color={
+                          tipoLugar === "consultorio_privado"
+                            ? "#FFFFFF"
+                            : "#475569"
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.tipoLugarText,
+                          tipoLugar === "consultorio_privado" &&
+                            styles.tipoLugarTextActive,
+                        ]}
+                      >
+                        Consultorio privado
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => setTipoLugar("hospital_clinica")}
+                      style={[
+                        styles.tipoLugarBtn,
+                        tipoLugar === "hospital_clinica" &&
+                          styles.tipoLugarBtnActive,
+                      ]}
+                    >
+                      <Ionicons
+                        name="business-outline"
+                        size={15}
+                        color={
+                          tipoLugar === "hospital_clinica"
+                            ? "#FFFFFF"
+                            : "#475569"
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.tipoLugarText,
+                          tipoLugar === "hospital_clinica" &&
+                            styles.tipoLugarTextActive,
+                        ]}
+                      >
+                        Hospital / Clínica
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {tipoLugar === "hospital_clinica" && (
+                    <>
+                      <Text style={styles.label}>
+                        Nombre del hospital, clínica o torre médica *
+                      </Text>
+                      <View style={styles.inputBoxWhite}>
+                        <Ionicons
+                          name="medkit-outline"
+                          size={18}
+                          color="#6192A4"
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Ej. Hospital.."
+                          placeholderTextColor="#94A3B8"
+                          value={nombreLugar}
+                          onChangeText={setNombreLugar}
+                        />
+                      </View>
+                    </>
+                  )}
+
+                  <Text style={styles.label}>Ciudad o municipio *</Text>
+                  <View style={styles.inputBoxWhite}>
+                    <Ionicons
+                      name="map-outline"
+                      size={18}
+                      color="#6192A4"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ingresa la ciudad."
+                      placeholderTextColor="#94A3B8"
+                      value={ciudad}
+                      onChangeText={setCiudad}
+                    />
+                  </View>
+
+                  <Text style={styles.label}>
+                    Dirección (calle, número y colonia) *
+                  </Text>
+                  <View style={styles.inputBoxWhite}>
+                    <Ionicons
+                      name="navigate-outline"
+                      size={18}
+                      color="#6192A4"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej. Av. 16 de Septiembre #955, Col. Centro"
+                      placeholderTextColor="#94A3B8"
+                      value={direccion}
+                      onChangeText={setDireccion}
+                    />
+                  </View>
+
+                  <Text style={styles.label}>
+                    {tipoLugar === "hospital_clinica"
+                      ? "Piso y número de consultorio"
+                      : "Interior, piso o despacho (opcional)"}
+                  </Text>
+                  <View style={styles.inputBoxWhite}>
+                    <Ionicons
+                      name="layers-outline"
+                      size={18}
+                      color="#6192A4"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder={
+                        tipoLugar === "hospital_clinica"
+                          ? "Ej. Piso 3, Consultorio #"
+                          : "Ej. Planta alta, Despacho B"
+                      }
+                      placeholderTextColor="#94A3B8"
+                      value={pisoConsultorio}
+                      onChangeText={setPisoConsultorio}
+                    />
+                  </View>
+
+                  <Text style={styles.label}>
+                    Referencia para llegar (opcional)
+                  </Text>
+                  <View style={[styles.inputBoxWhite, { marginBottom: 2 }]}>
+                    <Ionicons
+                      name="compass-outline"
+                      size={18}
+                      color="#6192A4"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej. Frente al parque, fachada blanca"
+                      placeholderTextColor="#94A3B8"
+                      value={referencia}
+                      onChangeText={setReferencia}
+                    />
+                  </View>
+                </View>
+              )}
 
               <View style={styles.divider} />
 
@@ -851,6 +1094,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 12,
   },
+  inputBoxWhite: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
   inputIcon: {
     marginRight: 8,
   },
@@ -868,6 +1121,64 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     overflow: "hidden",
   },
+
+  // Tarjeta de ubicación de consulta
+  locationCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  locationHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  locationHeaderTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1E1B4B",
+  },
+  locationHint: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 3,
+    marginBottom: 12,
+  },
+  tipoLugarRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  tipoLugarBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  tipoLugarBtnActive: {
+    backgroundColor: "#7E83C2",
+    borderColor: "#7E83C2",
+  },
+  tipoLugarText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  tipoLugarTextActive: {
+    color: "#FFFFFF",
+  },
+
   checkRow: {
     flexDirection: "row",
     alignItems: "flex-start",
