@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -20,7 +23,18 @@ import { Calendar } from "react-native-calendars";
 
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import { LineChart } from "react-native-chart-kit";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
@@ -82,6 +96,22 @@ export default function CalendarioEmocional({ navigation }) {
   const [notaGuardadaModal, setNotaGuardadaModal] = useState(false);
   const [exportandoPDF, setExportandoPDF] = useState(false);
 
+  // Estados para cancelar cita con motivo
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [citaACancelar, setCitaACancelar] = useState(null);
+  const [motivoCancelacion, setMotivoCancelacion] = useState("");
+  const [cancelandoCita, setCancelandoCita] = useState(false);
+
+  // Modal de confirmación elegante cuando el paciente cancela su cita
+  const [cancelSuccessModal, setCancelSuccessModal] = useState(null);
+
+  // Notificaciones del paciente (cuando el psicólogo cancela/elimina una consulta)
+  const [notificacionesPaciente, setNotificacionesPaciente] = useState([]);
+  const [notifCentroVisible, setNotifCentroVisible] = useState(false);
+  const [alertaCancelacionPsiModal, setAlertaCancelacionPsiModal] =
+    useState(null);
+  const shownPsiNotifIdsRef = useRef(new Set());
+
   const [personalityDone, setPersonalityDone] = useState(false);
   const [personalityResult, setPersonalityResult] = useState(null);
   const [activeNav, setActiveNav] = useState(1);
@@ -100,86 +130,159 @@ export default function CalendarioEmocional({ navigation }) {
     { label: "Calmado 😌", color: "#81C784", value: 4 },
   ];
 
-  // Carga citas locales + solicitudes/citas sincronizadas desde Firestore
-  const loadAppointments = async () => {
-    try {
-      const merged = {};
+  // Sincronización en tiempo real de citas (Firestore + AsyncStorage)
+  useEffect(() => {
+    let unsubFirestore = null;
 
-      // 1. Citas confirmadas guardadas localmente desde Perfil
-      const citasRaw = await AsyncStorage.getItem(CITAS_STORAGE_KEY);
-      if (citasRaw) {
-        const parsed = JSON.parse(citasRaw);
-        Object.keys(parsed).forEach((fecha) => {
-          merged[fecha] = Array.isArray(parsed[fecha]) ? [...parsed[fecha]] : [];
-        });
-      }
+    const iniciarEscuchaCitas = async () => {
+      try {
+        const localBase = {};
+        const citasRaw = await AsyncStorage.getItem(CITAS_STORAGE_KEY);
+        if (citasRaw) {
+          const parsed = JSON.parse(citasRaw);
+          Object.keys(parsed).forEach((fecha) => {
+            localBase[fecha] = Array.isArray(parsed[fecha])
+              ? [...parsed[fecha]]
+              : [];
+          });
+        }
 
-      // 2. Sincronizar con solicitudes_sesion en Firestore (pendientes o confirmadas)
-      const user = auth.currentUser;
-      if (user) {
+        const user = auth.currentUser;
+        if (!user) {
+          setDayAppointments(localBase);
+          return;
+        }
+
         const q = query(
           collection(db, "solicitudes_sesion"),
           where("pacienteId", "==", user.uid)
         );
-        const snap = await getDocs(q);
-        snap.forEach((docSnap) => {
-          const sol = docSnap.data();
-          if (sol.estado === "sin_disponibilidad") return;
 
-          // Si ya tiene fechaCita se coloca en esa fecha; si sigue pendiente, se muestra hoy como aviso
-          const fechaTarget = sol.fechaCita || todayKey;
-          const modRaw = (
-            sol.modalidadConfirmada ||
-            sol.modalidadSolicitada ||
-            "presencial"
-          ).toLowerCase();
-          const esOnline = modRaw === "online" || modRaw === "en línea";
+        unsubFirestore = onSnapshot(q, async (snap) => {
+          const merged = {};
 
-          const ub = sol.ubicacionConfirmada;
-          const lugarStr = esOnline
-            ? "Videollamada en Sala de Teleconsulta Lami"
-            : ub
-            ? `${ub.nombreLugar || "Consultorio privado"} • ${ub.direccion}${
-                ub.pisoConsultorio ? ` (${ub.pisoConsultorio})` : ""
-              }${ub.ciudad ? `, ${ub.ciudad}` : ""}`
-            : sol.lugarCita || "Consulta presencial (ubicación al confirmar)";
-
-          const itemCita = {
-            id: docSnap.id,
-            fecha: fechaTarget,
-            hora: sol.horaCita || "Por confirmar horario",
-            psicologoId: sol.psicologoId || "",
-            psicologoNombre: sol.psicologoNombre || "Especialista",
-            modalidad: esOnline ? "Online" : "Presencial",
-            esOnline,
-            estado: sol.estado || "pendiente",
-            lugar: lugarStr,
-            mensajeTerapeuta: sol.respuestaTerapeuta || sol.mensaje || "",
-          };
-
-          const listaDia = Array.isArray(merged[fechaTarget])
-            ? merged[fechaTarget]
-            : [];
-          const yaExiste = listaDia.some((c) => c.id === docSnap.id);
-          if (!yaExiste) {
-            merged[fechaTarget] = [...listaDia, itemCita];
-          } else {
-            merged[fechaTarget] = listaDia.map((c) =>
-              c.id === docSnap.id ? { ...c, ...itemCita } : c
+          // Mantener solo citas locales que no provengan de Firestore borrado
+          Object.keys(localBase).forEach((fecha) => {
+            merged[fecha] = localBase[fecha].filter(
+              (c) => !c.fromFirestore
             );
-          }
+            if (merged[fecha].length === 0) delete merged[fecha];
+          });
+
+          snap.forEach((docSnap) => {
+            const sol = docSnap.data();
+            if (
+              sol.estado === "sin_disponibilidad" ||
+              sol.estado === "cancelada"
+            )
+              return;
+
+            const fechaTarget = sol.fechaCita || todayKey;
+            const modRaw = (
+              sol.modalidadConfirmada ||
+              sol.modalidadSolicitada ||
+              "presencial"
+            ).toLowerCase();
+            const esOnline = modRaw === "online" || modRaw === "en línea";
+
+            const ub = sol.ubicacionConfirmada;
+            const lugarStr = esOnline
+              ? "Videollamada en Sala de Teleconsulta Lami"
+              : ub
+              ? `${ub.nombreLugar || "Consultorio privado"} • ${ub.direccion}${
+                  ub.pisoConsultorio ? ` (${ub.pisoConsultorio})` : ""
+                }${ub.ciudad ? `, ${ub.ciudad}` : ""}`
+              : sol.lugarCita || "Consulta presencial (ubicación al confirmar)";
+
+            const itemCita = {
+              id: docSnap.id,
+              fromFirestore: true,
+              citaPsicologoId: sol.citaPsicologoId || "",
+              fecha: fechaTarget,
+              hora: sol.horaCita || "Por confirmar horario",
+              psicologoId: sol.psicologoId || "",
+              psicologoNombre: sol.psicologoNombre || "Especialista",
+              modalidad: esOnline ? "Online" : "Presencial",
+              esOnline,
+              estado: sol.estado || "pendiente",
+              lugar: lugarStr,
+              mensajeTerapeuta: sol.respuestaTerapeuta || sol.mensaje || "",
+            };
+
+            const listaDia = Array.isArray(merged[fechaTarget])
+              ? merged[fechaTarget]
+              : [];
+            const yaExiste = listaDia.some((c) => c.id === docSnap.id);
+            if (!yaExiste) {
+              merged[fechaTarget] = [...listaDia, itemCita];
+            } else {
+              merged[fechaTarget] = listaDia.map((c) =>
+                c.id === docSnap.id ? { ...c, ...itemCita } : c
+              );
+            }
+          });
+
+          setDayAppointments(merged);
+        });
+      } catch (e) {
+        console.warn("Error sincronizando citas en tiempo real:", e);
+      }
+    };
+
+    iniciarEscuchaCitas();
+    return () => {
+      if (unsubFirestore) unsubFirestore();
+    };
+  }, [todayKey]);
+
+  // Escuchar notificaciones para el paciente cuando el psicólogo cancela/elimina una cita
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user?.uid) return;
+
+    const qNotifPac = query(
+      collection(db, "notificaciones_paciente"),
+      where("pacienteId", "==", user.uid)
+    );
+
+    const unsubNotifPac = onSnapshot(qNotifPac, (snap) => {
+      const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      lista.sort((a, b) => {
+        const ta = a.creadaEn?.seconds || 0;
+        const tb = b.creadaEn?.seconds || 0;
+        return tb - ta;
+      });
+      setNotificacionesPaciente(lista);
+
+      // Mostrar modal elegante para la notificación no leída más reciente
+      const nuevaNoLeida = lista.find(
+        (n) => !n.leida && !shownPsiNotifIdsRef.current.has(n.id)
+      );
+      if (nuevaNoLeida) {
+        shownPsiNotifIdsRef.current.add(nuevaNoLeida.id);
+        setAlertaCancelacionPsiModal(nuevaNoLeida);
+      }
+    });
+
+    return () => unsubNotifPac();
+  }, []);
+
+  const marcarNotificacionesPacienteLeidas = async () => {
+    try {
+      const noLeidas = notificacionesPaciente.filter((n) => !n.leida);
+      for (const item of noLeidas) {
+        await updateDoc(doc(db, "notificaciones_paciente", item.id), {
+          leida: true,
         });
       }
-
-      setDayAppointments(merged);
     } catch (e) {
-      console.warn("Error cargando citas en calendario:", e);
+      console.warn("Error marcando notificaciones como leídas:", e);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadAppointments();
+      // Refresca estados al volver a enfocar la pantalla
     }, [])
   );
 
@@ -206,8 +309,6 @@ export default function CalendarioEmocional({ navigation }) {
 
         const notesStr = await AsyncStorage.getItem("dayNotes_v1");
         if (notesStr) setDayNotes(JSON.parse(notesStr));
-
-        await loadAppointments();
 
         const done = await AsyncStorage.getItem("testPersonalidadHecho");
         if (done === "SI") setPersonalityDone(true);
@@ -323,7 +424,6 @@ export default function CalendarioEmocional({ navigation }) {
     setNotaGuardadaModal(true);
   };
 
-  // Unirse a la videollamada de teleconsulta
   const handleUnirseVideollamada = (cita) => {
     try {
       navigation.navigate("SalaTeleconsulta", {
@@ -339,6 +439,119 @@ export default function CalendarioEmocional({ navigation }) {
       );
     }
   };
+
+  const handleAbrirCancelarCita = (cita) => {
+    setCitaACancelar(cita);
+    setMotivoCancelacion("");
+    setCancelModalVisible(true);
+  };
+
+  const handleConfirmarCancelarCita = async () => {
+    const motivoLimpio = motivoCancelacion.trim();
+    if (!motivoLimpio) {
+      Alert.alert(
+        "Motivo requerido",
+        "Por favor escribe el motivo por el cual cancelas tu cita."
+      );
+      return;
+    }
+
+    if (!citaACancelar) return;
+
+    setCancelandoCita(true);
+    try {
+      const user = auth.currentUser;
+      const nombrePaciente =
+        user?.displayName ||
+        (user?.email ? user.email.split("@")[0] : "Paciente Lami");
+
+      // 1. Notificar al psicólogo con el motivo de cancelación
+      if (citaACancelar.psicologoId) {
+        await addDoc(collection(db, "notificaciones_psicologo"), {
+          psicologoId: citaACancelar.psicologoId,
+          pacienteId: user?.uid || "",
+          pacienteNombre: nombrePaciente,
+          citaId: citaACancelar.id || "",
+          fechaCita: citaACancelar.fecha || "",
+          horaCita: citaACancelar.hora || "",
+          modalidad: citaACancelar.modalidad || "Presencial",
+          motivo: motivoLimpio,
+          tipo: "cancelacion_cita",
+          leida: false,
+          creadaEn: serverTimestamp(),
+        });
+      }
+
+      // 2. Eliminar la cita de la agenda del psicólogo (citas_psicologo)
+      if (citaACancelar.citaPsicologoId) {
+        await deleteDoc(
+          doc(db, "citas_psicologo", citaACancelar.citaPsicologoId)
+        );
+      } else if (citaACancelar.psicologoId && user?.uid) {
+        const qPsi = query(
+          collection(db, "citas_psicologo"),
+          where("psicologoId", "==", citaACancelar.psicologoId),
+          where("pacienteId", "==", user.uid)
+        );
+        const snapPsi = await getDocs(qPsi);
+        for (const docPsi of snapPsi.docs) {
+          const dataPsi = docPsi.data();
+          if (
+            !citaACancelar.hora ||
+            citaACancelar.hora === "Por confirmar horario" ||
+            dataPsi.horario === citaACancelar.hora ||
+            dataPsi.hora === citaACancelar.hora
+          ) {
+            await deleteDoc(doc(db, "citas_psicologo", docPsi.id));
+          }
+        }
+      }
+
+      // 3. Eliminar la cita de solicitudes_sesion en Firestore
+      if (citaACancelar.id) {
+        await deleteDoc(doc(db, "solicitudes_sesion", citaACancelar.id));
+      }
+
+      // 4. Eliminar también del almacenamiento local AsyncStorage
+      const citasRaw = await AsyncStorage.getItem(CITAS_STORAGE_KEY);
+      if (citasRaw) {
+        const parsed = JSON.parse(citasRaw);
+        const fechaKey = citaACancelar.fecha || selectedDay;
+        if (Array.isArray(parsed[fechaKey])) {
+          parsed[fechaKey] = parsed[fechaKey].filter(
+            (c) => c.id !== citaACancelar.id
+          );
+          if (parsed[fechaKey].length === 0) {
+            delete parsed[fechaKey];
+          }
+          await AsyncStorage.setItem(CITAS_STORAGE_KEY, JSON.stringify(parsed));
+        }
+      }
+
+      const resumenCancelacion = {
+        psicologoNombre: citaACancelar.psicologoNombre,
+        fecha: citaACancelar.fecha,
+        hora: citaACancelar.hora,
+        modalidad: citaACancelar.modalidad,
+        motivo: motivoLimpio,
+      };
+
+      setCancelModalVisible(false);
+      setCitaACancelar(null);
+      setMotivoCancelacion("");
+      setCancelSuccessModal(resumenCancelacion);
+    } catch (error) {
+      console.error("Error al cancelar cita:", error);
+      Alert.alert(
+        "Error",
+        "No se pudo cancelar la cita en este momento. Intenta nuevamente."
+      );
+    } finally {
+      setCancelandoCita(false);
+    }
+  };
+
+  const unreadNotifCount = notificacionesPaciente.filter((n) => !n.leida).length;
 
   const sortedDates = Object.keys(dayFeelings).sort();
   const recentDates = sortedDates.slice(-7);
@@ -430,7 +643,6 @@ export default function CalendarioEmocional({ navigation }) {
     },
   };
 
-  // Exportar reporte PDF con respaldo nativo para Expo Go y APK
   const exportToPDF = async () => {
     if (exportandoPDF) return;
 
@@ -630,7 +842,32 @@ export default function CalendarioEmocional({ navigation }) {
             contentContainerStyle={{ paddingBottom: 50 }}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.title}>Calendario Emocional</Text>
+            {/* ENCABEZADO CON CAMPANA DE NOTIFICACIONES */}
+            <View style={styles.titleHeaderRow}>
+              <View style={{ width: 40 }} />
+              <Text style={styles.title}>Calendario Emocional</Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.notifBellBtn}
+                onPress={() => {
+                  setNotifCentroVisible(true);
+                  marcarNotificacionesPacienteLeidas();
+                }}
+              >
+                <Ionicons
+                  name="notifications-outline"
+                  size={22}
+                  color="#7C3AED"
+                />
+                {unreadNotifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>
+                      {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
 
             {/* CALENDARIO CON CÍRCULOS DE COLOR E INSIGNIA DESTACADA DE CITA */}
             <Calendar
@@ -674,7 +911,7 @@ export default function CalendarioEmocional({ navigation }) {
               }}
             />
 
-            {/* NOTA DESTACADA DE CITA CON TERAPEUTA (PRESENCIAL / ONLINE + BOTÓN VIDEOLLAMADA) */}
+            {/* NOTA DESTACADA DE CITA CON TERAPEUTA (PRESENCIAL / ONLINE + VIDEOLLAMADA / CANCELAR) */}
             {citasDiaSeleccionado.length > 0 && (
               <View style={styles.citaSectionCard}>
                 <View style={styles.citaSectionHeader}>
@@ -742,7 +979,6 @@ export default function CalendarioEmocional({ navigation }) {
                             : "• Cita confirmada"}
                         </Text>
 
-                        {/* Nota clara indicando si es presencial (con dirección) o en línea */}
                         <View style={styles.citaNotaBox}>
                           <Ionicons
                             name={
@@ -767,7 +1003,6 @@ export default function CalendarioEmocional({ navigation }) {
                           </Text>
                         ) : null}
 
-                        {/* Botón Unirse a la videollamada */}
                         {esOnline && (
                           <TouchableOpacity
                             activeOpacity={0.88}
@@ -791,6 +1026,21 @@ export default function CalendarioEmocional({ navigation }) {
                             </LinearGradient>
                           </TouchableOpacity>
                         )}
+
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => handleAbrirCancelarCita(cita)}
+                          style={styles.cancelCitaBtn}
+                        >
+                          <Ionicons
+                            name="close-circle-outline"
+                            size={16}
+                            color="#DC2626"
+                          />
+                          <Text style={styles.cancelCitaBtnText}>
+                            Cancelar cita
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     );
                   })}
@@ -1110,6 +1360,333 @@ export default function CalendarioEmocional({ navigation }) {
           </ScrollView>
         </View>
 
+        {/* MODAL PARA CANCELAR CITA ESCRIBIENDO UN MOTIVO */}
+        <Modal
+          visible={cancelModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => !cancelandoCita && setCancelModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <View style={styles.modalCard}>
+              <View style={styles.cancelIconRing}>
+                <Ionicons name="calendar-clear" size={26} color="#DC2626" />
+              </View>
+
+              <Text style={styles.cancelBadge}>CANCELAR SESIÓN</Text>
+              <Text style={styles.modalTitle}>¿Deseas cancelar tu cita?</Text>
+              <Text style={styles.modalBody}>
+                Escribe el motivo de cancelación. La cita se eliminará de tu
+                calendario y se le notificará a{" "}
+                <Text style={{ fontWeight: "700", color: "#1E293B" }}>
+                  {citaACancelar?.psicologoNombre || "tu especialista"}
+                </Text>
+                .
+              </Text>
+
+              <TextInput
+                style={styles.cancelReasonInput}
+                multiline
+                placeholder="Escribe aquí el motivo de tu cancelación..."
+                placeholderTextColor="#9CA3AF"
+                value={motivoCancelacion}
+                onChangeText={setMotivoCancelacion}
+                editable={!cancelandoCita}
+              />
+
+              <View style={styles.cancelModalActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.cancelKeepBtn}
+                  onPress={() => setCancelModalVisible(false)}
+                  disabled={cancelandoCita}
+                >
+                  <Text style={styles.cancelKeepBtnText}>Conservar cita</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  style={[
+                    styles.cancelConfirmBtn,
+                    cancelandoCita && { opacity: 0.7 },
+                  ]}
+                  onPress={handleConfirmarCancelarCita}
+                  disabled={cancelandoCita}
+                >
+                  {cancelandoCita ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.cancelConfirmBtnText}>
+                      Cancelar y notificar
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* MODAL MEJORADO DE CONFIRMACIÓN DE CANCELACIÓN DEL PACIENTE */}
+        <Modal
+          visible={!!cancelSuccessModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCancelSuccessModal(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.fancyModalCard}>
+              <LinearGradient
+                colors={["#FFF1F2", "#F5F3FF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fancyModalHeader}
+              >
+                <LinearGradient
+                  colors={["#E11D48", "#7C3AED"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.fancyIconCircle}
+                >
+                  <Ionicons name="checkmark-done" size={30} color="#FFFFFF" />
+                </LinearGradient>
+
+                <View style={styles.fancyPillBadge}>
+                  <Ionicons name="send" size={11} color="#BE123C" />
+                  <Text style={styles.fancyPillText}>AVISO ENVIADO</Text>
+                </View>
+
+                <Text style={styles.fancyModalTitle}>
+                  Cita cancelada con éxito
+                </Text>
+                <Text style={styles.fancyModalSub}>
+                  Se eliminó de tu calendario y notificamos a{" "}
+                  <Text style={{ fontWeight: "800", color: "#1E293B" }}>
+                    {cancelSuccessModal?.psicologoNombre || "tu especialista"}
+                  </Text>
+                  .
+                </Text>
+              </LinearGradient>
+
+              {cancelSuccessModal && (
+                <View style={styles.fancyTicketBox}>
+                  <View style={styles.fancyTicketRow}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={16}
+                      color="#7C3AED"
+                    />
+                    <Text style={styles.fancyTicketText}>
+                      {cancelSuccessModal.fecha} • {cancelSuccessModal.hora}
+                    </Text>
+                  </View>
+                  <View style={styles.fancyTicketRow}>
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={16}
+                      color="#E11D48"
+                    />
+                    <Text style={styles.fancyTicketText}>
+                      Motivo: "{cancelSuccessModal.motivo}"
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={{ width: "100%" }}
+                onPress={() => setCancelSuccessModal(null)}
+              >
+                <LinearGradient
+                  colors={["#7C3AED", "#6366F1"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalBtn}
+                >
+                  <Text style={styles.modalBtnText}>Entendido</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* MODAL MEJORADO CUANDO EL PSICÓLOGO CANCELA UNA CONSULTA */}
+        <Modal
+          visible={!!alertaCancelacionPsiModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setAlertaCancelacionPsiModal(null);
+            marcarNotificacionesPacienteLeidas();
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.fancyModalCard}>
+              <LinearGradient
+                colors={["#FEF2F2", "#EEF2FF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fancyModalHeader}
+              >
+                <LinearGradient
+                  colors={["#DC2626", "#7C3AED"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.fancyIconCircle}
+                >
+                  <Ionicons name="calendar-clear" size={28} color="#FFFFFF" />
+                </LinearGradient>
+
+                <View style={styles.fancyPillBadge}>
+                  <Ionicons name="notifications" size={11} color="#DC2626" />
+                  <Text style={styles.fancyPillText}>
+                    ACTUALIZACIÓN DE AGENDA
+                  </Text>
+                </View>
+
+                <Text style={styles.fancyModalTitle}>
+                  Consulta cancelada por tu especialista
+                </Text>
+                <Text style={styles.fancyModalSub}>
+                  <Text style={{ fontWeight: "800", color: "#1E293B" }}>
+                    {alertaCancelacionPsiModal?.psicologoNombre ||
+                      "Tu especialista"}
+                  </Text>{" "}
+                  ha cancelado la sesión programada y se ha retirado de tu
+                  calendario.
+                </Text>
+              </LinearGradient>
+
+              {alertaCancelacionPsiModal && (
+                <View style={styles.fancyTicketBox}>
+                  <View style={styles.fancyTicketRow}>
+                    <Ionicons name="time-outline" size={16} color="#7C3AED" />
+                    <Text style={styles.fancyTicketText}>
+                      {alertaCancelacionPsiModal.fechaCita || ""}{" "}
+                      {alertaCancelacionPsiModal.horaCita
+                        ? `• ${alertaCancelacionPsiModal.horaCita}`
+                        : ""}
+                    </Text>
+                  </View>
+                  {alertaCancelacionPsiModal.motivo ? (
+                    <View style={styles.fancyTicketRow}>
+                      <Ionicons
+                        name="document-text-outline"
+                        size={16}
+                        color="#DC2626"
+                      />
+                      <Text style={styles.fancyTicketText}>
+                        Motivo: "{alertaCancelacionPsiModal.motivo}"
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={{ width: "100%" }}
+                onPress={() => {
+                  setAlertaCancelacionPsiModal(null);
+                  marcarNotificacionesPacienteLeidas();
+                }}
+              >
+                <LinearGradient
+                  colors={["#7C3AED", "#0D9488"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalBtn}
+                >
+                  <Text style={styles.modalBtnText}>Aceptar</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* CENTRO DE NOTIFICACIONES DEL PACIENTE (CAMPANA SUPERIOR) */}
+        <Modal
+          visible={notifCentroVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setNotifCentroVisible(false)}
+        >
+          <View style={styles.notifDrawerOverlay}>
+            <View style={styles.notifDrawerCard}>
+              <View style={styles.notifDrawerHeader}>
+                <View style={styles.notifDrawerTitleRow}>
+                  <View style={styles.notifDrawerIcon}>
+                    <Ionicons name="notifications" size={18} color="#7C3AED" />
+                  </View>
+                  <Text style={styles.notifDrawerTitle}>
+                    Notificaciones ({notificacionesPaciente.length})
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setNotifCentroVisible(false)}
+                  style={styles.notifCloseBtn}
+                >
+                  <Ionicons name="close" size={20} color="#1E293B" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ gap: 10, paddingBottom: 14 }}
+              >
+                {notificacionesPaciente.length === 0 ? (
+                  <View style={styles.emptyNotifBox}>
+                    <Ionicons
+                      name="notifications-off-outline"
+                      size={32}
+                      color="#94A3B8"
+                    />
+                    <Text style={styles.emptyNotifTitle}>
+                      Sin notificaciones nuevas
+                    </Text>
+                    <Text style={styles.emptyNotifSub}>
+                      Aquí te avisaremos si tu psicólogo cancela o modifica una
+                      consulta.
+                    </Text>
+                  </View>
+                ) : (
+                  notificacionesPaciente.map((notif) => (
+                    <View key={notif.id} style={styles.notifItemCard}>
+                      <View style={styles.notifItemTop}>
+                        <View style={styles.notifTagPill}>
+                          <Text style={styles.notifTagText}>
+                            Consulta Cancelada
+                          </Text>
+                        </View>
+                        <Text style={styles.notifItemDate}>
+                          {notif.fechaCita || ""}
+                        </Text>
+                      </View>
+                      <Text style={styles.notifItemTitle}>
+                        {notif.psicologoNombre || "Especialista"} canceló tu
+                        cita ({notif.modalidad || "Sesión"})
+                      </Text>
+                      {notif.horaCita ? (
+                        <Text style={styles.notifItemMeta}>
+                          ⏰ Horario: {notif.horaCita}
+                        </Text>
+                      ) : null}
+                      {notif.motivo ? (
+                        <Text style={styles.notifItemMotivo}>
+                          💬 Motivo: "{notif.motivo}"
+                        </Text>
+                      ) : null}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
         {/* MODAL CREATIVO DE NOTA GUARDADA */}
         <Modal
           visible={notaGuardadaModal}
@@ -1246,7 +1823,6 @@ function DayWithEmotions({
           </View>
         )}
 
-        {/* Insignia sobresaliente en la esquina superior derecha cuando hay sesión */}
         {tieneCita && (
           <View
             style={[
@@ -1299,12 +1875,47 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "700",
   },
+  titleHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginVertical: 8,
+  },
   title: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: "700",
     color: "#222",
-    marginVertical: 8,
     textAlign: "center",
+  },
+  notifBellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  notifBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  notifBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "900",
   },
   section: { marginTop: 18 },
   sectionTitle: {
@@ -1428,6 +2039,23 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 13.5,
     fontWeight: "800",
+  },
+  cancelCitaBtn: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9.5,
+    borderRadius: 13,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  cancelCitaBtnText: {
+    color: "#DC2626",
+    fontSize: 12.5,
+    fontWeight: "700",
   },
 
   emotionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
@@ -1742,10 +2370,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#7C3AED",
   },
 
-  // Modal creativo nota guardada
+  // Modales creativos
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -1756,6 +2384,77 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 24,
     alignItems: "center",
+  },
+  fancyModalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 20,
+    alignItems: "center",
+    gap: 12,
+  },
+  fancyModalHeader: {
+    width: "100%",
+    borderRadius: 20,
+    padding: 16,
+    alignItems: "center",
+    gap: 6,
+  },
+  fancyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  fancyPillBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 999,
+  },
+  fancyPillText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#BE123C",
+    letterSpacing: 0.6,
+  },
+  fancyModalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1E293B",
+    textAlign: "center",
+  },
+  fancyModalSub: {
+    fontSize: 13,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  fancyTicketBox: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 8,
+  },
+  fancyTicketRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  fancyTicketText: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#1E293B",
+    lineHeight: 18,
   },
   modalIconRing: {
     width: 60,
@@ -1795,6 +2494,175 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
+  },
+  cancelIconRing: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  cancelBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#DC2626",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  cancelReasonInput: {
+    width: "100%",
+    minHeight: 84,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FFFBFB",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: "#1E293B",
+    textAlignVertical: "top",
+    marginBottom: 14,
+  },
+  cancelModalActions: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
+  },
+  cancelKeepBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelKeepBtnText: {
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  cancelConfirmBtn: {
+    flex: 1.25,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelConfirmBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  // Centro de notificaciones (campana superior)
+  notifDrawerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "flex-end",
+  },
+  notifDrawerCard: {
+    maxHeight: "78%",
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+  },
+  notifDrawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  notifDrawerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  notifDrawerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "#EDE9FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifDrawerTitle: {
+    fontSize: 16.5,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  notifCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyNotifBox: {
+    alignItems: "center",
+    paddingVertical: 28,
+    gap: 6,
+  },
+  emptyNotifTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  emptyNotifSub: {
+    fontSize: 12.5,
+    color: "#64748B",
+    textAlign: "center",
+  },
+  notifItemCard: {
+    backgroundColor: "#FFFBFB",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    gap: 5,
+  },
+  notifItemTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  notifTagPill: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  notifTagText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
+  notifItemDate: {
+    fontSize: 11,
+    color: "#64748B",
+    fontWeight: "600",
+  },
+  notifItemTitle: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  notifItemMeta: {
+    fontSize: 12,
+    color: "#475569",
+    fontWeight: "600",
+  },
+  notifItemMotivo: {
+    fontSize: 12.5,
+    color: "#991B1B",
+    backgroundColor: "#FEF2F2",
+    padding: 8,
+    borderRadius: 10,
+    marginTop: 2,
   },
 
   // Estilos test de personalidad

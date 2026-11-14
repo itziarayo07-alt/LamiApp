@@ -58,6 +58,16 @@ const NOTIF_IDS_KEY = "@scheduled_notif_ids";
 const CITAS_STORAGE_KEY = "@citas_agendadas_v1";
 const USER_PHOTO_KEY = "@user_profile_photo";
 
+const PRIVACIDAD_PSI_DEFAULT = {
+  fotoPerfil: true,
+  cedulaProfesional: true,
+  especialidad: true,
+  telefono: false,
+  correo: false,
+  ubicacion: true,
+  biografia: true,
+};
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -312,7 +322,11 @@ export default function ProfileScreen({ navigation }) {
     try {
       const psiSnap = await getDoc(doc(db, "psicologos", idPsi));
       if (psiSnap.exists()) {
-        setPsicologoDetalle(psiSnap.data());
+        const data = psiSnap.data();
+        setPsicologoDetalle(data);
+        if (data.nombre) setPsicologoVinculado(data.nombre);
+        if (data.especialidad) setPsicologoEspecialidad(data.especialidad);
+        setPsicologoFoto(data.fotoPerfil || null);
       }
     } catch (e) {
       console.log("Error cargando detalle del psicólogo:", e);
@@ -1058,7 +1072,36 @@ export default function ProfileScreen({ navigation }) {
     return ciudadPsi.includes(queryCiudad) || espPsi.includes(queryCiudad);
   });
 
-  const ubicacionVinculada = psicologoDetalle?.ubicacion || null;
+  // Privacidad configurada por el psicólogo vinculado
+  const privPsi = {
+    ...PRIVACIDAD_PSI_DEFAULT,
+    ...(psicologoDetalle?.privacidad || {}),
+  };
+
+  const fotoPsiVisible = privPsi.fotoPerfil
+    ? psicologoDetalle?.fotoPerfil || psicologoFoto || null
+    : null;
+  const especialidadPsiVisible = privPsi.especialidad
+    ? psicologoDetalle?.especialidad ||
+      psicologoEspecialidad ||
+      "Psicología Clínica • Red Lami"
+    : "Especialista verificado • Red Lami";
+  const cedulaPsiVisible = privPsi.cedulaProfesional
+    ? psicologoDetalle?.cedulaProfesional || psicologoDetalle?.cedula || null
+    : null;
+  const ubicacionVinculada = privPsi.ubicacion
+    ? psicologoDetalle?.ubicacion || null
+    : null;
+  const correoPsiVisible = privPsi.correo
+    ? psicologoDetalle?.correo || null
+    : null;
+  const telefonoPsiVisible = privPsi.telefono
+    ? psicologoDetalle?.telefono || null
+    : null;
+  const biografiaPsiVisible = privPsi.biografia
+    ? psicologoDetalle?.biografia || psicologoDetalle?.descripcion || null
+    : null;
+
   const totalResenasVinculado = Number(psicologoDetalle?.totalResenas || 0);
   const promedioVinculado =
     totalResenasVinculado > 0
@@ -1198,9 +1241,9 @@ export default function ProfileScreen({ navigation }) {
                     style={styles.especialistaCard}
                   >
                     <View style={styles.avatarRing}>
-                      {psicologoFoto ? (
+                      {fotoPsiVisible ? (
                         <Image
-                          source={{ uri: psicologoFoto }}
+                          source={{ uri: fotoPsiVisible }}
                           style={styles.especialistaAvatar}
                         />
                       ) : (
@@ -1218,9 +1261,7 @@ export default function ProfileScreen({ navigation }) {
                         {psicologoVinculado}
                       </Text>
                       <Text style={styles.especialistaSpec} numberOfLines={1}>
-                        {psicologoDetalle?.especialidad ||
-                          psicologoEspecialidad ||
-                          "Psicología Clínica • Red Lami"}
+                        {especialidadPsiVisible}
                       </Text>
 
                       <View style={styles.miniRatingRow}>
@@ -1255,7 +1296,7 @@ export default function ProfileScreen({ navigation }) {
                     <TouchableOpacity
                       activeOpacity={0.85}
                       onPress={() => {
-                        if (psicologoId && !psicologoDetalle) {
+                        if (psicologoId) {
                           loadPsicologoDetalle(psicologoId);
                         }
                         setModalInfoPsicologo(true);
@@ -2122,9 +2163,9 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <View style={styles.infoModalAvatarRing}>
-                  {psicologoFoto ? (
+                  {fotoPsiVisible ? (
                     <Image
-                      source={{ uri: psicologoFoto }}
+                      source={{ uri: fotoPsiVisible }}
                       style={styles.infoModalAvatar}
                     />
                   ) : (
@@ -2143,9 +2184,7 @@ export default function ProfileScreen({ navigation }) {
 
                 <Text style={styles.infoModalName}>{psicologoVinculado}</Text>
                 <Text style={styles.infoModalSpec}>
-                  {psicologoDetalle?.especialidad ||
-                    psicologoEspecialidad ||
-                    "Psicología Clínica • Red Lami"}
+                  {especialidadPsiVisible}
                 </Text>
 
                 <View style={styles.ratingBadgeTop}>
@@ -2161,8 +2200,22 @@ export default function ProfileScreen({ navigation }) {
 
               <View style={styles.infoModalBody}>
                 <View style={styles.infoModalDetailsBox}>
-                  {psicologoDetalle?.cedulaProfesional ||
-                  psicologoDetalle?.cedula ? (
+                  {biografiaPsiVisible ? (
+                    <View style={styles.infoDetailRow}>
+                      <View style={styles.detailIconCircle}>
+                        <Ionicons
+                          name="document-text-outline"
+                          size={16}
+                          color="#4F46E5"
+                        />
+                      </View>
+                      <Text style={styles.infoDetailText}>
+                        {biografiaPsiVisible}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {cedulaPsiVisible ? (
                     <View style={styles.infoDetailRow}>
                       <View style={styles.detailIconCircle}>
                         <Ionicons
@@ -2174,8 +2227,7 @@ export default function ProfileScreen({ navigation }) {
                       <Text style={styles.infoDetailText}>
                         Cédula profesional:{" "}
                         <Text style={{ fontWeight: "700", color: "#1E293B" }}>
-                          {psicologoDetalle.cedulaProfesional ||
-                            psicologoDetalle.cedula}
+                          {cedulaPsiVisible}
                         </Text>
                       </Text>
                     </View>
@@ -2260,7 +2312,7 @@ export default function ProfileScreen({ navigation }) {
                     </View>
                   ) : null}
 
-                  {psicologoDetalle?.correo && (
+                  {correoPsiVisible && (
                     <View style={styles.infoDetailRow}>
                       <View style={styles.detailIconCircle}>
                         <Ionicons
@@ -2270,15 +2322,15 @@ export default function ProfileScreen({ navigation }) {
                         />
                       </View>
                       <Text style={styles.infoDetailText}>
-                        {psicologoDetalle.correo}
+                        {correoPsiVisible}
                       </Text>
                     </View>
                   )}
 
-                  {psicologoDetalle?.telefono && (
+                  {telefonoPsiVisible && (
                     <TouchableOpacity
                       onPress={() =>
-                        Linking.openURL(`tel:${psicologoDetalle.telefono}`)
+                        Linking.openURL(`tel:${telefonoPsiVisible}`)
                       }
                       style={styles.infoDetailRow}
                     >
@@ -2299,7 +2351,7 @@ export default function ProfileScreen({ navigation }) {
                           },
                         ]}
                       >
-                        {psicologoDetalle.telefono}
+                        {telefonoPsiVisible}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -2514,7 +2566,8 @@ export default function ProfileScreen({ navigation }) {
                     return (
                       <View key={psi.id} style={styles.dirPsiCard}>
                         <View style={styles.dirPsiTopRow}>
-                          {psi.fotoPerfil ? (
+                          {psi.fotoPerfil &&
+                          psi.privacidad?.fotoPerfil !== false ? (
                             <Image
                               source={{ uri: psi.fotoPerfil }}
                               style={styles.dirPsiAvatar}
@@ -2532,7 +2585,9 @@ export default function ProfileScreen({ navigation }) {
                           <View style={{ flex: 1 }}>
                             <Text style={styles.dirPsiName}>{psi.nombre}</Text>
                             <Text style={styles.dirPsiSpec}>
-                              {psi.especialidad || "Psicología Clínica"}
+                              {psi.privacidad?.especialidad !== false
+                                ? psi.especialidad || "Psicología Clínica"
+                                : "Especialista verificado"}
                             </Text>
                             <View style={styles.dirPsiBadgesRow}>
                               <View style={styles.dirModBadge}>
@@ -2550,7 +2605,7 @@ export default function ProfileScreen({ navigation }) {
                           </View>
                         </View>
 
-                        {ub ? (
+                        {ub && psi.privacidad?.ubicacion !== false ? (
                           <View style={styles.dirAddressBox}>
                             <Ionicons
                               name="location-outline"

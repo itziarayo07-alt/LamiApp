@@ -8,9 +8,11 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import EjercicioDinamico from "./screens/EjercicioDinamico";
 import AgendaPsicologo from "./screens/psicologo/AgendaPsicologo";
 import FlywheelQR from "./screens/psicologo/FlywheelQR";
+import PerfilPsicologo from "./screens/psicologo/PerfilPsicologo";
 import PsicologoDashboard from "./screens/psicologo/PsicologoDashboard";
 import RegistroPsicologo from "./screens/psicologo/RegistroPsicologo";
 import SalaTeleconsulta from "./screens/psicologo/SalaTeleconsulta";
+
 
 import Anxiosimetro from './screens/anxiosimetro';
 import Autoabrazo from "./screens/Autoabrazo";
@@ -67,7 +69,7 @@ export default function App() {
           <Stack.Screen name="SalaTeleconsulta" component={SalaTeleconsulta} /> 
           <Stack.Screen name="FlywheelQR" component={FlywheelQR} />  
           <Stack.Screen name="AgendaPsicologo" component={AgendaPsicologo} options={{ headerShown: false }} />
-
+          <Stack.Screen name="PerfilPsicologo" component={PerfilPsicologo} /> 
 
         </Stack.Navigator>
       </NavigationContainer>

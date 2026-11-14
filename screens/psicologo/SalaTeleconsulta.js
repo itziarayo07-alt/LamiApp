@@ -4,15 +4,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -32,10 +32,22 @@ const PALETTE = {
 };
 
 export default function SalaTeleconsulta({ route, navigation }) {
+  const rol = route?.params?.rol || "psicologo";
+  const esPaciente = rol === "paciente";
+
   const paciente = route?.params?.paciente || null;
-  const psicologoId = auth.currentUser?.uid || "PSI-DEMO-492";
+  const psicologoId = esPaciente
+    ? route?.params?.psicologoId || "PSI-DEMO-492"
+    : auth.currentUser?.uid || "PSI-DEMO-492";
+  const psicologoNombre = route?.params?.psicologoNombre || "Especialista Lami";
+
   const nombreEspecialista =
     auth.currentUser?.displayName || "Especialista Lami";
+  const nombrePaciente =
+    auth.currentUser?.displayName ||
+    (auth.currentUser?.email
+      ? auth.currentUser.email.split("@")[0]
+      : "Paciente Lami");
 
   // Permisos nativos de cámara y micrófono
   const [permisosEstado, setPermisosEstado] = useState("verificando"); // verificando | concedido | denegado
@@ -49,7 +61,6 @@ export default function SalaTeleconsulta({ route, navigation }) {
   const [guardandoApunte, setGuardandoApunte] = useState(false);
 
   // Solicitar permisos nativos al abrir la pantalla
-
   const solicitarPermisos = async () => {
     try {
       setPermisosEstado("verificando");
@@ -86,11 +97,20 @@ export default function SalaTeleconsulta({ route, navigation }) {
     return `${mins}:${secs}`;
   }, [segundos]);
 
-  // URL única y limpia de la sala embebida (sin app externa)
+  // URL única y limpia de la sala embebida (compartida entre psicólogo y paciente sin login)
   const salaUrl = useMemo(() => {
-    const idPaciente = paciente?.uid ? paciente.uid.slice(0, 10) : "General";
+    const idPaciente = esPaciente
+      ? auth.currentUser?.uid
+        ? auth.currentUser.uid.slice(0, 10)
+        : "General"
+      : paciente?.uid
+      ? paciente.uid.slice(0, 10)
+      : "General";
+
     const roomName = `LamiConsulta_${psicologoId.slice(0, 6)}_${idPaciente}`;
-    const displayName = encodeURIComponent(nombreEspecialista);
+    const displayName = encodeURIComponent(
+      esPaciente ? nombrePaciente : nombreEspecialista
+    );
 
     const configParams = [
       "config.prejoinPageEnabled=false",
@@ -104,8 +124,8 @@ export default function SalaTeleconsulta({ route, navigation }) {
       `userInfo.displayName="${displayName}"`,
     ].join("&");
 
-    return `https://meet.jit.si/${roomName}#${configParams}`;
-  }, [paciente, psicologoId, nombreEspecialista]);
+    return `https://meet.ffmuc.net/${roomName}#${configParams}`;
+  }, [esPaciente, paciente, psicologoId, nombrePaciente, nombreEspecialista]);
 
   // Guardar nota clínica privada en Firestore sin salir de la llamada
   const handleGuardarApunte = async () => {
@@ -189,7 +209,7 @@ export default function SalaTeleconsulta({ route, navigation }) {
         </View>
 
         {/* ============================================================ */}
-        {/* TARJETA DE CONTEXTO CLÍNICO DEL PACIENTE                     */}
+        {/* TARJETA DE CONTEXTO CLÍNICO DEL PACIENTE / ESPECIALISTA      */}
         {/* ============================================================ */}
         <LinearGradient
           colors={[PALETTE.tealDeep, PALETTE.indigoMuted]}
@@ -199,12 +219,16 @@ export default function SalaTeleconsulta({ route, navigation }) {
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.contextPatientName} numberOfLines={1}>
-              {paciente?.nombre ||
-                paciente?.correo ||
-                "Sala de Teleconsulta Activa"}
+              {esPaciente
+                ? psicologoNombre
+                : paciente?.nombre ||
+                  paciente?.correo ||
+                  "Sala de Teleconsulta Activa"}
             </Text>
             <Text style={styles.contextPatientMeta} numberOfLines={1}>
-              {paciente
+              {esPaciente
+                ? "Sesión de teleconsulta en curso"
+                : paciente
                 ? `Protocolo: ${
                     paciente.protocoloClinico || "Ansiedad"
                   } • Último ánimo: ${paciente.ultimoAnimo ?? "-"}/10`
@@ -212,7 +236,7 @@ export default function SalaTeleconsulta({ route, navigation }) {
             </Text>
           </View>
 
-          {paciente && (
+          {!esPaciente && paciente && (
             <TouchableOpacity
               style={styles.quickTaskChip}
               onPress={() =>
@@ -305,41 +329,43 @@ export default function SalaTeleconsulta({ route, navigation }) {
         {/* ============================================================ */}
         {/* BARRA INFERIOR DE APUNTE CLÍNICO RÁPIDO EN SESIÓN            */}
         {/* ============================================================ */}
-        <View style={styles.notesBar}>
-          <View style={styles.noteInputBox}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={15}
-              color={PALETTE.lavenderSoft}
-              style={{ marginRight: 6 }}
-            />
-            <TextInput
-              style={styles.noteInput}
-              placeholder="Apunte clínico privado en sesión..."
-              placeholderTextColor="#94A3B8"
-              value={apunteRapido}
-              onChangeText={setApunteRapido}
-            />
-          </View>
+        {!esPaciente && (
+          <View style={styles.notesBar}>
+            <View style={styles.noteInputBox}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={15}
+                color={PALETTE.lavenderSoft}
+                style={{ marginRight: 6 }}
+              />
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Apunte clínico privado en sesión..."
+                placeholderTextColor="#94A3B8"
+                value={apunteRapido}
+                onChangeText={setApunteRapido}
+              />
+            </View>
 
-          <TouchableOpacity
-            style={styles.saveNoteBtn}
-            onPress={handleGuardarApunte}
-            disabled={guardandoApunte}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={[PALETTE.tealDeep, PALETTE.tealMid]}
-              style={styles.saveNoteGradient}
+            <TouchableOpacity
+              style={styles.saveNoteBtn}
+              onPress={handleGuardarApunte}
+              disabled={guardandoApunte}
+              activeOpacity={0.85}
             >
-              {guardandoApunte ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.saveNoteText}>Guardar</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              <LinearGradient
+                colors={[PALETTE.tealDeep, PALETTE.tealMid]}
+                style={styles.saveNoteGradient}
+              >
+                {guardandoApunte ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveNoteText}>Guardar</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

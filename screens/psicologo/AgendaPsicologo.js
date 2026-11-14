@@ -6,13 +6,16 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -118,6 +121,18 @@ export default function AgendaPsicologo({ navigation }) {
 
   const [citaConfirmadaModal, setCitaConfirmadaModal] = useState(null);
 
+  // Notificaciones del psicólogo + modales mejorados de cancelación
+  const [notificacionesPsi, setNotificacionesPsi] = useState([]);
+  const [notifCentroVisible, setNotifCentroVisible] = useState(false);
+  const [alertaCancelacionPacienteModal, setAlertaCancelacionPacienteModal] =
+    useState(null);
+  const shownNotifIdsRef = useRef(new Set());
+
+  // Modal del psicólogo para eliminar/cancelar una cita con motivo al paciente
+  const [citaAEliminarModal, setCitaAEliminarModal] = useState(null);
+  const [motivoCancelacionPsi, setMotivoCancelacionPsi] = useState("");
+  const [eliminandoCita, setEliminandoCita] = useState(false);
+
   const psicologoId = auth.currentUser?.uid || "PSI-DEMO-492";
 
   useEffect(() => {
@@ -165,6 +180,52 @@ export default function AgendaPsicologo({ navigation }) {
     });
     return () => unsubCitas();
   }, []);
+
+  // Escuchar notificaciones de cancelación de citas por parte de pacientes
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const qNotif = query(
+      collection(db, "notificaciones_psicologo"),
+      where("psicologoId", "==", uid)
+    );
+
+    const unsubNotif = onSnapshot(qNotif, (snapshot) => {
+      const lista = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      lista.sort((a, b) => {
+        const ta = a.creadaEn?.seconds || 0;
+        const tb = b.creadaEn?.seconds || 0;
+        return tb - ta;
+      });
+      setNotificacionesPsi(lista);
+
+      const nuevaNoLeida = lista.find(
+        (n) => !n.leida && !shownNotifIdsRef.current.has(n.id)
+      );
+      if (nuevaNoLeida) {
+        shownNotifIdsRef.current.add(nuevaNoLeida.id);
+        setAlertaCancelacionPacienteModal(nuevaNoLeida);
+      }
+    });
+
+    return () => unsubNotif();
+  }, []);
+
+  const marcarNotificacionesPsiLeidas = async () => {
+    try {
+      const noLeidas = notificacionesPsi.filter((n) => !n.leida);
+      for (const item of noLeidas) {
+        await updateDoc(doc(db, "notificaciones_psicologo", item.id), {
+          leida: true,
+        });
+      }
+    } catch (e) {
+      console.warn("No se pudo marcar notificación como leída:", e);
+    }
+  };
+
+  const unreadNotifCount = notificacionesPsi.filter((n) => !n.leida).length;
 
   const nombreMostrar =
     perfilPsicologo?.nombre ||
@@ -254,37 +315,86 @@ export default function AgendaPsicologo({ navigation }) {
   };
 
   const handleEliminarCita = (cita) => {
-    Alert.alert(
-      "Eliminar cita",
-      `¿Deseas cancelar y eliminar la cita de ${cita.pacienteNombre} (${cita.horario})?`,
-      [
-        { text: "Conservar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              if (
-                auth.currentUser?.uid &&
-                cita.id &&
-                !String(cita.id).startsWith("local-")
-              ) {
-                await deleteDoc(doc(db, "citas_psicologo", cita.id));
-              } else {
-                setCitasFirestore((prev) =>
-                  prev.filter((item) => item.id !== cita.id)
-                );
-              }
-              if (citaSeleccionadaId === cita.id) {
-                setCitaSeleccionadaId(null);
-              }
-            } catch (_) {
-              Alert.alert("Error", "No se pudo eliminar la cita.");
+    setCitaAEliminarModal(cita);
+    setMotivoCancelacionPsi("");
+  };
+
+  const handleConfirmarEliminarCitaPsi = async () => {
+    const cita = citaAEliminarModal;
+    if (!cita) return;
+
+    setEliminandoCita(true);
+    try {
+      const motivoFinal =
+        motivoCancelacionPsi.trim() ||
+        "El especialista reprogramará esta sesión próximamente.";
+
+      if (
+        auth.currentUser?.uid &&
+        cita.id &&
+        !String(cita.id).startsWith("local-")
+      ) {
+        // 1. Eliminar de citas_psicologo
+        await deleteDoc(doc(db, "citas_psicologo", cita.id));
+
+        // 2. Eliminar de solicitudes_sesion para que desaparezca en el calendario del paciente
+        const qSol = query(
+          collection(db, "solicitudes_sesion"),
+          where("citaPsicologoId", "==", cita.id)
+        );
+        const snapSol = await getDocs(qSol);
+        for (const docSol of snapSol.docs) {
+          await deleteDoc(doc(db, "solicitudes_sesion", docSol.id));
+        }
+
+        // Respaldo por si la cita no tenía citaPsicologoId guardado
+        if (snapSol.empty && cita.pacienteId) {
+          const qSolFallback = query(
+            collection(db, "solicitudes_sesion"),
+            where("psicologoId", "==", auth.currentUser.uid),
+            where("pacienteId", "==", cita.pacienteId)
+          );
+          const snapFallback = await getDocs(qSolFallback);
+          for (const docFb of snapFallback.docs) {
+            if (docFb.data().horaCita === cita.horario) {
+              await deleteDoc(doc(db, "solicitudes_sesion", docFb.id));
             }
-          },
-        },
-      ]
-    );
+          }
+        }
+
+        // 3. Notificar al paciente en notificaciones_paciente
+        if (cita.pacienteId) {
+          await addDoc(collection(db, "notificaciones_paciente"), {
+            pacienteId: cita.pacienteId,
+            psicologoId: auth.currentUser.uid,
+            psicologoNombre: nombreMostrar,
+            fechaCita: cita.diaLabel || "",
+            horaCita: cita.horario || "",
+            modalidad:
+              cita.modalidad === "videollamada" ? "Online" : "Presencial",
+            motivo: motivoFinal,
+            tipo: "cancelacion_psicologo",
+            leida: false,
+            creadaEn: serverTimestamp(),
+          });
+        }
+      } else {
+        setCitasFirestore((prev) =>
+          prev.filter((item) => item.id !== cita.id)
+        );
+      }
+
+      if (citaSeleccionadaId === cita.id) {
+        setCitaSeleccionadaId(null);
+      }
+
+      setCitaAEliminarModal(null);
+      setMotivoCancelacionPsi("");
+    } catch (_) {
+      Alert.alert("Error", "No se pudo eliminar la cita.");
+    } finally {
+      setEliminandoCita(false);
+    }
   };
 
   const handleGuardarNuevaCita = async () => {
@@ -340,11 +450,15 @@ export default function AgendaPsicologo({ navigation }) {
       };
 
       if (auth.currentUser?.uid) {
-        await addDoc(collection(db, "citas_psicologo"), nueva);
+        const citaPsicologoRef = await addDoc(
+          collection(db, "citas_psicologo"),
+          nueva
+        );
 
         if (pacienteTargetId) {
           const esPresencial = nuevaModalidad === "presencial";
           await addDoc(collection(db, "solicitudes_sesion"), {
+            citaPsicologoId: citaPsicologoRef.id,
             pacienteId: pacienteTargetId,
             pacienteNombre: pacienteSeleccionado.nombre || "Paciente Lami",
             psicologoId: auth.currentUser.uid,
@@ -432,18 +546,43 @@ export default function AgendaPsicologo({ navigation }) {
             </View>
           </View>
 
-          <TouchableOpacity
-            onPress={() => setModalNuevaCita(true)}
-            activeOpacity={0.88}
-            style={styles.heroNewBtn}
-          >
-            <Ionicons
-              name="add-circle"
-              size={18}
-              color={PALETTE.purpleVibrant}
-            />
-            <Text style={styles.heroNewBtnText}>Agendar</Text>
-          </TouchableOpacity>
+          {/* CAMPANA DE NOTIFICACIONES + BOTÓN AGENDAR */}
+          <View style={styles.heroActionsRight}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={styles.heroBellBtn}
+              onPress={() => {
+                setNotifCentroVisible(true);
+                marcarNotificacionesPsiLeidas();
+              }}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={19}
+                color="#FFFFFF"
+              />
+              {unreadNotifCount > 0 && (
+                <View style={styles.heroNotifBadge}>
+                  <Text style={styles.heroNotifBadgeText}>
+                    {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setModalNuevaCita(true)}
+              activeOpacity={0.88}
+              style={styles.heroNewBtn}
+            >
+              <Ionicons
+                name="add-circle"
+                size={18}
+                color={PALETTE.purpleVibrant}
+              />
+              <Text style={styles.heroNewBtnText}>Agendar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.selectedPatientBanner}>
@@ -924,6 +1063,245 @@ export default function AgendaPsicologo({ navigation }) {
           })
         )}
       </ScrollView>
+
+      {/* MODAL MEJORADO DE AVISO CUANDO UN PACIENTE CANCELA UNA CITA */}
+      <Modal
+        visible={!!alertaCancelacionPacienteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setAlertaCancelacionPacienteModal(null);
+          marcarNotificacionesPsiLeidas();
+        }}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <LinearGradient
+              colors={["#FFF1F2", "#F3E8FF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.confirmTopBanner}
+            >
+              <LinearGradient
+                colors={["#E11D48", PALETTE.purpleVibrant]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.confirmIconBubble}
+              >
+                <Ionicons name="calendar-clear" size={30} color="#FFFFFF" />
+              </LinearGradient>
+
+              <View style={styles.cancelBadgePill}>
+                <Ionicons name="notifications" size={12} color="#E11D48" />
+                <Text style={styles.cancelBadgePillText}>
+                  AVISO DE CANCELACIÓN
+                </Text>
+              </View>
+
+              <Text style={styles.confirmTitle}>
+                Cita cancelada por el paciente
+              </Text>
+              <Text style={styles.confirmSubtitle}>
+                <Text style={{ fontWeight: "800", color: PALETTE.textDark }}>
+                  {alertaCancelacionPacienteModal?.pacienteNombre ||
+                    "Un paciente"}
+                </Text>{" "}
+                ha cancelado su sesión ({alertaCancelacionPacienteModal?.modalidad || "Sesión"}) y se liberó el espacio en tu agenda.
+              </Text>
+            </LinearGradient>
+
+            {alertaCancelacionPacienteModal && (
+              <View style={styles.confirmTicketBox}>
+                <View style={styles.confirmTicketRow}>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={16}
+                    color={PALETTE.purpleVibrant}
+                  />
+                  <Text style={styles.confirmTicketText}>
+                    {alertaCancelacionPacienteModal.fechaCita || ""}{" "}
+                    {alertaCancelacionPacienteModal.horaCita
+                      ? `• ${alertaCancelacionPacienteModal.horaCita}`
+                      : ""}
+                  </Text>
+                </View>
+
+                <View style={styles.confirmTicketRow}>
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={16}
+                    color="#E11D48"
+                  />
+                  <Text style={styles.confirmTicketText}>
+                    Motivo: "
+                    {alertaCancelacionPacienteModal.motivo ||
+                      "Sin motivo especificado"}
+                    "
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={() => {
+                setAlertaCancelacionPacienteModal(null);
+                marcarNotificacionesPsiLeidas();
+              }}
+              style={{ width: "100%" }}
+            >
+              <LinearGradient
+                colors={[PALETTE.purpleVibrant, PALETTE.tealDeep]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.confirmDoneBtn}
+              >
+                <Text style={styles.confirmDoneText}>Entendido</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL PARA QUE EL PSICÓLOGO ELIMINE/CANCELE UNA CITA NOTIFICANDO AL PACIENTE */}
+      <Modal
+        visible={!!citaAEliminarModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !eliminandoCita && setCitaAEliminarModal(null)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.deleteModalIconRing}>
+              <Ionicons name="trash-outline" size={28} color="#DC2626" />
+            </View>
+
+            <Text style={styles.cancelBadgePillText}>CANCELAR CONSULTA</Text>
+            <Text style={styles.confirmTitle}>¿Eliminar cita agendada?</Text>
+            <Text style={styles.confirmSubtitle}>
+              Se eliminará de tu agenda y del calendario de{" "}
+              <Text style={{ fontWeight: "800", color: PALETTE.textDark }}>
+                {citaAEliminarModal?.pacienteNombre}
+              </Text>
+              . Puedes escribirle un breve motivo:
+            </Text>
+
+            <TextInput
+              style={styles.psiCancelReasonInput}
+              multiline
+              placeholder="Ej. Reprogramaremos tu sesión por ajuste de horario..."
+              placeholderTextColor="#94A3B8"
+              value={motivoCancelacionPsi}
+              onChangeText={setMotivoCancelacionPsi}
+              editable={!eliminandoCita}
+            />
+
+            <View style={styles.confirmActionsRow}>
+              <TouchableOpacity
+                onPress={() => setCitaAEliminarModal(null)}
+                disabled={eliminandoCita}
+                style={styles.confirmShareBtn}
+              >
+                <Text style={styles.confirmShareText}>Conservar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleConfirmarEliminarCitaPsi}
+                disabled={eliminandoCita}
+                style={[
+                  styles.deleteConfirmActionBtn,
+                  eliminandoCita && { opacity: 0.7 },
+                ]}
+              >
+                {eliminandoCita ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDoneText}>
+                    Eliminar y notificar
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CENTRO DE NOTIFICACIONES DEL PSICÓLOGO (CAMPANA SUPERIOR) */}
+      <Modal
+        visible={notifCentroVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNotifCentroVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons
+                  name="notifications"
+                  size={20}
+                  color={PALETTE.purpleVibrant}
+                />
+                <Text style={styles.modalTitle}>
+                  Notificaciones ({notificacionesPsi.length})
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setNotifCentroVisible(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={22} color={PALETTE.textDark} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingTop: 10, paddingBottom: 16 }}
+            >
+              {notificacionesPsi.length === 0 ? (
+                <View style={styles.emptyNotifContainer}>
+                  <Ionicons
+                    name="notifications-off-outline"
+                    size={32}
+                    color="#94A3B8"
+                  />
+                  <Text style={styles.emptyTitle}>Sin avisos recientes</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Cuando un paciente cancele una cita aparecerá aquí con su
+                    motivo.
+                  </Text>
+                </View>
+              ) : (
+                notificacionesPsi.map((notif) => (
+                  <View key={notif.id} style={styles.notifPsiCard}>
+                    <View style={styles.notifPsiTopRow}>
+                      <View style={styles.notifPsiTag}>
+                        <Text style={styles.notifPsiTagText}>
+                          Cita Cancelada
+                        </Text>
+                      </View>
+                      <Text style={styles.notifPsiDate}>
+                        {notif.fechaCita || ""}
+                      </Text>
+                    </View>
+                    <Text style={styles.notifPsiTitle}>
+                      {notif.pacienteNombre || "Paciente"} canceló su cita (
+                      {notif.modalidad || "Sesión"})
+                    </Text>
+                    {notif.horaCita ? (
+                      <Text style={styles.notifPsiMeta}>
+                        ⏰ {notif.horaCita}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.notifPsiMotivo}>
+                      💬 Motivo: "{notif.motivo || "Sin motivo"}"
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={modalNuevaCita}
@@ -1519,12 +1897,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 8,
   },
   heroDoctorInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
+    gap: 10,
     flex: 1,
   },
   heroAvatarFrame: {
@@ -1561,22 +1939,22 @@ const styles = StyleSheet.create({
   heroNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 6,
   },
   heroName: {
-    fontSize: 16.5,
+    fontSize: 16,
     fontWeight: "800",
     color: "#FFFFFF",
     flexShrink: 1,
   },
   heroCodeBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.22)",
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 8,
   },
   heroCodeText: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -1585,12 +1963,47 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.85)",
     marginTop: 1,
   },
+  heroActionsRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  heroBellBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  heroNotifBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 8.5,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  heroNotifBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9.5,
+    fontWeight: "900",
+  },
   heroNewBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     paddingVertical: 8.5,
     borderRadius: 14,
     elevation: 3,
@@ -2355,6 +2768,50 @@ const styles = StyleSheet.create({
     color: PALETTE.purpleVibrant,
     letterSpacing: 0.5,
   },
+  cancelBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 999,
+  },
+  cancelBadgePillText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#E11D48",
+    letterSpacing: 0.5,
+  },
+  deleteModalIconRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  psiCancelReasonInput: {
+    width: "100%",
+    minHeight: 78,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FFFBFB",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: PALETTE.textDark,
+    textAlignVertical: "top",
+  },
+  deleteConfirmActionBtn: {
+    flex: 1.25,
+    paddingVertical: 12.5,
+    borderRadius: 14,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   confirmTitle: {
     fontSize: 17.5,
     fontWeight: "900",
@@ -2378,7 +2835,7 @@ const styles = StyleSheet.create({
   },
   confirmTicketRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 9,
   },
   confirmTicketText: {
@@ -2419,6 +2876,61 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
+
+  // Centro de notificaciones del psicólogo
+  emptyNotifContainer: {
+    alignItems: "center",
+    paddingVertical: 28,
+    gap: 6,
+  },
+  notifPsiCard: {
+    backgroundColor: "#FFFBFB",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    gap: 5,
+  },
+  notifPsiTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  notifPsiTag: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  notifPsiTagText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
+  notifPsiDate: {
+    fontSize: 11,
+    color: PALETTE.textMuted,
+    fontWeight: "600",
+  },
+  notifPsiTitle: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: PALETTE.textDark,
+  },
+  notifPsiMeta: {
+    fontSize: 12,
+    color: PALETTE.textMuted,
+    fontWeight: "600",
+  },
+  notifPsiMotivo: {
+    fontSize: 12.5,
+    color: "#991B1B",
+    backgroundColor: "#FEF2F2",
+    padding: 8,
+    borderRadius: 10,
+    marginTop: 2,
+  },
+
   bottomBar: {
     flexDirection: "row",
     alignItems: "center",

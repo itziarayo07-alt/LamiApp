@@ -483,7 +483,7 @@ export default function PsicologoDashboard({ navigation }) {
 
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => irAPantalla("FlywheelQR")}
+              onPress={() => irAPantalla("PerfilPsicologo")}
             >
               <LinearGradient
                 colors={[PALETTE.purpleVibrant, PALETTE.indigoMuted]}
