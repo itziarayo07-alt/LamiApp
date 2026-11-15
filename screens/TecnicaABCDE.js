@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { auth } from "../config/firebaseConfig";
 
 const DISTORSIONES = [
   {
@@ -93,13 +94,20 @@ export default function TecnicaABCDE({ navigation }) {
   const [historial, setHistorial] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
 
+  // Clave única en AsyncStorage por usuario logueado
+  const obtenerStorageKey = () => {
+    const uid = auth.currentUser?.uid || "invitado";
+    return `historialABCDE_${uid}`;
+  };
+
   useEffect(() => {
     cargarHistorial();
   }, []);
 
   const cargarHistorial = async () => {
     try {
-      const raw = await AsyncStorage.getItem("historialABCDE");
+      const key = obtenerStorageKey();
+      const raw = await AsyncStorage.getItem(key);
       const lista = raw ? JSON.parse(raw) : [];
       setHistorial(lista);
     } catch (e) {
@@ -177,7 +185,8 @@ export default function TecnicaABCDE({ navigation }) {
 
   const guardarHistorial = async () => {
     try {
-      const raw = await AsyncStorage.getItem("historialABCDE");
+      const key = obtenerStorageKey();
+      const raw = await AsyncStorage.getItem(key);
       const lista = raw ? JSON.parse(raw) : [];
       const interp = calcularInterpretacionPara(
         intensidadInicial,
@@ -186,6 +195,7 @@ export default function TecnicaABCDE({ navigation }) {
 
       const nuevoRegistro = {
         id: Date.now().toString(),
+        uid: auth.currentUser?.uid || "invitado",
         fecha: new Date().toISOString(),
         eventoA,
         creenciaB,
@@ -201,7 +211,7 @@ export default function TecnicaABCDE({ navigation }) {
         resumenInterpretacion: interp.resumen,
       };
       const nuevaLista = [nuevoRegistro, ...lista];
-      await AsyncStorage.setItem("historialABCDE", JSON.stringify(nuevaLista));
+      await AsyncStorage.setItem(key, JSON.stringify(nuevaLista));
       setHistorial(nuevaLista);
       setGuardado(true);
       Alert.alert(
@@ -234,11 +244,9 @@ export default function TecnicaABCDE({ navigation }) {
           style: "destructive",
           onPress: async () => {
             try {
+              const key = obtenerStorageKey();
               const filtrados = historial.filter((item) => item.id !== id);
-              await AsyncStorage.setItem(
-                "historialABCDE",
-                JSON.stringify(filtrados)
-              );
+              await AsyncStorage.setItem(key, JSON.stringify(filtrados));
               setHistorial(filtrados);
             } catch (e) {
               console.log("Error eliminando registro:", e);
