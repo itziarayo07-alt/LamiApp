@@ -26,15 +26,38 @@ function generarCodigoEspecialista() {
   return `PSI-${num}`;
 }
 
+const PLANES_TERAPEUTA = [
+  {
+    id: "semilla",
+    nombre: "Semilla",
+    precio: 299,
+    limite: 10,
+    descripcion: "Ideal para iniciar • Hasta 10 pacientes vinculados",
+  },
+  {
+    id: "profesional",
+    nombre: "Profesional",
+    precio: 599,
+    limite: 30,
+    descripcion: "Consultorio activo • Hasta 30 pacientes vinculados",
+    destacado: true,
+  },
+  {
+    id: "consultorio",
+    nombre: "Consultorio",
+    precio: 1299,
+    limite: 100,
+    descripcion: "Clínica o grupo • Hasta 100 pacientes vinculados",
+  },
+];
+
 export default function RegistroPsicologo({ navigation }) {
   const [fotoBase64, setFotoBase64] = useState(null);
   const [modalFotoVisible, setModalFotoVisible] = useState(false);
 
-  // Modal personalizado de registro exitoso
   const [modalExitoVisible, setModalExitoVisible] = useState(false);
   const [codigoGenerado, setCodigoGenerado] = useState("");
 
-  // Modal personalizado de aviso / validación
   const [avisoModal, setAvisoModal] = useState({
     visible: false,
     etiqueta: "",
@@ -50,10 +73,20 @@ export default function RegistroPsicologo({ navigation }) {
   const [cedulaProfesional, setCedulaProfesional] = useState("");
   const [especialidad, setEspecialidad] = useState("Ansiedad y Estrés");
   const [modalidad, setModalidad] = useState("presencial");
+  const [planSeleccionado, setPlanSeleccionado] = useState("profesional");
 
-  // Campos de ubicación (solo si es presencial o híbrida)
-  const [tipoLugar, setTipoLugar] = useState("consultorio_privado"); // "consultorio_privado" | "hospital_clinica"
-  const [nombreLugar, setNombreLugar] = useState(""); // Ej. Hospital Español / Torre Médica (opcional si es privado)
+  // Estados de método de pago
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] =
+    useState("tarjeta");
+  const [titularTarjeta, setTitularTarjeta] = useState("");
+  const [numeroTarjeta, setNumeroTarjeta] = useState("");
+  const [expiracionTarjeta, setExpiracionTarjeta] = useState("");
+  const [cvvTarjeta, setCvvTarjeta] = useState("");
+  const [correoPaypal, setCorreoPaypal] = useState("");
+  const [procesandoPago, setProcesandoPago] = useState(false);
+
+  const [tipoLugar, setTipoLugar] = useState("consultorio_privado");
+  const [nombreLugar, setNombreLugar] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
   const [pisoConsultorio, setPisoConsultorio] = useState("");
@@ -89,6 +122,19 @@ export default function RegistroPsicologo({ navigation }) {
       titulo,
       mensaje,
     });
+  };
+
+  const formatearNumeroTarjeta = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 16);
+    return limpio.replace(/(\d{4})(?=\d)/g, "$1 ");
+  };
+
+  const formatearExpiracion = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 4);
+    if (limpio.length >= 3) {
+      return `${limpio.slice(0, 2)}/${limpio.slice(2)}`;
+    }
+    return limpio;
   };
 
   const abrirGaleria = async () => {
@@ -208,6 +254,64 @@ export default function RegistroPsicologo({ navigation }) {
       return;
     }
 
+    if (!planSeleccionado) {
+      mostrarAviso(
+        "SUSCRIPCIÓN",
+        "Selecciona tu plan",
+        "Elige el plan profesional con el que deseas iniciar en Lami."
+      );
+      return;
+    }
+
+    // Validación de método de pago para terapeutas
+    let resumenMetodo = "";
+    if (metodoPagoSeleccionado === "tarjeta") {
+      const digitos = numeroTarjeta.replace(/\s/g, "");
+      if (!titularTarjeta.trim()) {
+        mostrarAviso(
+          "MÉTODO DE PAGO",
+          "Titular requerido",
+          "Ingresa el nombre del titular de la tarjeta."
+        );
+        return;
+      }
+      if (digitos.length < 16) {
+        mostrarAviso(
+          "MÉTODO DE PAGO",
+          "Tarjeta incompleta",
+          "Ingresa los 16 dígitos de tu tarjeta."
+        );
+        return;
+      }
+      if (expiracionTarjeta.length < 5) {
+        mostrarAviso(
+          "MÉTODO DE PAGO",
+          "Vencimiento requerido",
+          "Ingresa la fecha de vencimiento (MM/AA)."
+        );
+        return;
+      }
+      if (cvvTarjeta.length < 3) {
+        mostrarAviso(
+          "MÉTODO DE PAGO",
+          "CVV requerido",
+          "Ingresa el código CVV de seguridad."
+        );
+        return;
+      }
+      resumenMetodo = `Tarjeta terminación •••• ${digitos.slice(-4)}`;
+    } else {
+      if (!correoPaypal.trim() || !correoPaypal.includes("@")) {
+        mostrarAviso(
+          "MÉTODO DE PAGO",
+          "PayPal inválido",
+          "Ingresa un correo electrónico válido de PayPal."
+        );
+        return;
+      }
+      resumenMetodo = `PayPal (${correoPaypal.trim()})`;
+    }
+
     if (!aceptaTerminos) {
       mostrarAviso(
         "DECLARACIÓN",
@@ -219,6 +323,10 @@ export default function RegistroPsicologo({ navigation }) {
 
     try {
       setCargando(true);
+      setProcesandoPago(true);
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      setProcesandoPago(false);
+
       const cred = await createUserWithEmailAndPassword(
         auth,
         correo.trim(),
@@ -226,6 +334,9 @@ export default function RegistroPsicologo({ navigation }) {
       );
       const uid = cred.user.uid;
       const codigoVinculacion = generarCodigoEspecialista();
+      const planInfo =
+        PLANES_TERAPEUTA.find((p) => p.id === planSeleccionado) ||
+        PLANES_TERAPEUTA[1];
 
       const ubicacionData = requiereDireccion
         ? {
@@ -262,7 +373,15 @@ export default function RegistroPsicologo({ navigation }) {
         telefono: telefono.trim(),
         fotoPerfil: fotoBase64 || null,
         codigoVinculacion,
-        plan: "profesional",
+        plan: planInfo.id,
+        planNombre: planInfo.nombre,
+        precioMensual: planInfo.precio,
+        limitePacientes: planInfo.limite,
+        bonificacionPorPaciente: 50,
+        estadoSuscripcion: "activo",
+        metodoPagoTipo: metodoPagoSeleccionado,
+        metodoPagoResumen: resumenMetodo,
+        suscripcionActualizadaEn: serverTimestamp(),
         creadoEn: serverTimestamp(),
       });
 
@@ -285,8 +404,15 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso("ERROR DE REGISTRO", "No se pudo completar", error.message);
       }
     } finally {
+      setProcesandoPago(false);
       setCargando(false);
     }
+  };
+
+  const textoBotonRegistro = () => {
+    if (procesandoPago) return "Procesando pago...";
+    if (cargando) return "Creando perfil...";
+    return "Completar registro";
   };
 
   const esPresencialOHibrido =
@@ -304,7 +430,6 @@ export default function RegistroPsicologo({ navigation }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          {/* BARRA SUPERIOR */}
           <View style={styles.topBar}>
             <TouchableOpacity
               onPress={() => navigation.goBack()}
@@ -331,16 +456,13 @@ export default function RegistroPsicologo({ navigation }) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* ENCABEZADO */}
             <Text style={styles.heroTitle}>Alta de Especialista</Text>
             <Text style={styles.heroSubtitle}>
               Configura tu perfil clínico para vincular y acompañar a tus
               pacientes
             </Text>
 
-            {/* TARJETA PRINCIPAL */}
             <View style={styles.mainCard}>
-              {/* SELECTOR DE FOTOGRAFÍA */}
               <View style={styles.photoSection}>
                 <TouchableOpacity
                   onPress={() => setModalFotoVisible(true)}
@@ -379,7 +501,6 @@ export default function RegistroPsicologo({ navigation }) {
 
               <View style={styles.divider} />
 
-              {/* SECCIÓN 1: IDENTIDAD */}
               <Text style={styles.sectionHeader}>Identidad profesional</Text>
 
               <Text style={styles.label}>Nombre(s)</Text>
@@ -445,7 +566,6 @@ export default function RegistroPsicologo({ navigation }) {
 
               <View style={styles.divider} />
 
-              {/* SECCIÓN 2: VALIDACIÓN CLÍNICA */}
               <Text style={styles.sectionHeader}>Acreditación y consulta</Text>
 
               <Text style={styles.label}>Cédula profesional</Text>
@@ -504,7 +624,6 @@ export default function RegistroPsicologo({ navigation }) {
                 </Picker>
               </View>
 
-              {/* UBICACIÓN DEL CONSULTORIO (SI ES PRESENCIAL O HÍBRIDA) */}
               {esPresencialOHibrido && (
                 <View style={styles.locationCard}>
                   <View style={styles.locationHeaderRow}>
@@ -523,7 +642,6 @@ export default function RegistroPsicologo({ navigation }) {
                     llegar fácilmente.
                   </Text>
 
-                  {/* Selector: Consultorio privado vs Hospital/Clínica */}
                   <View style={styles.tipoLugarRow}>
                     <TouchableOpacity
                       activeOpacity={0.85}
@@ -691,7 +809,204 @@ export default function RegistroPsicologo({ navigation }) {
 
               <View style={styles.divider} />
 
-              {/* SECCIÓN 3: ACCESO */}
+              <Text style={styles.sectionHeader}>
+                Selecciona tu plan profesional
+              </Text>
+              <Text style={styles.planIntroText}>
+                Con el Sistema Flywheel recibes $50 MXN de descuento por cada
+                paciente activo al mes hasta llegar a $0 MXN.
+              </Text>
+
+              <View style={styles.plansList}>
+                {PLANES_TERAPEUTA.map((plan) => {
+                  const activo = planSeleccionado === plan.id;
+                  return (
+                    <TouchableOpacity
+                      key={plan.id}
+                      activeOpacity={0.88}
+                      onPress={() => setPlanSeleccionado(plan.id)}
+                      style={[
+                        styles.planCard,
+                        activo && styles.planCardActive,
+                      ]}
+                    >
+                      <View style={styles.planTopRow}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Ionicons
+                            name={
+                              activo ? "radio-button-on" : "radio-button-off"
+                            }
+                            size={20}
+                            color={activo ? "#7E83C2" : "#94A3B8"}
+                          />
+                          <Text style={styles.planTitle}>{plan.nombre}</Text>
+                          {plan.destacado && (
+                            <View style={styles.planPopularBadge}>
+                              <Text style={styles.planPopularText}>
+                                RECOMENDADO
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.planPrice}>
+                          ${plan.precio.toLocaleString("es-MX")}{" "}
+                          <Text style={styles.planPeriod}>MXN/mes</Text>
+                        </Text>
+                      </View>
+                      <Text style={styles.planDesc}>{plan.descripcion}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Sección de método de pago integrada */}
+              <View style={styles.paymentSectionContainer}>
+                <Text style={[styles.sectionHeader, { marginTop: 16 }]}>
+                   Método de pago de suscripción
+                </Text>
+                <View style={styles.payMethodRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setMetodoPagoSeleccionado("tarjeta")}
+                    style={[
+                      styles.payMethodBtn,
+                      metodoPagoSeleccionado === "tarjeta" &&
+                        styles.payMethodBtnActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name="card-outline"
+                      size={18}
+                      color={
+                        metodoPagoSeleccionado === "tarjeta"
+                          ? "#FFFFFF"
+                          : "#1E293B"
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.payMethodBtnText,
+                        metodoPagoSeleccionado === "tarjeta" && {
+                          color: "#FFFFFF",
+                        },
+                      ]}
+                    >
+                      Tarjeta Débito / Crédito
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setMetodoPagoSeleccionado("paypal")}
+                    style={[
+                      styles.payMethodBtn,
+                      metodoPagoSeleccionado === "paypal" &&
+                        styles.payMethodBtnActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name="logo-paypal"
+                      size={18}
+                      color={
+                        metodoPagoSeleccionado === "paypal"
+                          ? "#FFFFFF"
+                          : "#1E293B"
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.payMethodBtnText,
+                        metodoPagoSeleccionado === "paypal" && {
+                          color: "#FFFFFF",
+                        },
+                      ]}
+                    >
+                      PayPal
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {metodoPagoSeleccionado === "tarjeta" ? (
+                  <View style={styles.payFormBox}>
+                    <Text style={styles.payFieldLabel}>Nombre del titular</Text>
+                    <TextInput
+                      style={styles.payInput}
+                      placeholder="Nombre como aparece en la tarjeta"
+                      placeholderTextColor="#94A3B8"
+                      value={titularTarjeta}
+                      onChangeText={setTitularTarjeta}
+                    />
+
+                    <Text style={styles.payFieldLabel}>Número de tarjeta</Text>
+                    <TextInput
+                      style={styles.payInput}
+                      placeholder="0000 0000 0000 0000"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={19}
+                      value={numeroTarjeta}
+                      onChangeText={(t) =>
+                        setNumeroTarjeta(formatearNumeroTarjeta(t))
+                      }
+                    />
+
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.payFieldLabel}>Vencimiento</Text>
+                        <TextInput
+                          style={styles.payInput}
+                          placeholder="MM/AA"
+                          placeholderTextColor="#94A3B8"
+                          keyboardType="number-pad"
+                          maxLength={5}
+                          value={expiracionTarjeta}
+                          onChangeText={(t) =>
+                            setExpiracionTarjeta(formatearExpiracion(t))
+                          }
+                        />
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.payFieldLabel}>CVV</Text>
+                        <TextInput
+                          style={styles.payInput}
+                          placeholder="123"
+                          placeholderTextColor="#94A3B8"
+                          keyboardType="number-pad"
+                          secureTextEntry
+                          maxLength={4}
+                          value={cvvTarjeta}
+                          onChangeText={(t) =>
+                            setCvvTarjeta(t.replace(/\D/g, "").slice(0, 4))
+                          }
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.payFormBox}>
+                    <Text style={styles.payFieldLabel}>
+                      Correo electrónico de PayPal
+                    </Text>
+                    <TextInput
+                      style={styles.payInput}
+                      placeholder="tu-cuenta@paypal.com"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={correoPaypal}
+                      onChangeText={setCorreoPaypal}
+                    />
+                    <Text style={styles.payPaypalHint}>
+                      Se vinculará tu cuenta de PayPal para la suscripción
+                      mensual del plan seleccionado.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.divider} />
+
               <Text style={styles.sectionHeader}>Credenciales de acceso</Text>
 
               <Text style={styles.label}>Correo electrónico</Text>
@@ -765,7 +1080,6 @@ export default function RegistroPsicologo({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* DECLARACIÓN PROFESIONAL */}
               <TouchableOpacity
                 style={styles.checkRow}
                 onPress={() => setAceptaTerminos(!aceptaTerminos)}
@@ -787,10 +1101,9 @@ export default function RegistroPsicologo({ navigation }) {
                 </Text>
               </TouchableOpacity>
 
-              {/* BOTÓN PRINCIPAL */}
               <TouchableOpacity
                 onPress={handleRegistro}
-                disabled={cargando}
+                disabled={cargando || procesandoPago}
                 activeOpacity={0.9}
                 style={{ marginTop: 14 }}
               >
@@ -801,7 +1114,7 @@ export default function RegistroPsicologo({ navigation }) {
                   style={styles.submitBtn}
                 >
                   <Text style={styles.submitBtnText}>
-                    {cargando ? "Creando perfil..." : "Completar registro"}
+                    {textoBotonRegistro()}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -809,7 +1122,6 @@ export default function RegistroPsicologo({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* MODAL CÁMARA / GALERÍA */}
         <Modal
           visible={modalFotoVisible}
           transparent
@@ -853,7 +1165,6 @@ export default function RegistroPsicologo({ navigation }) {
           </View>
         </Modal>
 
-        {/* MODAL PERSONALIZADO DE AVISO / VALIDACIÓN */}
         <Modal
           visible={avisoModal.visible}
           transparent
@@ -896,7 +1207,6 @@ export default function RegistroPsicologo({ navigation }) {
           </View>
         </Modal>
 
-        {/* MODAL PERSONALIZADO DE CONFIRMACIÓN E IR AL LOGIN */}
         <Modal
           visible={modalExitoVisible}
           transparent
@@ -915,8 +1225,8 @@ export default function RegistroPsicologo({ navigation }) {
               <Text style={styles.successBadge}>PERFIL CREADO</Text>
               <Text style={styles.successTitle}>Registro profesional listo</Text>
               <Text style={styles.successDesc}>
-                Tu cuenta ha sido creada correctamente y tu cédula quedó
-                registrada para validación.
+                Tu cuenta ha sido creada correctamente, tu suscripción está activa
+                y tu cédula quedó registrada para validación.
               </Text>
 
               <View style={styles.codeCard}>
@@ -1121,8 +1431,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     overflow: "hidden",
   },
-
-  // Tarjeta de ubicación de consulta
   locationCard: {
     backgroundColor: "#F8FAFC",
     borderRadius: 18,
@@ -1178,11 +1486,129 @@ const styles = StyleSheet.create({
   tipoLugarTextActive: {
     color: "#FFFFFF",
   },
-
+  planIntroText: {
+    fontSize: 12,
+    color: "#64748B",
+    lineHeight: 17,
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  plansList: {
+    gap: 10,
+  },
+  planCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+  },
+  planCardActive: {
+    backgroundColor: "#F5F3FF",
+    borderColor: "#7E83C2",
+  },
+  planTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  planTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  planPopularBadge: {
+    backgroundColor: "#EDE9FE",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  planPopularText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#6D28D9",
+  },
+  planPrice: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#6192A4",
+  },
+  planPeriod: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  planDesc: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 5,
+    marginLeft: 28,
+  },
+  paymentSectionContainer: {
+    marginTop: 6,
+    gap: 8,
+  },
+  payMethodRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  payMethodBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  payMethodBtnActive: {
+    backgroundColor: "#7E83C2",
+    borderColor: "#7E83C2",
+  },
+  payMethodBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1E293B",
+    textAlign: "center",
+  },
+  payFormBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 8,
+    marginTop: 6,
+  },
+  payFieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  payInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 13.5,
+    color: "#1E293B",
+  },
+  payPaypalHint: {
+    fontSize: 11.5,
+    color: "#64748B",
+    lineHeight: 16,
+  },
   checkRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: 6,
+    marginTop: 14,
     gap: 10,
   },
   checkbox: {

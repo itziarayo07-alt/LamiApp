@@ -1,8 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import {
+  addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -13,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -47,6 +51,25 @@ function getTomorrowISO() {
   )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function parseHoraToPicker(horaStr = "10:00 AM") {
+  const match = String(horaStr)
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match) {
+    return {
+      hora: match[1].padStart(2, "0"),
+      minuto: match[2],
+      turno: match[3].toUpperCase(),
+    };
+  }
+  return { hora: "10", minuto: "00", turno: "AM" };
+}
+
+function normalizarHoraComparacion(horaStr = "") {
+  const p = parseHoraToPicker(horaStr);
+  return `${p.hora}:${p.minuto} ${p.turno}`;
+}
+
 export default function PsicologoDashboard({ navigation }) {
   const [pacientes, setPacientes] = useState([]);
   const [perfilPsicologo, setPerfilPsicologo] = useState(null);
@@ -54,14 +77,25 @@ export default function PsicologoDashboard({ navigation }) {
   const [filtroEstado, setFiltroEstado] = useState("all");
   const [modalAlertas, setModalAlertas] = useState(false);
 
+  const [citasAgendadasPsi, setCitasAgendadasPsi] = useState([]);
   const [solicitudesSesion, setSolicitudesSesion] = useState([]);
   const [solicitudRespondendo, setSolicitudRespondendo] = useState(null);
   const [tipoRespuesta, setTipoRespuesta] = useState("aceptar");
+
+  const [calMesPsi, setCalMesPsi] = useState(() => {
+    const hoy = new Date();
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  });
   const [fechaPropuesta, setFechaPropuesta] = useState(getTomorrowISO());
-  const [horaPropuesta, setHoraPropuesta] = useState("10:00 AM");
+  const [horaPickerPsi, setHoraPickerPsi] = useState("10");
+  const [minutoPickerPsi, setMinutoPickerPsi] = useState("00");
+  const [turnoPickerPsi, setTurnoPickerPsi] = useState("AM");
+
   const [modalidadPropuesta, setModalidadPropuesta] = useState("presencial");
   const [mensajeRespuesta, setMensajeRespuesta] = useState("");
   const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
+
+  const [pacientePerfilModal, setPacientePerfilModal] = useState(null);
 
   const [resenasLista, setResenasLista] = useState([]);
   const [modalResenas, setModalResenas] = useState(false);
@@ -114,6 +148,19 @@ export default function PsicologoDashboard({ navigation }) {
       setSolicitudesSesion(lista);
     });
     return () => unsubSol();
+  }, []);
+
+  useEffect(() => {
+    if (!auth.currentUser?.uid) return;
+    const qCitas = query(
+      collection(db, "citas_psicologo"),
+      where("psicologoId", "==", auth.currentUser.uid)
+    );
+    const unsubCitas = onSnapshot(qCitas, (snap) => {
+      const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setCitasAgendadasPsi(lista);
+    });
+    return () => unsubCitas();
   }, []);
 
   useEffect(() => {
@@ -189,6 +236,8 @@ export default function PsicologoDashboard({ navigation }) {
 
       return {
         ...pac,
+        uid: pac.uid || pac.id,
+        fotoUrl: pac.fotoPerfil || pac.fotoUrl || null,
         estadoClinico: estado,
         ultimoAnimo: animo,
         porcentajeTareas: tareasPct,
@@ -251,6 +300,72 @@ export default function PsicologoDashboard({ navigation }) {
     navigation.navigate(routeName, params);
   };
 
+  const abrirPerfilPaciente = async (datosBase) => {
+    const uidTarget = datosBase.uid || datosBase.pacienteId;
+    setPacientePerfilModal({
+      uid: uidTarget,
+      nombre:
+        datosBase.nombre || datosBase.pacienteNombre || "Paciente Lami",
+      correo: datosBase.correo || datosBase.pacienteCorreo || "",
+      telefono: datosBase.telefono || datosBase.pacienteTelefono || "",
+      fotoPerfil: datosBase.fotoUrl || datosBase.fotoPerfil || null,
+      genero: datosBase.genero || "",
+      pais: datosBase.pais || "",
+      protocoloClinico: datosBase.protocoloClinico || "Seguimiento general",
+      ultimoAnimo: datosBase.ultimoAnimo,
+      sesionNum: datosBase.sesionNum || 1,
+      esVinculado: Boolean(datosBase.psicologoId),
+    });
+
+    if (!uidTarget) return;
+    try {
+      const snap = await getDoc(doc(db, "usuarios", uidTarget));
+      if (snap.exists()) {
+        const uData = snap.data();
+        setPacientePerfilModal((prev) =>
+          prev
+            ? {
+                ...prev,
+                nombre: uData.nombre || prev.nombre,
+                correo: uData.correo || prev.correo,
+                telefono: uData.telefono || prev.telefono,
+                fotoPerfil: uData.fotoPerfil || prev.fotoPerfil,
+                genero: uData.genero || prev.genero,
+                pais: uData.pais || prev.pais,
+                esVinculado: uData.psicologoId === auth.currentUser?.uid,
+              }
+            : prev
+        );
+      }
+    } catch (e) {
+      console.log("Error cargando perfil del paciente:", e);
+    }
+  };
+
+  const prepararAgendamientoSolicitud = (sol) => {
+    setSolicitudRespondendo(sol);
+    setTipoRespuesta("aceptar");
+
+    const fechaBase = sol.fechaSolicitada || getTomorrowISO();
+    setFechaPropuesta(fechaBase);
+    const partesFecha = fechaBase.split("-");
+    if (partesFecha.length === 3) {
+      setCalMesPsi(
+        new Date(Number(partesFecha[0]), Number(partesFecha[1]) - 1, 1)
+      );
+    }
+
+    const parsedHora = parseHoraToPicker(sol.horaSolicitada || "10:00 AM");
+    setHoraPickerPsi(parsedHora.hora);
+    setMinutoPickerPsi(parsedHora.minuto);
+    setTurnoPickerPsi(parsedHora.turno);
+
+    setModalidadPropuesta(
+      sol.modalidadSolicitada === "online" ? "online" : "presencial"
+    );
+    setMensajeRespuesta("");
+  };
+
   const handleResponderSolicitud = async () => {
     if (!solicitudRespondendo) return;
 
@@ -289,26 +404,91 @@ export default function PsicologoDashboard({ navigation }) {
           return;
         }
 
+        const fechaFinal =
+          fechaPropuesta.trim() ||
+          solicitudRespondendo.fechaSolicitada ||
+          getTomorrowISO();
+        const horaFinal = `${horaPickerPsi}:${minutoPickerPsi} ${turnoPickerPsi}`;
+
+        const hayChoque = citasAgendadasPsi.some((cita) => {
+          const fechaCitaExistente = cita.fechaExacta || cita.diaLabel || "";
+          if (fechaCitaExistente !== fechaFinal) return false;
+          const horaExistente = normalizarHoraComparacion(cita.horario || "");
+          return horaExistente === normalizarHoraComparacion(horaFinal);
+        });
+
+        if (hayChoque) {
+          setEnviandoRespuesta(false);
+          Alert.alert(
+            "Horario ocupado ⚠️",
+            `Ya tienes otra cita agendada el ${fechaFinal} a las ${horaFinal}. Selecciona otro horario o día en el calendario para poder guardar.`
+          );
+          return;
+        }
+
         await updateDoc(
           doc(db, "solicitudes_sesion", solicitudRespondendo.id),
           {
             estado: "confirmada",
-            fechaCita: fechaPropuesta.trim() || getTomorrowISO(),
-            horaCita: horaPropuesta.trim() || "10:00 AM",
+            fechaCita: fechaFinal,
+            horaCita: horaFinal,
             modalidadConfirmada: modalidadPropuesta,
             ubicacionConfirmada: ubicacionParaEnviar,
             respuestaTerapeuta:
               mensajeRespuesta.trim() ||
-              `¡Hola! Con gusto te recibo. Acepta la cita para agregarla a tu calendario y vincularnos (código ${codigoVinculacion}).`,
+              `¡Hola! Con gusto te recibo el ${fechaFinal} a las ${horaFinal}. Acepta la cita para agregarla a tu calendario.`,
             respondidoEn: serverTimestamp(),
           }
         );
 
+        const diasKeys = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
+        const fechaObj = new Date(`${fechaFinal}T12:00:00`);
+        const diaKeyCalculado = !isNaN(fechaObj.getTime())
+          ? diasKeys[fechaObj.getDay()]
+          : "jue";
+
+        await addDoc(collection(db, "citas_psicologo"), {
+          psicologoId: auth.currentUser.uid,
+          pacienteId: solicitudRespondendo.pacienteId || null,
+          diaKey: diaKeyCalculado,
+          diaLabel: fechaFinal,
+          fechaExacta: fechaFinal,
+          tipo: "cita",
+          modalidad: esPresencial ? "presencial" : "videollamada",
+          turno: turnoPickerPsi === "PM" ? "tarde" : "manana",
+          horario: horaFinal,
+          pacienteNombre:
+            solicitudRespondendo.pacienteNombre || "Paciente Lami",
+          sesionNum: 1,
+          motivo:
+            solicitudRespondendo.mensajeOpcional ||
+            solicitudRespondendo.mensaje ||
+            "Primera sesión agendada",
+          estadoRecordatorio: esPresencial
+            ? "Recordatorio + Maps listo"
+            : "Recordatorio 1h activado",
+          ubicacion: ubicacionParaEnviar?.direccion || "Consultorio",
+          createdAt: serverTimestamp(),
+        });
+
+        if (solicitudRespondendo.pacienteId) {
+          try {
+            await updateDoc(
+              doc(db, "usuarios", solicitudRespondendo.pacienteId),
+              {
+                psicologoId: auth.currentUser.uid,
+                psicologoNombre: nombreMostrar,
+                psicologoFoto: fotoPerfilUri || null,
+                psicologoEspecialidad:
+                  perfilPsicologo?.especialidad || "Psicología Clínica",
+              }
+            );
+          } catch (_) {}
+        }
+
         Alert.alert(
-          "Cita confirmada ✨",
-          esPresencial
-            ? "Se envió tu invitación y la ubicación exacta de tu consultorio al paciente."
-            : "Se envió tu invitación de videollamada al paciente."
+          "Cita guardada en tu calendario ✨",
+          `La sesión con ${solicitudRespondendo.pacienteNombre} quedó agendada el ${fechaFinal} a las ${horaFinal}.`
         );
       }
 
@@ -582,7 +762,7 @@ export default function PsicologoDashboard({ navigation }) {
                   : `${solicitudesPendientes.length} solicitudes de sesión pendientes`}
               </Text>
               <Text style={styles.solicitudesBannerSub}>
-                Toca aquí para revisar y responder disponibilidad
+                Toca aquí para ver el perfil y agendar la cita
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#0F766E" />
@@ -841,7 +1021,11 @@ export default function PsicologoDashboard({ navigation }) {
                 <View style={{ flex: 1 }}>
                   <View style={styles.patientTopRow}>
                     <View style={styles.patientIdentity}>
-                      <View style={styles.patientAvatarWrapper}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => abrirPerfilPaciente(pac)}
+                        style={styles.patientAvatarWrapper}
+                      >
                         {pac.fotoUrl ? (
                           <Image
                             source={{ uri: pac.fotoUrl }}
@@ -875,7 +1059,7 @@ export default function PsicologoDashboard({ navigation }) {
                             <Text style={styles.exclamationText}>!</Text>
                           )}
                         </View>
-                      </View>
+                      </TouchableOpacity>
 
                       <View style={{ flex: 1 }}>
                         <View style={styles.nameBadgeRow}>
@@ -930,31 +1114,57 @@ export default function PsicologoDashboard({ navigation }) {
                       </Text>
                     </View>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.tasksPill,
-                        {
-                          backgroundColor: "#EDE9FE",
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 4,
-                        },
-                      ]}
-                      onPress={() =>
-                        irAPantalla("EjerciciosPsicologo", { paciente: pac })
-                      }
-                    >
-                      <Ionicons
-                        name="create-outline"
-                        size={13}
-                        color="#5B21B6"
-                      />
-                      <Text
-                        style={[styles.tasksPillText, { color: "#5B21B6" }]}
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      <TouchableOpacity
+                        style={[
+                          styles.tasksPill,
+                          {
+                            backgroundColor: "#EEF2FF",
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 3,
+                          },
+                        ]}
+                        onPress={() => abrirPerfilPaciente(pac)}
                       >
-                        Personalizar ejercicios
-                      </Text>
-                    </TouchableOpacity>
+                        <Ionicons
+                          name="person-outline"
+                          size={12}
+                          color="#4338CA"
+                        />
+                        <Text
+                          style={[styles.tasksPillText, { color: "#4338CA" }]}
+                        >
+                          Perfil
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.tasksPill,
+                          {
+                            backgroundColor: "#EDE9FE",
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                          },
+                        ]}
+                        onPress={() =>
+                          irAPantalla("EjerciciosPsicologo", { paciente: pac })
+                        }
+                      >
+                        <Ionicons
+                          name="create-outline"
+                          size={13}
+                          color="#5B21B6"
+                        />
+                        <Text
+                          style={[styles.tasksPillText, { color: "#5B21B6" }]}
+                        >
+                          Ejercicios
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -1025,13 +1235,169 @@ export default function PsicologoDashboard({ navigation }) {
       </View>
 
       <Modal
+        visible={!!pacientePerfilModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPacientePerfilModal(null)}
+      >
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.pacProfileCard}>
+            <LinearGradient
+              colors={["#EDF6F8", "#F5F3FF"]}
+              style={styles.pacProfileBanner}
+            >
+              <TouchableOpacity
+                onPress={() => setPacientePerfilModal(null)}
+                style={styles.pacProfileCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#1E293B" />
+              </TouchableOpacity>
+
+              <View style={styles.pacProfileAvatarRing}>
+                {pacientePerfilModal?.fotoPerfil ? (
+                  <Image
+                    source={{ uri: pacientePerfilModal.fotoPerfil }}
+                    style={styles.pacProfileAvatarImg}
+                  />
+                ) : (
+                  <View style={styles.pacProfileAvatarPlaceholder}>
+                    <Ionicons
+                      name="person"
+                      size={34}
+                      color={PALETTE.tealDeep}
+                    />
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.pacProfileBadge}>
+                <Text style={styles.pacProfileBadgeText}>
+                  {pacientePerfilModal?.esVinculado
+                    ? "PACIENTE VINCULADO"
+                    : "SOLICITUD DE SESIÓN"}
+                </Text>
+              </View>
+
+              <Text style={styles.pacProfileName}>
+                {pacientePerfilModal?.nombre}
+              </Text>
+              {pacientePerfilModal?.genero || pacientePerfilModal?.pais ? (
+                <Text style={styles.pacProfileMeta}>
+                  {[pacientePerfilModal?.genero, pacientePerfilModal?.pais]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </Text>
+              ) : null}
+            </LinearGradient>
+
+            <View style={styles.pacProfileBody}>
+              <View style={styles.pacProfileDetailsBox}>
+                {pacientePerfilModal?.correo ? (
+                  <View style={styles.pacProfileDetailRow}>
+                    <Ionicons
+                      name="mail-outline"
+                      size={16}
+                      color={PALETTE.tealDeep}
+                    />
+                    <Text style={styles.pacProfileDetailText}>
+                      {pacientePerfilModal.correo}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {pacientePerfilModal?.telefono ? (
+                  <TouchableOpacity
+                    onPress={() =>
+                      Linking.openURL(`tel:${pacientePerfilModal.telefono}`)
+                    }
+                    style={styles.pacProfileDetailRow}
+                  >
+                    <Ionicons
+                      name="call-outline"
+                      size={16}
+                      color={PALETTE.tealDeep}
+                    />
+                    <Text
+                      style={[
+                        styles.pacProfileDetailText,
+                        {
+                          color: "#1D4ED8",
+                          textDecorationLine: "underline",
+                          fontWeight: "600",
+                        },
+                      ]}
+                    >
+                      {pacientePerfilModal.telefono}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.pacProfileDetailRow}>
+                    <Ionicons name="call-outline" size={16} color="#94A3B8" />
+                    <Text style={styles.pacProfileDetailText}>
+                      Sin teléfono registrado
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.pacProfileDetailRow}>
+                  <Ionicons
+                    name="clipboard-outline"
+                    size={16}
+                    color={PALETTE.purpleVibrant}
+                  />
+                  <Text style={styles.pacProfileDetailText}>
+                    Motivo / Protocolo:{" "}
+                    <Text style={{ fontWeight: "700", color: "#1E293B" }}>
+                      {pacientePerfilModal?.protocoloClinico}
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => {
+                  const target = pacientePerfilModal;
+                  setPacientePerfilModal(null);
+                  setModalAlertas(false);
+                  irAPantalla("ExpedientePaciente", {
+                    paciente: {
+                      uid: target.uid,
+                      nombre: target.nombre,
+                      correo: target.correo,
+                      telefono: target.telefono,
+                      fotoUrl: target.fotoPerfil,
+                      protocoloClinico: target.protocoloClinico,
+                      ultimoAnimo: target.ultimoAnimo ?? 7,
+                      sesionNum: target.sesionNum || 1,
+                    },
+                  });
+                }}
+              >
+                <LinearGradient
+                  colors={[PALETTE.tealDeep, PALETTE.indigoMuted]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.respondSubmitBtn}
+                >
+                  <Text style={styles.respondSubmitText}>
+                    Abrir expediente clínico
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={modalAlertas}
         transparent
         animationType="slide"
         onRequestClose={() => setModalAlertas(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxHeight: "88%" }]}>
+          <View style={[styles.modalCard, { maxHeight: "90%" }]}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeaderRow}>
               <View
@@ -1060,7 +1426,7 @@ export default function PsicologoDashboard({ navigation }) {
 
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
+              contentContainerStyle={{ gap: 12, paddingBottom: 20 }}
             >
               {solicitudRespondendo ? (
                 <View style={styles.respondCard}>
@@ -1070,7 +1436,7 @@ export default function PsicologoDashboard({ navigation }) {
                       flexDirection: "row",
                       alignItems: "center",
                       gap: 5,
-                      marginBottom: 8,
+                      marginBottom: 6,
                     }}
                   >
                     <Ionicons
@@ -1089,11 +1455,48 @@ export default function PsicologoDashboard({ navigation }) {
                     </Text>
                   </TouchableOpacity>
 
-                  <Text style={styles.respondTitle}>
-                    Solicitud de {solicitudRespondendo.pacienteNombre}
-                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={styles.respondTitle}>
+                      {solicitudRespondendo.pacienteNombre}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => abrirPerfilPaciente(solicitudRespondendo)}
+                      style={styles.verPerfilMiniBtn}
+                    >
+                      <Ionicons
+                        name="person-outline"
+                        size={13}
+                        color={PALETTE.indigoMuted}
+                      />
+                      <Text style={styles.verPerfilMiniText}>Ver perfil</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {solicitudRespondendo.fechaSolicitada ||
+                  solicitudRespondendo.horaSolicitada ? (
+                    <View style={styles.requestedSlotPill}>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={14}
+                        color="#0F766E"
+                      />
+                      <Text style={styles.requestedSlotText}>
+                        Solicitó: {solicitudRespondendo.fechaSolicitada}{" "}
+                        {solicitudRespondendo.horaSolicitada
+                          ? `• ${solicitudRespondendo.horaSolicitada}`
+                          : ""}
+                      </Text>
+                    </View>
+                  ) : null}
+
                   <Text style={styles.respondQuote}>
-                    "{solicitudRespondendo.mensaje}" (Modalidad preferida:{" "}
+                    "{solicitudRespondendo.mensaje}" (Modalidad:{" "}
                     {solicitudRespondendo.modalidadSolicitada})
                   </Text>
 
@@ -1112,7 +1515,7 @@ export default function PsicologoDashboard({ navigation }) {
                           tipoRespuesta === "aceptar" && { color: "#FFFFFF" },
                         ]}
                       >
-                        Aceptar y agendar
+                        Aceptar / Agendar
                       </Text>
                     </TouchableOpacity>
 
@@ -1138,22 +1541,202 @@ export default function PsicologoDashboard({ navigation }) {
                   {tipoRespuesta === "aceptar" && (
                     <>
                       <Text style={styles.respondLabel}>
-                        Fecha propuesta (AAAA-MM-DD)
+                        Selecciona el día en el calendario ({fechaPropuesta})
                       </Text>
-                      <TextInput
-                        style={styles.respondInput}
-                        value={fechaPropuesta}
-                        onChangeText={setFechaPropuesta}
-                        placeholder="2026-11-15"
-                      />
+                      {(() => {
+                        const anio = calMesPsi.getFullYear();
+                        const mes = calMesPsi.getMonth();
+                        const nombresMes = [
+                          "Enero",
+                          "Febrero",
+                          "Marzo",
+                          "Abril",
+                          "Mayo",
+                          "Junio",
+                          "Julio",
+                          "Agosto",
+                          "Septiembre",
+                          "Octubre",
+                          "Noviembre",
+                          "Diciembre",
+                        ];
+                        const primerDiaSemana = new Date(
+                          anio,
+                          mes,
+                          1
+                        ).getDay();
+                        const totalDiasMes = new Date(
+                          anio,
+                          mes + 1,
+                          0
+                        ).getDate();
+                        const hoy = new Date();
+                        const hoyStr = `${hoy.getFullYear()}-${String(
+                          hoy.getMonth() + 1
+                        ).padStart(2, "0")}-${String(hoy.getDate()).padStart(
+                          2,
+                          "0"
+                        )}`;
 
-                      <Text style={styles.respondLabel}>Hora de la cita</Text>
-                      <TextInput
-                        style={styles.respondInput}
-                        value={horaPropuesta}
-                        onChangeText={setHoraPropuesta}
-                        placeholder="10:00 AM"
-                      />
+                        const celdas = [];
+                        for (let i = 0; i < primerDiaSemana; i++)
+                          celdas.push(null);
+                        for (let d = 1; d <= totalDiasMes; d++) celdas.push(d);
+
+                        return (
+                          <View style={styles.miniCalCard}>
+                            <View style={styles.miniCalHeader}>
+                              <TouchableOpacity
+                                onPress={() =>
+                                  setCalMesPsi(new Date(anio, mes - 1, 1))
+                                }
+                                style={{ padding: 6 }}
+                              >
+                                <Ionicons
+                                  name="chevron-back"
+                                  size={18}
+                                  color="#0F766E"
+                                />
+                              </TouchableOpacity>
+                              <Text style={styles.miniCalMonthTitle}>
+                                {nombresMes[mes]} {anio}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() =>
+                                  setCalMesPsi(new Date(anio, mes + 1, 1))
+                                }
+                                style={{ padding: 6 }}
+                              >
+                                <Ionicons
+                                  name="chevron-forward"
+                                  size={18}
+                                  color="#0F766E"
+                                />
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.miniCalWeekRow}>
+                              {["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"].map(
+                                (dw) => (
+                                  <Text key={dw} style={styles.miniCalWeekText}>
+                                    {dw}
+                                  </Text>
+                                )
+                              )}
+                            </View>
+
+                            <View style={styles.miniCalDaysGrid}>
+                              {celdas.map((diaNum, idx) => {
+                                if (!diaNum) {
+                                  return (
+                                    <View
+                                      key={`empty-${idx}`}
+                                      style={styles.miniCalCell}
+                                    />
+                                  );
+                                }
+                                const fechaStr = `${anio}-${String(
+                                  mes + 1
+                                ).padStart(2, "0")}-${String(diaNum).padStart(
+                                  2,
+                                  "0"
+                                )}`;
+                                const esPasado = fechaStr < hoyStr;
+                                const seleccionado =
+                                  fechaPropuesta === fechaStr;
+                                const tieneCitaEseDia = citasAgendadasPsi.some(
+                                  (c) =>
+                                    (c.fechaExacta || c.diaLabel) === fechaStr
+                                );
+
+                                return (
+                                  <TouchableOpacity
+                                    key={fechaStr}
+                                    disabled={esPasado}
+                                    onPress={() => setFechaPropuesta(fechaStr)}
+                                    style={styles.miniCalCell}
+                                  >
+                                    <View
+                                      style={[
+                                        styles.miniCalDayBubble,
+                                        seleccionado &&
+                                          styles.miniCalDayBubbleSelected,
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.miniCalDayText,
+                                          esPasado && { color: "#CBD5E1" },
+                                          seleccionado && {
+                                            color: "#FFFFFF",
+                                            fontWeight: "800",
+                                          },
+                                        ]}
+                                      >
+                                        {diaNum}
+                                      </Text>
+                                      {tieneCitaEseDia && !seleccionado && (
+                                        <View style={styles.busyDotMini} />
+                                      )}
+                                    </View>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        );
+                      })()}
+
+                      <Text style={styles.respondLabel}>
+                        Hora de la cita ({horaPickerPsi}:{minutoPickerPsi}{" "}
+                        {turnoPickerPsi})
+                      </Text>
+                      <View style={styles.timeWheelRow}>
+                        <View style={styles.timeWheelBox}>
+                          <Picker
+                            selectedValue={horaPickerPsi}
+                            onValueChange={(v) => setHoraPickerPsi(v)}
+                          >
+                            {[
+                              "01",
+                              "02",
+                              "03",
+                              "04",
+                              "05",
+                              "06",
+                              "07",
+                              "08",
+                              "09",
+                              "10",
+                              "11",
+                              "12",
+                            ].map((h) => (
+                              <Picker.Item key={h} label={`${h} hr`} value={h} />
+                            ))}
+                          </Picker>
+                        </View>
+
+                        <View style={styles.timeWheelBox}>
+                          <Picker
+                            selectedValue={minutoPickerPsi}
+                            onValueChange={(v) => setMinutoPickerPsi(v)}
+                          >
+                            {["00", "15", "30", "45"].map((m) => (
+                              <Picker.Item key={m} label={`:${m}`} value={m} />
+                            ))}
+                          </Picker>
+                        </View>
+
+                        <View style={styles.timeWheelBoxSmall}>
+                          <Picker
+                            selectedValue={turnoPickerPsi}
+                            onValueChange={(v) => setTurnoPickerPsi(v)}
+                          >
+                            <Picker.Item label="AM" value="AM" />
+                            <Picker.Item label="PM" value="PM" />
+                          </Picker>
+                        </View>
+                      </View>
 
                       <Text style={styles.respondLabel}>
                         Modalidad confirmada
@@ -1190,11 +1773,9 @@ export default function PsicologoDashboard({ navigation }) {
                     </>
                   )}
 
-                  <Text style={styles.respondLabel}>
-                    Mensaje para el paciente
-                  </Text>
+                  <Text style={styles.respondLabel}>Mensaje (opcional)</Text>
                   <TextInput
-                    style={[styles.respondInput, { minHeight: 70 }]}
+                    style={[styles.respondInput, { minHeight: 68 }]}
                     multiline
                     value={mensajeRespuesta}
                     onChangeText={setMensajeRespuesta}
@@ -1217,9 +1798,9 @@ export default function PsicologoDashboard({ navigation }) {
                     >
                       <Text style={styles.respondSubmitText}>
                         {enviandoRespuesta
-                          ? "Enviando..."
+                          ? "Verificando y guardando..."
                           : tipoRespuesta === "aceptar"
-                          ? "Confirmar cita y enviar invitación"
+                          ? "Confirmar y guardar en calendario"
                           : "Enviar aviso de disponibilidad"}
                       </Text>
                     </LinearGradient>
@@ -1248,6 +1829,22 @@ export default function PsicologoDashboard({ navigation }) {
                             </Text>
                           </View>
                         </View>
+
+                        {sol.fechaSolicitada || sol.horaSolicitada ? (
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: "800",
+                              color: "#0F766E",
+                            }}
+                          >
+                            📅 Día y hora propuestos: {sol.fechaSolicitada}{" "}
+                            {sol.horaSolicitada
+                              ? `• ${sol.horaSolicitada}`
+                              : ""}
+                          </Text>
+                        ) : null}
+
                         {sol.estado === "reprogramacion_solicitada" && (
                           <Text
                             style={{
@@ -1263,22 +1860,31 @@ export default function PsicologoDashboard({ navigation }) {
                         <Text style={styles.solMensajeText}>
                           "{sol.mensaje}"
                         </Text>
-                        <TouchableOpacity
-                          onPress={() => {
-                            setSolicitudRespondendo(sol);
-                            setTipoRespuesta("aceptar");
-                            setModalidadPropuesta(
-                              sol.modalidadSolicitada === "online"
-                                ? "online"
-                                : "presencial"
-                            );
-                          }}
-                          style={styles.solActionBtn}
-                        >
-                          <Text style={styles.solActionBtnText}>
-                            Responder / Agendar cita
-                          </Text>
-                        </TouchableOpacity>
+
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                          <TouchableOpacity
+                            onPress={() => abrirPerfilPaciente(sol)}
+                            style={styles.solProfileBtn}
+                          >
+                            <Ionicons
+                              name="person-outline"
+                              size={15}
+                              color="#0F766E"
+                            />
+                            <Text style={styles.solProfileBtnText}>
+                              Ver perfil
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => prepararAgendamientoSolicitud(sol)}
+                            style={[styles.solActionBtn, { flex: 1.5 }]}
+                          >
+                            <Text style={styles.solActionBtnText}>
+                              Agendar / Responder
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     ))
                   )}
@@ -2058,6 +2664,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
   },
+  verPerfilMiniBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  verPerfilMiniText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: PALETTE.indigoMuted,
+  },
   emptyStateCard: {
     borderRadius: 24,
     padding: 24,
@@ -2148,6 +2768,103 @@ const styles = StyleSheet.create({
     color: PALETTE.tealDeep,
     fontWeight: "800",
   },
+
+  centerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  pacProfileCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    overflow: "hidden",
+    elevation: 10,
+  },
+  pacProfileBanner: {
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  pacProfileCloseBtn: {
+    alignSelf: "flex-end",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pacProfileAvatarRing: {
+    padding: 3.5,
+    borderRadius: 48,
+    backgroundColor: "#FFFFFF",
+    marginBottom: 10,
+    elevation: 3,
+  },
+  pacProfileAvatarImg: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+  },
+  pacProfileAvatarPlaceholder: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: "#E0F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pacProfileBadge: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 6,
+  },
+  pacProfileBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: PALETTE.tealDeep,
+    letterSpacing: 0.5,
+  },
+  pacProfileName: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
+  },
+  pacProfileMeta: {
+    fontSize: 12.5,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  pacProfileBody: {
+    padding: 20,
+    gap: 14,
+  },
+  pacProfileDetailsBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 10,
+  },
+  pacProfileDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  pacProfileDetailText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#475569",
+  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.48)",
@@ -2231,15 +2948,33 @@ const styles = StyleSheet.create({
     color: "#334155",
     fontStyle: "italic",
   },
+  solProfileBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  solProfileBtnText: {
+    color: "#0F766E",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   solActionBtn: {
     backgroundColor: "#0D9488",
     paddingVertical: 9,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   solActionBtnText: {
     color: "#FFFFFF",
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: "800",
   },
   respondCard: {
@@ -2254,6 +2989,21 @@ const styles = StyleSheet.create({
     fontSize: 15.5,
     fontWeight: "800",
     color: "#1E293B",
+  },
+  requestedSlotPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#CCFBF1",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    alignSelf: "flex-start",
+  },
+  requestedSlotText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F766E",
   },
   respondQuote: {
     fontSize: 12,
@@ -2293,6 +3043,89 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#334155",
     marginTop: 2,
+  },
+  miniCalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  miniCalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  miniCalMonthTitle: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  miniCalWeekRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 4,
+  },
+  miniCalWeekText: {
+    width: 32,
+    textAlign: "center",
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  miniCalDaysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  miniCalCell: {
+    width: "14.28%",
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniCalDayBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniCalDayBubbleSelected: {
+    backgroundColor: "#0D9488",
+  },
+  miniCalDayText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  busyDotMini: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#F59E0B",
+    position: "absolute",
+    bottom: 2,
+  },
+  timeWheelRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  timeWheelBox: {
+    flex: 1.15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    overflow: "hidden",
+  },
+  timeWheelBoxSmall: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    overflow: "hidden",
   },
   respondInput: {
     backgroundColor: "#FFFFFF",

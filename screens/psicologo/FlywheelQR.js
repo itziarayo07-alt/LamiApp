@@ -1,14 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
+  Modal,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -16,7 +18,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../config/firebaseConfig";
 import { escucharMisPacientes } from "../../services/lamiSyncService";
 
-// Paleta oficial Lami
 const PALETTE = {
   tealDeep: "#6192A4",
   tealMid: "#8BC1D1",
@@ -42,10 +43,23 @@ export default function FlywheelQR({ navigation }) {
   const [paqueteSeleccionado, setPaqueteSeleccionado] = useState("profesional");
   const [copiado, setCopiado] = useState(false);
 
+  // Estados para cambio de plan y pago de diferencia
+  const [modalCambioPlanVisible, setModalCambioPlanVisible] = useState(false);
+  const [nuevoPlanSeleccionado, setNuevoPlanSeleccionado] = useState(null);
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState("tarjeta");
+  const [titularTarjeta, setTitularTarjeta] = useState("");
+  const [numeroTarjeta, setNumeroTarjeta] = useState("");
+  const [expiracionTarjeta, setExpiracionTarjeta] = useState("");
+  const [cvvTarjeta, setCvvTarjeta] = useState("");
+  const [correoPaypal, setCorreoPaypal] = useState("");
+  const [procesandoPago, setProcesandoPago] = useState(false);
+
+  // Estado que recuerda si se seleccionó o no la bonificación de pacientes premium en la barra
+  const [usarPremiumEnBarra, setUsarPremiumEnBarra] = useState(true);
+
   const psicologoId = auth.currentUser?.uid || "PSI-DEMO-492";
   const mesActual = new Date().toISOString().slice(0, 7);
 
-  // 1. Perfil real del psicólogo desde Firestore
   useEffect(() => {
     if (!auth.currentUser?.uid) return;
     const unsubPerfil = onSnapshot(
@@ -56,6 +70,7 @@ export default function FlywheelQR({ navigation }) {
           setPerfilPsicologo(data);
           if (data.plan && PAQUETES.some((p) => p.id === data.plan)) {
             setPaqueteSeleccionado(data.plan);
+            setNuevoPlanSeleccionado(data.plan);
           }
         }
       }
@@ -63,7 +78,6 @@ export default function FlywheelQR({ navigation }) {
     return () => unsubPerfil();
   }, []);
 
-  // 2. Pacientes vinculados en tiempo real
   useEffect(() => {
     const unsubPac = escucharMisPacientes(psicologoId, (lista) => {
       setPacientes(lista || []);
@@ -86,13 +100,11 @@ export default function FlywheelQR({ navigation }) {
     .join("")
     .toUpperCase();
 
-  // Payload real que codifica el QR para vincular al paciente
   const payloadQR = `LAMI-LINK|${codigoVinculacion}|${psicologoId}`;
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&color=1E293B&bgcolor=FFFFFF&data=${encodeURIComponent(
     payloadQR
   )}`;
 
-  // Cálculos dinámicos del Sistema Flywheel (idénticos al prototipo HTML)
   const pacientesActivosMes = useMemo(
     () => pacientes.filter((p) => p.activoEnMes === mesActual).length,
     [pacientes, mesActual]
@@ -109,36 +121,52 @@ export default function FlywheelQR({ navigation }) {
   const infoPaquete =
     PAQUETES.find((p) => p.id === paqueteSeleccionado) || PAQUETES[1];
 
-  const bonificacionPorPaciente = 60; // $60 MXN por paciente activo/mes
-  const descuentoTotal = pacientesActivosMes * bonificacionPorPaciente;
+  // Cálculo: 30 pesos por paciente activo + 15% de 149 MXN (~$22.35 MXN) por paciente premium
+  const bonificacionRegular = pacientesActivosMes * 30;
+  const bonificacionPremiumTotal = pacientesPremium * (149 * 0.15);
+
+  const descuentoTotal =
+    bonificacionRegular + (usarPremiumEnBarra ? bonificacionPremiumTotal : 0);
   const cuotaAPagar = Math.max(0, infoPaquete.precio - descuentoTotal);
-  const progresoMetaPct = Math.min(
-    100,
-    Math.round((descuentoTotal / infoPaquete.precio) * 100)
-  );
+
+  const saldoRestanteParaCero = Math.max(0, infoPaquete.precio - descuentoTotal);
   const pacientesParaGratis = Math.ceil(
-    infoPaquete.precio / bonificacionPorPaciente
+    saldoRestanteParaCero / 30
   );
 
-  // Comisión pasiva 20% por pacientes Premium ($149 MXN/mes)
-  const comisionMensualMXN = Math.round(pacientesPremium * 149 * 0.2);
+  const comisionMensualMXN = Math.round(pacientesPremium * 149 * 0.15);
 
-  // Copiar código con feedback visual
+  // Lógica de planes actual, nuevo y diferencia
+  const planActualObj = infoPaquete;
+  const planNuevoObj = PAQUETES.find((p) => p.id === nuevoPlanSeleccionado) || infoPaquete;
+  const diferenciaPlan = planNuevoObj.precio - planActualObj.precio;
+  const hayCambioDePlan = nuevoPlanSeleccionado && nuevoPlanSeleccionado !== paqueteSeleccionado;
+  const esBajadaDePlan = hayCambioDePlan && diferenciaPlan < 0;
+
+  const formatearNumeroTarjeta = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 16);
+    return limpio.replace(/(\d{4})(?=\d)/g, "$1 ");
+  };
+
+  const formatearExpiracion = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 4);
+    if (limpio.length >= 3) {
+      return `${limpio.slice(0, 2)}/${limpio.slice(2)}`;
+    }
+    return limpio;
+  };
+
   const handleCopiarCodigo = async () => {
     try {
-      // Intenta usar expo-clipboard dinámicamente si está disponible en Expo Go
       const Clipboard = require("expo-clipboard");
       if (Clipboard?.setStringAsync) {
         await Clipboard.setStringAsync(codigoVinculacion);
       }
-    } catch (_) {
-      // Respaldo silencioso si no está importado
-    }
+    } catch (_) {}
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2200);
   };
 
-  // Compartir enlace y código por WhatsApp / sistema
   const handleCompartirEnlace = async () => {
     try {
       await Share.share({
@@ -149,15 +177,54 @@ export default function FlywheelQR({ navigation }) {
     }
   };
 
+  const procesarCambioDePlanYPago = async () => {
+    if (!hayCambioDePlan || procesandoPago) return;
+
+    if (diferenciaPlan > 0) {
+      if (metodoPagoSeleccionado === "tarjeta") {
+        const digitos = numeroTarjeta.replace(/\s/g, "");
+        if (!titularTarjeta.trim() || digitos.length < 16 || expiracionTarjeta.length < 5 || cvvTarjeta.length < 3) {
+          Alert.alert("Datos incompletos", "Por favor completa correctamente los datos de tu tarjeta para procesar la diferencia.");
+          return;
+        }
+      } else {
+        if (!correoPaypal.trim() || !correoPaypal.includes("@")) {
+          Alert.alert("PayPal inválido", "Ingresa un correo electrónico válido de PayPal.");
+          return;
+        }
+      }
+    }
+
+    try {
+      setProcesandoPago(true);
+      if (diferenciaPlan > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      // Única escritura controlada a Firestore para evitar saturación de tráfico
+      await updateDoc(doc(db, "psicologos", auth.currentUser.uid), {
+        plan: planNuevoObj.id,
+        planNombre: planNuevoObj.nombre,
+        precioMensual: planNuevoObj.precio,
+        limitePacientes: planNuevoObj.limite,
+      });
+
+      setPaqueteSeleccionado(planNuevoObj.id);
+      setProcesandoPago(false);
+      setModalCambioPlanVisible(false);
+      Alert.alert("¡Plan actualizado!", `Tu consultorio ahora está en el plan ${planNuevoObj.nombre}.`);
+    } catch (e) {
+      setProcesandoPago(false);
+      Alert.alert("Atención", "El servidor está experimentando tráfico elevado. Intenta de nuevo en un momento.");
+    }
+  };
+
   const irAPantalla = (routeName, params = {}) => {
     navigation.navigate(routeName, params);
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      {/* ============================================================ */}
-      {/* HEADER SUPERIOR UNIFICADO CON LA PALETA LAMI                 */}
-      {/* ============================================================ */}
       <View style={styles.headerWrapper}>
         <LinearGradient
           colors={["#EDF6F8", "#F5F2FF", "#FFFFFF"]}
@@ -232,14 +299,10 @@ export default function FlywheelQR({ navigation }) {
         </LinearGradient>
       </View>
 
-      {/* ============================================================ */}
-      {/* CONTENIDO PRINCIPAL: CONSULTORIO & FLYWHEEL                  */}
-      {/* ============================================================ */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Título de sección centrado como en el diseño */}
         <View style={styles.titleBlock}>
           <Text style={styles.pageTitle}>Consultorio & Flywheel</Text>
           <Text style={styles.pageSubtitle}>
@@ -247,7 +310,6 @@ export default function FlywheelQR({ navigation }) {
           </Text>
         </View>
 
-        {/* 1. TARJETA PRINCIPAL DE VINCULACIÓN QR */}
         <View style={styles.qrMainCard}>
           <View style={styles.qrTopPill}>
             <Text style={styles.qrTopPillText}>
@@ -255,7 +317,6 @@ export default function FlywheelQR({ navigation }) {
             </Text>
           </View>
 
-          {/* Marco del Código QR con ícono central de pulso Lami */}
           <LinearGradient
             colors={[PALETTE.tealSoft, PALETTE.lavenderSoft]}
             start={{ x: 0, y: 0 }}
@@ -275,7 +336,6 @@ export default function FlywheelQR({ navigation }) {
                   style={{ width: 185, height: 185, borderRadius: 12 }}
                 />
 
-                {/* Emblema central flotante */}
                 <LinearGradient
                   colors={[PALETTE.purpleVibrant, PALETTE.indigoMuted]}
                   style={[styles.qrCenterEmblem, { top: 70, left: 70 }]}
@@ -290,13 +350,15 @@ export default function FlywheelQR({ navigation }) {
             Código alfanumérico para el paciente:
           </Text>
 
-          {/* Código grande + Botón Copiar */}
           <View style={styles.codeCopyRow}>
             <Text style={styles.codeHighlight}>{codigoVinculacion}</Text>
             <TouchableOpacity
               style={[
                 styles.copyIconBtn,
-                copiado && { backgroundColor: "#E6F3F6", borderColor: PALETTE.tealDeep },
+                copiado && {
+                  backgroundColor: "#E6F3F6",
+                  borderColor: PALETTE.tealDeep,
+                },
               ]}
               onPress={handleCopiarCodigo}
               activeOpacity={0.8}
@@ -319,7 +381,6 @@ export default function FlywheelQR({ navigation }) {
             {nombreMostrar} (Céd. {cedulaMostrar})
           </Text>
 
-          {/* Botón Compartir Enlace */}
           <TouchableOpacity
             style={styles.shareBtn}
             onPress={handleCompartirEnlace}
@@ -336,7 +397,7 @@ export default function FlywheelQR({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* 2. TARJETA DEGRADADA: SISTEMA FLYWHEEL ACTIVO */}
+        {/* Tarjeta Flywheel y Plan Actual */}
         <LinearGradient
           colors={["#3A2D5C", PALETTE.indigoMuted, PALETTE.purpleVibrant]}
           start={{ x: 0, y: 0 }}
@@ -345,7 +406,6 @@ export default function FlywheelQR({ navigation }) {
         >
           <View style={styles.flywheelOrb} />
 
-          {/* Fila superior: Pill dorado + Cuota calculada */}
           <View style={styles.flywheelHeaderRow}>
             <View style={styles.flywheelGoldPill}>
               <Text style={styles.flywheelGoldText}>
@@ -357,76 +417,69 @@ export default function FlywheelQR({ navigation }) {
             </Text>
           </View>
 
-          {/* Selector de Paquete Terapeuta */}
-          <Text style={styles.packageLabel}>
-            Tu Paquete Terapeuta contratado:
-          </Text>
-          <View style={styles.packageSelectorBox}>
-            {PAQUETES.map((pkg) => {
-              const activo = paqueteSeleccionado === pkg.id;
-              return (
-                <TouchableOpacity
-                  key={pkg.id}
-                  style={[
-                    styles.packageOption,
-                    activo && styles.packageOptionActive,
-                  ]}
-                  onPress={() => setPaqueteSeleccionado(pkg.id)}
-                  activeOpacity={0.85}
-                >
-                  <Text
-                    style={[
-                      styles.packageName,
-                      activo && styles.packageNameActive,
-                    ]}
-                  >
-                    {pkg.nombre}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.packageMeta,
-                      activo && styles.packageMetaActive,
-                    ]}
-                  >
-                    ≤{pkg.limite} pac • ${pkg.precio.toLocaleString("es-MX")}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.planActivoContainer}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.packageLabelActiveTitle}>Tu Plan Actual:</Text>
+              <Text style={styles.packageActiveName}>{infoPaquete.nombre}</Text>
+              <Text style={styles.packageActiveSub}>
+                Hasta {infoPaquete.limite} pacientes • ${infoPaquete.precio} MXN/mes
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.upgradeBtnMini}
+              onPress={() => {
+                setNuevoPlanSeleccionado(paqueteSeleccionado);
+                setModalCambioPlanVisible(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="arrow-up-circle-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.upgradeBtnMiniText}>Cambiar Plan</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Barra de progreso hacia cuota $0 MXN */}
           <View style={styles.progressSection}>
             <View style={styles.progressLabelsRow}>
               <Text style={styles.progressLeftLabel}>
-                Bonificación ({pacientesActivosMes} activos × $60)
+                Progreso ({pacientesActivosMes} regulares × $30{usarPremiumEnBarra && pacientesPremium > 0 ? ` + 15% Premium` : ""})
               </Text>
               <Text style={styles.progressRightLabel}>
-                -${descuentoTotal.toLocaleString("es-MX")} MXN
+                -${Math.round(descuentoTotal).toLocaleString("es-MX")} MXN
               </Text>
             </View>
 
-            <View style={styles.progressTrack}>
-              <LinearGradient
-                colors={[PALETTE.tealMid, "#A7F3D0"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressFill, { width: `${progresoMetaPct}%` }]}
+            {/* Barra de progreso multitono: Verde (regulares) + Amarillo/Dorado (Premium) */}
+            <View style={styles.progressTrackMulti}>
+              <View
+                style={[
+                  styles.progressFillGreen,
+                  { width: `${Math.min(100, (bonificacionRegular / infoPaquete.precio) * 100)}%` },
+                ]}
               />
+              {usarPremiumEnBarra && bonificacionPremiumTotal > 0 && (
+                <View
+                  style={[
+                    styles.progressFillYellow,
+                    {
+                      width: `${Math.min(
+                        100 - (bonificacionRegular / infoPaquete.precio) * 100,
+                        (bonificacionPremiumTotal / infoPaquete.precio) * 100
+                      )}%`,
+                    },
+                  ]}
+                />
+              )}
             </View>
 
             <Text style={styles.progressFootnote}>
               {cuotaAPagar === 0
-                ? "¡Meta alcanzada! Tu plataforma clínica Lami es 100% gratuita este mes ✨"
-                : `Vincula ${Math.max(
-                    0,
-                    pacientesParaGratis - pacientesActivosMes
-                  )} pacientes activos más para cubrir tu tarifa de $${infoPaquete.precio} MXN.`}
+                ? "¡Meta alcanzada! Tu cuota llegó a $0 este mes. Se reiniciará en el siguiente ciclo ✨"
+                : `Te faltan aprox. ${pacientesParaGratis} pacientes activos para llegar a $0 ($30 c/u).`}
             </Text>
           </View>
         </LinearGradient>
 
-        {/* 3. TARJETA COMPLEMENTARIA: INGRESOS POR REFERIDOS PREMIUM */}
+        {/* Tarjeta de comisiones y opción de usar/guardar bonificación premium */}
         <LinearGradient
           colors={["#FFFFFF", "#EDF6F8"]}
           style={styles.commissionCard}
@@ -441,26 +494,193 @@ export default function FlywheelQR({ navigation }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.commissionTitle}>
-                Comisión Recurrente (20%)
+                Pacientes Premium ({pacientesPremium})
               </Text>
               <Text style={styles.commissionSub}>
-                {pacientesPremium} pacientes en Plan Lami Premium ($149/mes)
+                Comisión 15% (~$22.35 c/u): +${comisionMensualMXN} MXN
               </Text>
+              <TouchableOpacity
+                style={styles.toggleBarBtn}
+                onPress={() => setUsarPremiumEnBarra(!usarPremiumEnBarra)}
+              >
+                <Ionicons
+                  name={usarPremiumEnBarra ? "checkbox" : "square-outline"}
+                  size={15}
+                  color={PALETTE.purpleVibrant}
+                />
+                <Text style={styles.toggleBarText}>
+                  {usarPremiumEnBarra ? "Aplicado a la barra actual" : "No usado en la barra (guardado)"}
+                </Text>
+              </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.commissionAmountBadge}>
-            <Text style={styles.commissionAmountText}>
-              +${comisionMensualMXN} MXN
-            </Text>
           </View>
         </LinearGradient>
       </ScrollView>
 
-      {/* ============================================================ */}
-      {/* BARRA INFERIOR DE 5 ICONOS (CON QR & $0 ACTIVO)              */}
-      {/* ============================================================ */}
+      {/* Modal para cambiar plan (Subida con pago o Bajada sin devolución) */}
+      <Modal
+        visible={modalCambioPlanVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalCambioPlanVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Cambiar Plan de Consultorio</Text>
+              <Text style={styles.modalSubtitle}>
+                Selecciona tu nuevo nivel de crecimiento clínico:
+              </Text>
+
+              <View style={{ gap: 8, marginVertical: 8 }}>
+                {PAQUETES.map((pkg) => {
+                  const seleccionado = nuevoPlanSeleccionado === pkg.id;
+                  return (
+                    <TouchableOpacity
+                      key={pkg.id}
+                      style={[
+                        styles.modalPlanItem,
+                        seleccionado && styles.modalPlanItemActive,
+                      ]}
+                      onPress={() => setNuevoPlanSeleccionado(pkg.id)}
+                      activeOpacity={0.85}
+                    >
+                      <View>
+                        <Text style={[styles.modalPlanName, seleccionado && { color: PALETTE.purpleVibrant }]}>
+                          {pkg.nombre}
+                        </Text>
+                        <Text style={styles.modalPlanDesc}>Hasta {pkg.limite} pacientes vinculados</Text>
+                      </View>
+                      <Text style={styles.modalPlanPrice}>${pkg.precio} MXN</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Si es bajada de plan (ej. profesional a semilla) */}
+              {esBajadaDePlan && (
+                <View style={styles.avisoBajadaBox}>
+                  <Ionicons name="information-circle-outline" size={20} color="#D97706" />
+                  <Text style={styles.avisoBajadaText}>
+                    Estás cambiando a un plan más económico. Se realizará el cambio y <Text style={{ fontWeight: "800" }}>no habrá devolución de la diferencia</Text> del periodo actual.
+                  </Text>
+                </View>
+              )}
+
+              {/* Si es subida de plan (ej. semilla a profesional) */}
+              {hayCambioDePlan && diferenciaPlan > 0 && (
+                <View style={styles.diferenciaBox}>
+                  <Text style={styles.diferenciaTitle}>Diferencia a pagar:</Text>
+                  <Text style={styles.diferenciaValue}>${diferenciaPlan} MXN</Text>
+
+                  <Text style={[styles.sectionHeader, { marginTop: 10 }]}>Método de pago de diferencia</Text>
+                  <View style={styles.payMethodRow}>
+                    <TouchableOpacity
+                      onPress={() => setMetodoPagoSeleccionado("tarjeta")}
+                      style={[styles.payMethodBtn, metodoPagoSeleccionado === "tarjeta" && styles.payMethodBtnActive]}
+                    >
+                      <Ionicons name="card-outline" size={16} color={metodoPagoSeleccionado === "tarjeta" ? "#FFFFFF" : "#1E293B"} />
+                      <Text style={[styles.payMethodBtnText, metodoPagoSeleccionado === "tarjeta" && { color: "#FFFFFF" }]}>Tarjeta</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setMetodoPagoSeleccionado("paypal")}
+                      style={[styles.payMethodBtn, metodoPagoSeleccionado === "paypal" && styles.payMethodBtnActive]}
+                    >
+                      <Ionicons name="logo-paypal" size={16} color={metodoPagoSeleccionado === "paypal" ? "#FFFFFF" : "#1E293B"} />
+                      <Text style={[styles.payMethodBtnText, metodoPagoSeleccionado === "paypal" && { color: "#FFFFFF" }]}>PayPal</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {metodoPagoSeleccionado === "tarjeta" ? (
+                    <View style={styles.payFormBox}>
+                      <TextInput
+                        style={styles.payInput}
+                        placeholder="Nombre del titular"
+                        placeholderTextColor="#94A3B8"
+                        value={titularTarjeta}
+                        onChangeText={setTitularTarjeta}
+                      />
+                      <TextInput
+                        style={styles.payInput}
+                        placeholder="0000 0000 0000 0000"
+                        placeholderTextColor="#94A3B8"
+                        keyboardType="number-pad"
+                        maxLength={19}
+                        value={numeroTarjeta}
+                        onChangeText={(t) => setNumeroTarjeta(formatearNumeroTarjeta(t))}
+                      />
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <TextInput
+                          style={[styles.payInput, { flex: 1 }]}
+                          placeholder="MM/AA"
+                          placeholderTextColor="#94A3B8"
+                          keyboardType="number-pad"
+                          maxLength={5}
+                          value={expiracionTarjeta}
+                          onChangeText={(t) => setExpiracionTarjeta(formatearExpiracion(t))}
+                        />
+                        <TextInput
+                          style={[styles.payInput, { flex: 1 }]}
+                          placeholder="CVV"
+                          placeholderTextColor="#94A3B8"
+                          keyboardType="number-pad"
+                          secureTextEntry
+                          maxLength={4}
+                          value={cvvTarjeta}
+                          onChangeText={(t) => setCvvTarjeta(t.replace(/\D/g, "").slice(0, 4))}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.payFormBox}>
+                      <TextInput
+                        style={styles.payInput}
+                        placeholder="tucuenta@paypal.com"
+                        placeholderTextColor="#94A3B8"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={correoPaypal}
+                        onChangeText={setCorreoPaypal}
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Botón principal de acción dinámico */}
+              <TouchableOpacity
+                style={[styles.modalActionBtn, { backgroundColor: hayCambioDePlan ? PALETTE.purpleVibrant : "#94A3B8" }]}
+                onPress={procesarCambioDePlanYPago}
+                disabled={procesandoPago}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalActionBtnText}>
+                  {procesandoPago
+                    ? "Procesando..."
+                    : diferenciaPlan > 0
+                    ? "Procesar pago"
+                    : hayCambioDePlan
+                    ? "Aceptar cambio"
+                    : "Cerrar"}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Botón de Cancelar adicional si cambió de plan */}
+              {hayCambioDePlan && (
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setModalCambioPlanVisible(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancelar</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.bottomBar}>
-        {/* 1. Pacientes */}
         <TouchableOpacity
           style={styles.navItem}
           activeOpacity={0.8}
@@ -470,7 +690,6 @@ export default function FlywheelQR({ navigation }) {
           <Text style={styles.navLabel}>Pacientes</Text>
         </TouchableOpacity>
 
-        {/* 2. Expediente */}
         <TouchableOpacity
           style={styles.navItem}
           activeOpacity={0.8}
@@ -484,7 +703,6 @@ export default function FlywheelQR({ navigation }) {
           <Text style={styles.navLabel}>Expediente</Text>
         </TouchableOpacity>
 
-        {/* 3. Botón Central Elevado: Ejercicios */}
         <TouchableOpacity
           style={styles.navCenterWrapper}
           activeOpacity={0.9}
@@ -501,7 +719,6 @@ export default function FlywheelQR({ navigation }) {
           <Text style={[styles.navLabel, { marginTop: 3 }]}>Ejercicios</Text>
         </TouchableOpacity>
 
-        {/* 4. Agenda */}
         <TouchableOpacity
           style={styles.navItem}
           activeOpacity={0.8}
@@ -511,7 +728,6 @@ export default function FlywheelQR({ navigation }) {
           <Text style={styles.navLabel}>Agenda</Text>
         </TouchableOpacity>
 
-        {/* 5. QR & $0 (Pantalla actual activa) */}
         <TouchableOpacity
           style={styles.navItem}
           activeOpacity={0.8}
@@ -732,31 +948,6 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: PALETTE.textDark,
   },
-  qrGridContainer: {
-    width: 170,
-    height: 170,
-    justifyContent: "space-between",
-    position: "relative",
-  },
-  qrRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  qrCell: {
-    width: 8,
-    height: 8,
-    borderRadius: 2.5,
-  },
-  qrCellFilled: {
-    backgroundColor: PALETTE.textDark,
-  },
-  qrCellEmpty: {
-    backgroundColor: "transparent",
-  },
-  qrCellBlank: {
-    width: 8,
-    height: 8,
-  },
   qrCenterEmblem: {
     position: "absolute",
     top: 63,
@@ -873,52 +1064,43 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#6EE7B7",
   },
-  packageLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#F1F5F9",
-    marginTop: 14,
-    marginBottom: 8,
-  },
-  packageSelectorBox: {
+  planActivoContainer: {
     flexDirection: "row",
-    backgroundColor: "rgba(15, 23, 42, 0.28)",
-    borderRadius: 18,
-    padding: 4,
-    gap: 4,
-  },
-  packageOption: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderRadius: 14,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(15, 23, 42, 0.25)",
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 14,
   },
-  packageOptionActive: {
-    backgroundColor: PALETTE.purpleVibrant,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+  packageLabelActiveTitle: {
+    fontSize: 11,
+    color: "#CBD5E1",
+    fontWeight: "600",
   },
-  packageName: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#E2E8F0",
-  },
-  packageNameActive: {
+  packageActiveName: {
+    fontSize: 16,
+    fontWeight: "900",
     color: "#FFFFFF",
   },
-  packageMeta: {
-    fontSize: 9.5,
-    color: "#CBD5E1",
+  packageActiveSub: {
+    fontSize: 10.5,
+    color: "#E2E8F0",
     marginTop: 2,
   },
-  packageMetaActive: {
-    color: "#F3E8FF",
-    fontWeight: "700",
+  upgradeBtnMini: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: PALETTE.purpleVibrant,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  upgradeBtnMiniText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
   progressSection: {
     marginTop: 14,
@@ -939,15 +1121,20 @@ const styles = StyleSheet.create({
     color: "#6EE7B7",
     fontWeight: "800",
   },
-  progressTrack: {
-    height: 8,
+  progressTrackMulti: {
+    height: 9,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.2)",
     overflow: "hidden",
+    flexDirection: "row",
   },
-  progressFill: {
+  progressFillGreen: {
     height: "100%",
-    borderRadius: 999,
+    backgroundColor: "#10B981",
+  },
+  progressFillYellow: {
+    height: "100%",
+    backgroundColor: "#FACC15",
   },
   progressFootnote: {
     fontSize: 11,
@@ -989,16 +1176,179 @@ const styles = StyleSheet.create({
     color: PALETTE.textMuted,
     marginTop: 1,
   },
-  commissionAmountBadge: {
-    backgroundColor: "#DCEEF2",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+  toggleBarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 6,
   },
-  commissionAmountText: {
-    fontSize: 12,
+  toggleBarText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: PALETTE.purpleVibrant,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxHeight: "85%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
     fontWeight: "800",
+    color: PALETTE.textDark,
+    textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: PALETTE.textMuted,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  modalPlanItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 12,
+    borderRadius: 14,
+  },
+  modalPlanItemActive: {
+    backgroundColor: "#F3EFFF",
+    borderColor: PALETTE.purpleVibrant,
+  },
+  modalPlanName: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: PALETTE.textDark,
+  },
+  modalPlanDesc: {
+    fontSize: 10.5,
+    color: PALETTE.textMuted,
+    marginTop: 2,
+  },
+  modalPlanPrice: {
+    fontSize: 13.5,
+    fontWeight: "900",
     color: PALETTE.tealDeep,
+  },
+  avisoBajadaBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 8,
+  },
+  avisoBajadaText: {
+    fontSize: 12,
+    color: "#92400E",
+    flex: 1,
+    lineHeight: 16,
+  },
+  diferenciaBox: {
+    backgroundColor: "#F1F5F9",
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  diferenciaTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: PALETTE.textDark,
+  },
+  diferenciaValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: PALETTE.purpleVibrant,
+    marginTop: 2,
+  },
+  sectionHeader: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: PALETTE.textDark,
+    marginBottom: 6,
+  },
+  payMethodRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  payMethodBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  payMethodBtnActive: {
+    backgroundColor: PALETTE.purpleVibrant,
+    borderColor: PALETTE.purpleVibrant,
+  },
+  payMethodBtnText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: PALETTE.textDark,
+  },
+  payFormBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    gap: 8,
+  },
+  payInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 40,
+    fontSize: 13,
+    color: PALETTE.textDark,
+  },
+  modalActionBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+  modalActionBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  modalCancelBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  modalCancelBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: PALETTE.textMuted,
   },
   bottomBar: {
     flexDirection: "row",

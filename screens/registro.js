@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   Image,
@@ -20,6 +20,26 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../config/firebaseConfig";
 
+const PLANES_PACIENTE = [
+  {
+    id: "esencial",
+    nombre: "Plan Esencial",
+    precio: 0,
+    esPremium: false,
+    beneficios:
+      "Anxiósometro, calendario emocional, bitácora diaria, ejercicios y vinculación con especialista.",
+  },
+  {
+    id: "premium",
+    nombre: "Lami Premium",
+    precio: 149,
+    esPremium: true,
+    destacado: true,
+    beneficios:
+      "Todo lo de Esencial + reportes clínicos avanzados, seguimiento prioritario y recursos exclusivos.",
+  },
+];
+
 export default function Registro({ navigation }) {
   const [paso, setPaso] = useState(1);
 
@@ -27,6 +47,17 @@ export default function Registro({ navigation }) {
   const [genero, setGenero] = useState("");
   const [pais, setPais] = useState("Mexico");
   const [telefono, setTelefono] = useState("");
+  const [planSeleccionado, setPlanSeleccionado] = useState("esencial");
+
+  // Estados de método de pago (igual que en perfil.js)
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] =
+    useState("tarjeta");
+  const [titularTarjeta, setTitularTarjeta] = useState("");
+  const [numeroTarjeta, setNumeroTarjeta] = useState("");
+  const [expiracionTarjeta, setExpiracionTarjeta] = useState("");
+  const [cvvTarjeta, setCvvTarjeta] = useState("");
+  const [correoPaypal, setCorreoPaypal] = useState("");
+  const [procesandoPago, setProcesandoPago] = useState(false);
 
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
@@ -72,6 +103,19 @@ export default function Registro({ navigation }) {
     });
   };
 
+  const formatearNumeroTarjeta = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 16);
+    return limpio.replace(/(\d{4})(?=\d)/g, "$1 ");
+  };
+
+  const formatearExpiracion = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 4);
+    if (limpio.length >= 3) {
+      return `${limpio.slice(0, 2)}/${limpio.slice(2)}`;
+    }
+    return limpio;
+  };
+
   const avanzarPaso2 = () => {
     const err = {};
     if (!nombre.trim()) err.nombre = "Dinos cómo te gustaría que te llamemos.";
@@ -94,8 +138,43 @@ export default function Registro({ navigation }) {
       nuevosErrores.confirmarPassword = "Confirma tu contraseña.";
     else if (password !== confirmarPassword)
       nuevosErrores.confirmarPassword = "Las contraseñas no coinciden.";
+    if (!planSeleccionado)
+      nuevosErrores.plan = "Elige el plan que prefieres.";
     if (!aceptaPrivacidad)
-      nuevosErrores.privacidad = "Acepta el aviso de privacidad para crear tu cuenta.";
+      nuevosErrores.privacidad =
+        "Acepta el aviso de privacidad para crear tu cuenta.";
+
+    // Validación de método de pago solo si eligió Lami Premium
+    let resumenMetodo = "";
+    if (planSeleccionado === "premium") {
+      if (metodoPagoSeleccionado === "tarjeta") {
+        const digitos = numeroTarjeta.replace(/\s/g, "");
+        if (!titularTarjeta.trim()) {
+          nuevosErrores.titularTarjeta =
+            "Ingresa el nombre del titular de la tarjeta.";
+        }
+        if (digitos.length < 16) {
+          nuevosErrores.numeroTarjeta =
+            "Ingresa los 16 dígitos de tu tarjeta.";
+        }
+        if (expiracionTarjeta.length < 5) {
+          nuevosErrores.expiracionTarjeta = "Ingresa vencimiento (MM/AA).";
+        }
+        if (cvvTarjeta.length < 3) {
+          nuevosErrores.cvvTarjeta = "Ingresa el CVV (3 o 4 dígitos).";
+        }
+        if (digitos.length === 16) {
+          resumenMetodo = `Tarjeta terminación •••• ${digitos.slice(-4)}`;
+        }
+      } else {
+        if (!correoPaypal.trim() || !correoPaypal.includes("@")) {
+          nuevosErrores.correoPaypal =
+            "Ingresa un correo electrónico válido de PayPal.";
+        } else {
+          resumenMetodo = `PayPal (${correoPaypal.trim()})`;
+        }
+      }
+    }
 
     setErrores(nuevosErrores);
 
@@ -109,21 +188,44 @@ export default function Registro({ navigation }) {
 
     try {
       setCargando(true);
+
+      // Si es Premium, simulamos el procesamiento del pago primero
+      if (planSeleccionado === "premium") {
+        setProcesandoPago(true);
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        setProcesandoPago(false);
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         correo.trim(),
         password
       );
       const user = userCredential.user;
+      const planInfo =
+        PLANES_PACIENTE.find((p) => p.id === planSeleccionado) ||
+        PLANES_PACIENTE[0];
 
-      await setDoc(doc(db, "usuarios", user.uid), {
+      const datosUsuario = {
         nombre: nombre.trim(),
         correo: correo.trim(),
         pais,
         telefono: telefono.trim(),
         genero,
+        plan: planInfo.id,
+        planNombre: planInfo.nombre,
+        esPremium: planInfo.esPremium,
+        precioMensual: planInfo.precio,
         createdAt: new Date(),
-      });
+      };
+
+      if (planInfo.esPremium) {
+        datosUsuario.metodoPagoTipo = metodoPagoSeleccionado;
+        datosUsuario.metodoPagoResumen = resumenMetodo;
+        datosUsuario.suscripcionActualizadaEn = serverTimestamp();
+      }
+
+      await setDoc(doc(db, "usuarios", user.uid), datosUsuario);
 
       setModalExitoVisible(true);
     } catch (error) {
@@ -142,8 +244,15 @@ export default function Registro({ navigation }) {
         mostrarAviso("No se pudo registrar", error.message);
       }
     } finally {
+      setProcesandoPago(false);
       setCargando(false);
     }
+  };
+
+  const textoBotonRegistro = () => {
+    if (procesandoPago) return "Procesando pago...";
+    if (cargando) return "Creando tu cuenta...";
+    return "Unirme a Lami";
   };
 
   return (
@@ -158,7 +267,6 @@ export default function Registro({ navigation }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          {/* NAVEGACIÓN SUPERIOR MINIMALISTA */}
           <View style={styles.topBar}>
             <TouchableOpacity
               onPress={() => (paso === 2 ? setPaso(1) : navigation.goBack())}
@@ -167,18 +275,13 @@ export default function Registro({ navigation }) {
               <Ionicons name="arrow-back" size={20} color="#0F3D42" />
             </TouchableOpacity>
 
-            {/* INDICADOR DE PROGRESO */}
             <View style={styles.stepsIndicator}>
               <View style={[styles.stepDot, styles.stepDotActive]} />
               <View
-                style={[
-                  styles.stepDot,
-                  paso === 2 && styles.stepDotActive,
-                ]}
+                style={[styles.stepDot, paso === 2 && styles.stepDotActive]}
               />
             </View>
 
-            {/* Espaciador para mantener centrado el indicador */}
             <View style={{ width: 40 }} />
           </View>
 
@@ -195,7 +298,6 @@ export default function Registro({ navigation }) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* IDENTIDAD VISUAL CON EL LOGO DE LAMI */}
             <View style={styles.brandHeader}>
               <Image
                 source={require("../assets/logo_lami.png")}
@@ -207,7 +309,6 @@ export default function Registro({ navigation }) {
               </Text>
             </View>
 
-            {/* CONTENEDOR TIPO BURBUJA ORGÁNICA */}
             <View style={styles.organicSheet}>
               <View style={styles.stepPill}>
                 <Text style={styles.stepPillText}>Paso {paso} de 2</Text>
@@ -215,12 +316,14 @@ export default function Registro({ navigation }) {
 
               {paso === 1 ? (
                 <>
-                  <Text style={styles.sheetTitle}>Hola, te damos la bienvenida</Text>
+                  <Text style={styles.sheetTitle}>
+                    Hola, te damos la bienvenida
+                  </Text>
                   <Text style={styles.sheetSubtitle}>
-                    Este es un espacio tranquilo pensado para acompañarte día a día.
+                    Este es un espacio tranquilo pensado para acompañarte día a
+                    día.
                   </Text>
 
-                  {/* NOMBRE */}
                   <Text style={styles.fieldLabel}>¿Cómo te llamamos?</Text>
                   <View
                     style={[
@@ -250,7 +353,6 @@ export default function Registro({ navigation }) {
                     <Text style={styles.errorText}>{errores.nombre}</Text>
                   )}
 
-                  {/* SEXO */}
                   <Text style={styles.fieldLabel}>Sexo</Text>
                   <View
                     style={[
@@ -275,7 +377,6 @@ export default function Registro({ navigation }) {
                     <Text style={styles.errorText}>{errores.genero}</Text>
                   )}
 
-                  {/* PAÍS Y TELÉFONO */}
                   <Text style={styles.fieldLabel}>País</Text>
                   <View style={styles.softPickerBox}>
                     <Picker
@@ -287,7 +388,9 @@ export default function Registro({ navigation }) {
                     </Picker>
                   </View>
 
-                  <Text style={styles.fieldLabel}>Teléfono celular (opcional)</Text>
+                  <Text style={styles.fieldLabel}>
+                    Teléfono celular (opcional)
+                  </Text>
                   <View style={styles.softInputRow}>
                     <Ionicons
                       name="call-outline"
@@ -317,7 +420,11 @@ export default function Registro({ navigation }) {
                       style={styles.primaryBtn}
                     >
                       <Text style={styles.primaryBtnText}>Continuar</Text>
-                      <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                      <Ionicons
+                        name="arrow-forward"
+                        size={18}
+                        color="#FFFFFF"
+                      />
                     </LinearGradient>
                   </TouchableOpacity>
                 </>
@@ -325,11 +432,10 @@ export default function Registro({ navigation }) {
                 <>
                   <Text style={styles.sheetTitle}>Protege tu espacio</Text>
                   <Text style={styles.sheetSubtitle}>
-                    Crea tu acceso personal. Puedes usar Lami por tu cuenta o
-                    conectarte con un especialista cuando tú lo decidas.
+                    Crea tu acceso personal y elige el plan que mejor se adapte
+                    a ti.
                   </Text>
 
-                  {/* CORREO */}
                   <Text style={styles.fieldLabel}>Correo electrónico</Text>
                   <View
                     style={[
@@ -361,7 +467,6 @@ export default function Registro({ navigation }) {
                     <Text style={styles.errorText}>{errores.correo}</Text>
                   )}
 
-                  {/* CONTRASEÑA */}
                   <Text style={styles.fieldLabel}>Contraseña</Text>
                   <View
                     style={[
@@ -401,7 +506,6 @@ export default function Registro({ navigation }) {
                     <Text style={styles.errorText}>{errores.password}</Text>
                   )}
 
-                  {/* CONFIRMAR CONTRASEÑA */}
                   <Text style={styles.fieldLabel}>Confirmar contraseña</Text>
                   <View
                     style={[
@@ -452,7 +556,287 @@ export default function Registro({ navigation }) {
                     </Text>
                   )}
 
-                  {/* CHECKBOX PRIVACIDAD */}
+                  {/* Selección de Plan movida al Paso 2 de 2 */}
+                  <Text style={styles.fieldLabel}>Elige tu plan en Lami</Text>
+                  <View style={styles.plansWrapper}>
+                    {PLANES_PACIENTE.map((plan) => {
+                      const seleccionado = planSeleccionado === plan.id;
+                      return (
+                        <TouchableOpacity
+                          key={plan.id}
+                          activeOpacity={0.88}
+                          onPress={() => {
+                            setPlanSeleccionado(plan.id);
+                            if (errores.plan)
+                              setErrores((p) => ({ ...p, plan: null }));
+                          }}
+                          style={[
+                            styles.planCard,
+                            seleccionado && styles.planCardSelected,
+                          ]}
+                        >
+                          <View style={styles.planTopRow}>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <Ionicons
+                                name={
+                                  seleccionado
+                                    ? "radio-button-on"
+                                    : "radio-button-off"
+                                }
+                                size={20}
+                                color={seleccionado ? "#0F3D42" : "#8DA8A5"}
+                              />
+                              <Text style={styles.planName}>{plan.nombre}</Text>
+                            </View>
+                            <Text style={styles.planPrice}>
+                              {plan.precio === 0
+                                ? "Gratis"
+                                : `$${plan.precio} MXN/mes`}
+                            </Text>
+                          </View>
+                          <Text style={styles.planBenefits}>
+                            {plan.beneficios}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {errores.plan && (
+                    <Text style={styles.errorText}>{errores.plan}</Text>
+                  )}
+
+                  {/* Despliegue de métodos de pago si selecciona Lami Premium */}
+                  {planSeleccionado === "premium" && (
+                    <View style={styles.paymentSectionContainer}>
+                      <Text style={styles.fieldLabel}>
+                        Selecciona método de pago
+                      </Text>
+                      <View style={styles.payMethodRow}>
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => setMetodoPagoSeleccionado("tarjeta")}
+                          style={[
+                            styles.payMethodBtn,
+                            metodoPagoSeleccionado === "tarjeta" &&
+                              styles.payMethodBtnActive,
+                          ]}
+                        >
+                          <Ionicons
+                            name="card-outline"
+                            size={18}
+                            color={
+                              metodoPagoSeleccionado === "tarjeta"
+                                ? "#FFFFFF"
+                                : "#0F3D42"
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.payMethodBtnText,
+                              metodoPagoSeleccionado === "tarjeta" && {
+                                color: "#FFFFFF",
+                              },
+                            ]}
+                          >
+                            Tarjeta Débito / Crédito
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => setMetodoPagoSeleccionado("paypal")}
+                          style={[
+                            styles.payMethodBtn,
+                            metodoPagoSeleccionado === "paypal" &&
+                              styles.payMethodBtnActive,
+                          ]}
+                        >
+                          <Ionicons
+                            name="logo-paypal"
+                            size={18}
+                            color={
+                              metodoPagoSeleccionado === "paypal"
+                                ? "#FFFFFF"
+                                : "#0F3D42"
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.payMethodBtnText,
+                              metodoPagoSeleccionado === "paypal" && {
+                                color: "#FFFFFF",
+                              },
+                            ]}
+                          >
+                            PayPal
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {metodoPagoSeleccionado === "tarjeta" ? (
+                        <View style={styles.payFormBox}>
+                          <Text style={styles.payFieldLabel}>
+                            Nombre del titular
+                          </Text>
+                          <TextInput
+                            style={[
+                              styles.payInput,
+                              errores.titularTarjeta && styles.softInputError,
+                            ]}
+                            placeholder="Nombre como aparece en la tarjeta"
+                            placeholderTextColor="#8DA8A5"
+                            value={titularTarjeta}
+                            onChangeText={(t) => {
+                              setTitularTarjeta(t);
+                              if (errores.titularTarjeta)
+                                setErrores((p) => ({
+                                  ...p,
+                                  titularTarjeta: null,
+                                }));
+                            }}
+                          />
+                          {errores.titularTarjeta && (
+                            <Text style={styles.payErrorText}>
+                              {errores.titularTarjeta}
+                            </Text>
+                          )}
+
+                          <Text style={styles.payFieldLabel}>
+                            Número de tarjeta
+                          </Text>
+                          <TextInput
+                            style={[
+                              styles.payInput,
+                              errores.numeroTarjeta && styles.softInputError,
+                            ]}
+                            placeholder="0000 0000 0000 0000"
+                            placeholderTextColor="#8DA8A5"
+                            keyboardType="number-pad"
+                            maxLength={19}
+                            value={numeroTarjeta}
+                            onChangeText={(t) => {
+                              setNumeroTarjeta(formatearNumeroTarjeta(t));
+                              if (errores.numeroTarjeta)
+                                setErrores((p) => ({
+                                  ...p,
+                                  numeroTarjeta: null,
+                                }));
+                            }}
+                          />
+                          {errores.numeroTarjeta && (
+                            <Text style={styles.payErrorText}>
+                              {errores.numeroTarjeta}
+                            </Text>
+                          )}
+
+                          <View style={{ flexDirection: "row", gap: 10 }}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.payFieldLabel}>
+                                Vencimiento
+                              </Text>
+                              <TextInput
+                                style={[
+                                  styles.payInput,
+                                  errores.expiracionTarjeta &&
+                                    styles.softInputError,
+                                ]}
+                                placeholder="MM/AA"
+                                placeholderTextColor="#8DA8A5"
+                                keyboardType="number-pad"
+                                maxLength={5}
+                                value={expiracionTarjeta}
+                                onChangeText={(t) => {
+                                  setExpiracionTarjeta(formatearExpiracion(t));
+                                  if (errores.expiracionTarjeta)
+                                    setErrores((p) => ({
+                                      ...p,
+                                      expiracionTarjeta: null,
+                                    }));
+                                }}
+                              />
+                              {errores.expiracionTarjeta && (
+                                <Text style={styles.payErrorText}>
+                                  {errores.expiracionTarjeta}
+                                </Text>
+                              )}
+                            </View>
+
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.payFieldLabel}>CVV</Text>
+                              <TextInput
+                                style={[
+                                  styles.payInput,
+                                  errores.cvvTarjeta && styles.softInputError,
+                                ]}
+                                placeholder="123"
+                                placeholderTextColor="#8DA8A5"
+                                keyboardType="number-pad"
+                                secureTextEntry
+                                maxLength={4}
+                                value={cvvTarjeta}
+                                onChangeText={(t) => {
+                                  setCvvTarjeta(
+                                    t.replace(/\D/g, "").slice(0, 4)
+                                  );
+                                  if (errores.cvvTarjeta)
+                                    setErrores((p) => ({
+                                      ...p,
+                                      cvvTarjeta: null,
+                                    }));
+                                }}
+                              />
+                              {errores.cvvTarjeta && (
+                                <Text style={styles.payErrorText}>
+                                  {errores.cvvTarjeta}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.payFormBox}>
+                          <Text style={styles.payFieldLabel}>
+                            Correo electrónico de PayPal
+                          </Text>
+                          <TextInput
+                            style={[
+                              styles.payInput,
+                              errores.correoPaypal && styles.softInputError,
+                            ]}
+                            placeholder="tu-cuenta@paypal.com"
+                            placeholderTextColor="#8DA8A5"
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            value={correoPaypal}
+                            onChangeText={(t) => {
+                              setCorreoPaypal(t);
+                              if (errores.correoPaypal)
+                                setErrores((p) => ({
+                                  ...p,
+                                  correoPaypal: null,
+                                }));
+                            }}
+                          />
+                          {errores.correoPaypal && (
+                            <Text style={styles.payErrorText}>
+                              {errores.correoPaypal}
+                            </Text>
+                          )}
+                          <Text style={styles.payPaypalHint}>
+                            Se vinculará tu cuenta de PayPal para la suscripción
+                            mensual de Lami Premium ($149 MXN/mes).
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
                   <View style={styles.privacyRow}>
                     <TouchableOpacity
                       onPress={() => {
@@ -492,10 +876,9 @@ export default function Registro({ navigation }) {
                     <Text style={styles.errorText}>{errores.privacidad}</Text>
                   )}
 
-                  {/* BOTÓN FINAL */}
                   <TouchableOpacity
                     activeOpacity={0.9}
-                    disabled={cargando}
+                    disabled={cargando || procesandoPago}
                     onPress={handleRegistro}
                     style={{ marginTop: 12 }}
                   >
@@ -506,14 +889,13 @@ export default function Registro({ navigation }) {
                       style={styles.primaryBtn}
                     >
                       <Text style={styles.primaryBtnText}>
-                        {cargando ? "Creando tu cuenta..." : "Unirme a Lami"}
+                        {textoBotonRegistro()}
                       </Text>
                     </LinearGradient>
                   </TouchableOpacity>
                 </>
               )}
 
-              {/* PIE DE TARJETA */}
               <View style={styles.bottomLoginRow}>
                 <Text style={styles.bottomLoginMuted}>
                   ¿Ya tienes una cuenta?{" "}
@@ -526,7 +908,6 @@ export default function Registro({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* MODAL DE TÉRMINOS Y CONDICIONES */}
         <Modal
           visible={mostrarTerminos}
           transparent
@@ -596,7 +977,6 @@ export default function Registro({ navigation }) {
           </View>
         </Modal>
 
-        {/* MODAL DE AVISO / VALIDACIÓN */}
         <Modal
           visible={avisoModal.visible}
           transparent
@@ -639,7 +1019,6 @@ export default function Registro({ navigation }) {
           </View>
         </Modal>
 
-        {/* MODAL DE BIENVENIDA EXITOSA */}
         <Modal
           visible={modalExitoVisible}
           transparent
@@ -666,7 +1045,10 @@ export default function Registro({ navigation }) {
                 <Text style={{ fontWeight: "700", color: "#0F3D42" }}>
                   {correo.trim()}
                 </Text>
-                . Ya puedes iniciar sesión para comenzar.
+                {planSeleccionado === "premium"
+                  ? " y tu suscripción Lami Premium ya está activa."
+                  : "."}{" "}
+                Ya puedes iniciar sesión para comenzar.
               </Text>
 
               <TouchableOpacity
@@ -821,6 +1203,108 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DCEEEB",
     overflow: "hidden",
+  },
+  plansWrapper: {
+    gap: 10,
+    marginBottom: 14,
+  },
+  planCard: {
+    backgroundColor: "#F2F9F8",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: "#DCEEEB",
+  },
+  planCardSelected: {
+    backgroundColor: "#E6F4F1",
+    borderColor: "#53988E",
+  },
+  planTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  planName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F3D42",
+  },
+  planPrice: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#53988E",
+  },
+  planBenefits: {
+    fontSize: 12,
+    color: "#4A6668",
+    lineHeight: 17,
+    marginTop: 6,
+    marginLeft: 28,
+  },
+  paymentSectionContainer: {
+    marginBottom: 14,
+    gap: 10,
+  },
+  payMethodRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  payMethodBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: "#E9F6F4",
+    borderWidth: 1,
+    borderColor: "#C5E3DF",
+  },
+  payMethodBtnActive: {
+    backgroundColor: "#0F3D42",
+    borderColor: "#0F3D42",
+  },
+  payMethodBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F3D42",
+    textAlign: "center",
+  },
+  payFormBox: {
+    backgroundColor: "#F2F9F8",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#DCEEEB",
+    gap: 8,
+  },
+  payFieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1B4B4F",
+  },
+  payInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#C5E3DF",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 13.5,
+    color: "#0F3D42",
+  },
+  payErrorText: {
+    color: "#E11D48",
+    fontSize: 11.5,
+    marginTop: -4,
+    fontWeight: "500",
+  },
+  payPaypalHint: {
+    fontSize: 11.5,
+    color: "#5A7577",
+    lineHeight: 16,
   },
   errorText: {
     color: "#E11D48",

@@ -79,8 +79,8 @@ export default function Login({navigation}) {
             keyboardShouldPersistTaps="handled"
           >
             {/* ENCABEZADO */}
-            <Text style={styles.appName}>Anxiously 💜</Text>
-            <Text style={styles.title}>Bienvenida de nuevo</Text>
+            <Text style={styles.appName}>Lami</Text>
+            <Text style={styles.title}>Qué bueno que estás aquí</Text>
             <Text style={styles.subtitle}>
               Este es tu espacio seguro para respirar y sentirte mejor.
             </Text>
@@ -88,10 +88,10 @@ export default function Login({navigation}) {
             {/* CHIPS MOTIVACIONALES */}
             <View style={styles.chipsRow}>
               <View style={[styles.chip, { backgroundColor: '#ede9fe' }]}>
-                <Text style={styles.chipText}>Respira profundo 🌬️</Text>
+                <Text style={styles.chipText}>Respira profundo</Text>
               </View>
               <View style={[styles.chip, { backgroundColor: '#fee2e2' }]}>
-                <Text style={styles.chipText}>Sé amable contigo 💕</Text>
+                <Text style={styles.chipText}>Ten paciencia</Text>
               </View>
             </View>
 

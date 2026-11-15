@@ -84,6 +84,29 @@ function normalizarTexto(txt = "") {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+// Funciones auxiliares agregadas para solucionar el error de referencia
+function getTomorrowISO() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseHoraToPicker(horaStr = "10:00 AM") {
+  try {
+    const partes = horaStr.split(" ");
+    const tiempo = partes[0] || "10:00";
+    const turno = (partes[1] || "AM").toUpperCase();
+    const [hora, minuto] = tiempo.split(":");
+    return {
+      hora: hora ? hora.padStart(2, "0") : "10",
+      minuto: minuto || "00",
+      turno: turno === "PM" ? "PM" : "AM",
+    };
+  } catch (e) {
+    return { hora: "10", minuto: "00", turno: "AM" };
+  }
+}
+
 function EstrellasReales({ rating = 0, size = 13 }) {
   const valor = Number(rating) || 0;
   return (
@@ -116,6 +139,18 @@ export default function ProfileScreen({ navigation }) {
   const [modalFotoUsuario, setModalFotoUsuario] = useState(false);
   const [guardandoPerfil, setGuardandoPerfil] = useState(false);
 
+  const [planUsuario, setPlanUsuario] = useState("esencial");
+  const [metodoPagoGuardado, setMetodoPagoGuardado] = useState("");
+  const [modalPagoPremium, setModalPagoPremium] = useState(false);
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] =
+    useState("tarjeta");
+  const [titularTarjeta, setTitularTarjeta] = useState("");
+  const [numeroTarjeta, setNumeroTarjeta] = useState("");
+  const [expiracionTarjeta, setExpiracionTarjeta] = useState("");
+  const [cvvTarjeta, setCvvTarjeta] = useState("");
+  const [correoPaypal, setCorreoPaypal] = useState("");
+  const [procesandoPago, setProcesandoPago] = useState(false);
+
   const [codigoPsicologo, setCodigoPsicologo] = useState("");
   const [psicologoId, setPsicologoId] = useState(null);
   const [psicologoVinculado, setPsicologoVinculado] = useState(null);
@@ -137,9 +172,42 @@ export default function ProfileScreen({ navigation }) {
   const [mensajeSolicitud, setMensajeSolicitud] = useState("");
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
 
+  const [calMesActual, setCalMesActual] = useState(() => {
+    const hoy = new Date();
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  });
+  const [fechaSeleccionadaCita, setFechaSeleccionadaCita] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [horaCitaPicker, setHoraCitaPicker] = useState("10");
+  const [minutoCitaPicker, setMinutoCitaPicker] = useState("00");
+  const [turnoCitaPicker, setTurnoCitaPicker] = useState("AM");
+
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [aceptandoCitaId, setAceptandoCitaId] = useState(null);
   const [solicitudReprogramando, setSolicitudReprogramando] = useState(null);
+
+  // Estados para el calendario y ruleta al reprogramar (Otro horario)
+  const [calMesReprogramar, setCalMesReprogramar] = useState(() => {
+    const hoy = new Date();
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  });
+  const [fechaReprogramacion, setFechaReprogramacion] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [horaReprogPicker, setHoraReprogPicker] = useState("10");
+  const [minutoReprogPicker, setMinutoReprogPicker] = useState("00");
+  const [turnoReprogPicker, setTurnoReprogPicker] = useState("AM");
   const [mensajeReprogramacion, setMensajeReprogramacion] = useState("");
   const [enviandoReprogramacion, setEnviandoReprogramacion] = useState(false);
 
@@ -356,6 +424,11 @@ export default function ProfileScreen({ navigation }) {
           await AsyncStorage.setItem(USER_PHOTO_KEY, data.fotoPerfil);
         }
 
+        const esPlanPremium =
+          data.plan === "premium" || data.esPremium === true;
+        setPlanUsuario(esPlanPremium ? "premium" : "esencial");
+        setMetodoPagoGuardado(data.metodoPagoResumen || "");
+
         if (data.psicologoId) {
           setPsicologoId(data.psicologoId);
           setPsicologoVinculado(data.psicologoNombre || "Especialista Lami");
@@ -373,6 +446,157 @@ export default function ProfileScreen({ navigation }) {
     } catch (error) {
       console.log("Error cargando perfil:", error);
     }
+  };
+
+  const formatearNumeroTarjeta = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 16);
+    return limpio.replace(/(\d{4})(?=\d)/g, "$1 ");
+  };
+
+  const formatearExpiracion = (texto) => {
+    const limpio = texto.replace(/\D/g, "").slice(0, 4);
+    if (limpio.length >= 3) {
+      return `${limpio.slice(0, 2)}/${limpio.slice(2)}`;
+    }
+    return limpio;
+  };
+
+  const handleConfirmarPagoPremium = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    let resumenMetodo = "";
+
+    if (metodoPagoSeleccionado === "tarjeta") {
+      const digitos = numeroTarjeta.replace(/\s/g, "");
+      if (!titularTarjeta.trim()) {
+        Alert.alert(
+          "Dato requerido",
+          "Ingresa el nombre del titular de la tarjeta."
+        );
+        return;
+      }
+      if (digitos.length < 16) {
+        Alert.alert(
+          "Tarjeta incompleta",
+          "Ingresa los 16 dígitos de tu tarjeta de débito o crédito."
+        );
+        return;
+      }
+      if (expiracionTarjeta.length < 5) {
+        Alert.alert(
+          "Fecha requerida",
+          "Ingresa la fecha de vencimiento (MM/AA)."
+        );
+        return;
+      }
+      if (cvvTarjeta.length < 3) {
+        Alert.alert(
+          "CVV requerido",
+          "Ingresa el código de seguridad de 3 o 4 dígitos."
+        );
+        return;
+      }
+      resumenMetodo = `Tarjeta terminación •••• ${digitos.slice(-4)}`;
+    } else {
+      if (!correoPaypal.trim() || !correoPaypal.includes("@")) {
+        Alert.alert(
+          "Correo PayPal requerido",
+          "Ingresa el correo asociado a tu cuenta de PayPal."
+        );
+        return;
+      }
+      resumenMetodo = `PayPal (${correoPaypal.trim()})`;
+    }
+
+    try {
+      setProcesandoPago(true);
+      await new Promise((resolve) => setTimeout(resolve, 900));
+
+      await setDoc(
+        doc(db, "usuarios", user.uid),
+        {
+          plan: "premium",
+          planNombre: "Lami Premium",
+          esPremium: true,
+          precioMensual: 149,
+          metodoPagoTipo: metodoPagoSeleccionado,
+          metodoPagoResumen: resumenMetodo,
+          suscripcionActualizadaEn: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setPlanUsuario("premium");
+      setMetodoPagoGuardado(resumenMetodo);
+      setModalPagoPremium(false);
+      setTitularTarjeta("");
+      setNumeroTarjeta("");
+      setExpiracionTarjeta("");
+      setCvvTarjeta("");
+      setCorreoPaypal("");
+
+      Alert.alert(
+        "¡Suscripción activada! ✨",
+        "Tu cuenta ahora cuenta con Lami Premium ($149 MXN/mes)."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Error al procesar",
+        error?.message || "No se pudo actualizar tu plan en este momento."
+      );
+    } finally {
+      setProcesandoPago(false);
+    }
+  };
+
+  const handleCancelarSuscripcionPremium = () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    Alert.alert(
+      "Cancelar suscripción Premium",
+      "¿Deseas cancelar tu suscripción a Lami Premium y volver al Plan Esencial gratuito?",
+      [
+        { text: "Conservar Premium", style: "cancel" },
+        {
+          text: "Sí, cancelar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setProcesandoPago(true);
+              await setDoc(
+                doc(db, "usuarios", user.uid),
+                {
+                  plan: "esencial",
+                  planNombre: "Plan Esencial",
+                  esPremium: false,
+                  precioMensual: 0,
+                  metodoPagoResumen: "",
+                  suscripcionCanceladaEn: serverTimestamp(),
+                },
+                { merge: true }
+              );
+
+              setPlanUsuario("esencial");
+              setMetodoPagoGuardado("");
+
+              Alert.alert(
+                "Suscripción cancelada",
+                "Tu cuenta regresó al Plan Esencial gratuito. Puedes reactivar Lami Premium cuando lo desees."
+              );
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                error?.message || "No se pudo cancelar la suscripción."
+              );
+            } finally {
+              setProcesandoPago(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const actualizarFotoUsuario = async (base64Uri) => {
@@ -553,6 +777,7 @@ export default function ProfileScreen({ navigation }) {
 
       const fechaCita =
         solicitud.fechaCita ||
+        solicitud.fechaSolicitada ||
         (() => {
           const d = new Date();
           d.setDate(d.getDate() + 1);
@@ -562,7 +787,8 @@ export default function ProfileScreen({ navigation }) {
           )}-${String(d.getDate()).padStart(2, "0")}`;
         })();
 
-      const horaCita = solicitud.horaCita || "10:00 AM";
+      const horaCita =
+        solicitud.horaCita || solicitud.horaSolicitada || "10:00 AM";
       const esPresencial =
         (solicitud.modalidadConfirmada || solicitud.modalidadSolicitada) !==
         "online";
@@ -657,32 +883,34 @@ export default function ProfileScreen({ navigation }) {
 
   const handleReenviarPropuestaHorario = async () => {
     if (!solicitudReprogramando) return;
-    if (!mensajeReprogramacion.trim()) {
-      Alert.alert(
-        "Escribe tu disponibilidad",
-        "Indica qué horario te queda mejor para que el especialista pueda revisarlo."
-      );
-      return;
-    }
 
     try {
       setEnviandoReprogramacion(true);
+      const horaFormateada = `${horaReprogPicker}:${minutoReprogPicker} ${turnoReprogPicker}`;
+      const mensajeOpcional = mensajeReprogramacion.trim();
+
       const historialPrevio = Array.isArray(
         solicitudReprogramando.historialMensajes
       )
         ? solicitudReprogramando.historialMensajes
         : [];
 
+      const textoNota =
+        mensajeOpcional ||
+        `Propuesta de nuevo horario: ${fechaReprogramacion} a las ${horaFormateada}`;
+
       await updateDoc(
         doc(db, "solicitudes_sesion", solicitudReprogramando.id),
         {
           estado: "reprogramacion_solicitada",
-          mensaje: mensajeReprogramacion.trim(),
+          fechaSolicitada: fechaReprogramacion,
+          horaSolicitada: horaFormateada,
+          mensaje: textoNota,
           historialMensajes: [
             ...historialPrevio,
             {
               autor: "paciente",
-              texto: mensajeReprogramacion.trim(),
+              texto: textoNota,
               fecha: new Date().toLocaleTimeString("es-MX", {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -699,7 +927,7 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "Propuesta enviada 🔄",
-        "Le enviamos tu mensaje al especialista para que confirme si tiene disponibilidad."
+        `Le enviamos tu propuesta para el ${fechaReprogramacion} a las ${horaFormateada} al especialista para que la revise.`
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo enviar tu propuesta: " + err.message);
@@ -745,6 +973,16 @@ export default function ProfileScreen({ navigation }) {
     try {
       setEnviandoSolicitud(true);
       const psi = especialistaSeleccionadoPedir;
+      const modPsi = (psi.modalidad || "presencial").toLowerCase();
+      const modalidadFinal =
+        modPsi === "online"
+          ? "online"
+          : modPsi === "hybrid" || modPsi === "hibrida"
+          ? modalidadSolicitada
+          : "presencial";
+
+      const horaFormateada = `${horaCitaPicker}:${minutoCitaPicker} ${turnoCitaPicker}`;
+      const mensajeOpcional = mensajeSolicitud.trim();
 
       await addDoc(collection(db, "solicitudes_sesion"), {
         pacienteId: user.uid,
@@ -753,10 +991,13 @@ export default function ProfileScreen({ navigation }) {
         pacienteTelefono: phone.trim() || "",
         psicologoId: psi.id,
         psicologoNombre: psi.nombre || "Especialista",
-        modalidadSolicitada,
+        modalidadSolicitada: modalidadFinal,
+        fechaSolicitada: fechaSeleccionadaCita,
+        horaSolicitada: horaFormateada,
         mensaje:
-          mensajeSolicitud.trim() ||
-          "Hola, me gustaría solicitar una primera sesión contigo.",
+          mensajeOpcional ||
+          `Solicitud de sesión para el ${fechaSeleccionadaCita} a las ${horaFormateada}.`,
+        mensajeOpcional,
         estado: "pendiente",
         respuestaTerapeuta: "",
         creadoEn: serverTimestamp(),
@@ -769,7 +1010,7 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "Solicitud enviada ✨",
-        `Le avisamos a ${psi.nombre} que deseas una sesión. Podrás ver su respuesta aquí mismo en tu perfil.`
+        `Se envió tu solicitud a ${psi.nombre} para el ${fechaSeleccionadaCita} a las ${horaFormateada}.`
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo enviar la solicitud: " + err.message);
@@ -1072,7 +1313,6 @@ export default function ProfileScreen({ navigation }) {
     return ciudadPsi.includes(queryCiudad) || espPsi.includes(queryCiudad);
   });
 
-  // Privacidad configurada por el psicólogo vinculado
   const privPsi = {
     ...PRIVACIDAD_PSI_DEFAULT,
     ...(psicologoDetalle?.privacidad || {}),
@@ -1107,6 +1347,8 @@ export default function ProfileScreen({ navigation }) {
     totalResenasVinculado > 0
       ? Number(psicologoDetalle?.calificacionPromedio || 0).toFixed(1)
       : "0.0";
+
+  const esPremiumActivo = planUsuario === "premium";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f3e8ff" }}>
@@ -1168,7 +1410,7 @@ export default function ProfileScreen({ navigation }) {
                   style={styles.badge}
                 >
                   <Ionicons name="sparkles-outline" size={16} color="#4F46E5" />
-                  <Text style={styles.badgeText}>Tu espacio seguro 💜</Text>
+                  <Text style={styles.badgeText}>Tu espacio privado 💜</Text>
                 </LinearGradient>
               </View>
 
@@ -1218,6 +1460,109 @@ export default function ProfileScreen({ navigation }) {
             <TouchableOpacity onPress={addSession} style={styles.sessionButton}>
               <Text style={styles.sessionButtonText}>Hice una sesión 🎧</Text>
             </TouchableOpacity>
+
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                  Mi Plan Lami 
+                </Text>
+                <View
+                  style={[
+                    styles.planStatusPill,
+                    esPremiumActivo
+                      ? styles.planStatusPillPremium
+                      : styles.planStatusPillFree,
+                  ]}
+                >
+                  <Ionicons
+                    name={esPremiumActivo ? "diamond" : "leaf-outline"}
+                    size={12}
+                    color={esPremiumActivo ? "#6D28D9" : "#0F766E"}
+                  />
+                  <Text
+                    style={[
+                      styles.planStatusPillText,
+                      { color: esPremiumActivo ? "#6D28D9" : "#0F766E" },
+                    ]}
+                  >
+                    {esPremiumActivo ? "Lami Premium" : "Plan Esencial"}
+                  </Text>
+                </View>
+              </View>
+
+              {esPremiumActivo ? (
+                <View style={styles.planSummaryBoxPremium}>
+                  <View style={styles.planSummaryHeader}>
+                    <Text style={styles.planSummaryName}>
+                      Suscripción Lami Premium
+                    </Text>
+                    <Text style={styles.planSummaryPrice}>$149 MXN/mes</Text>
+                  </View>
+                  <Text style={styles.planSummaryDesc}>
+                    Tienes activos todos los reportes clínicos avanzados,
+                    seguimiento prioritario y recursos exclusivos.
+                  </Text>
+                  {metodoPagoGuardado ? (
+                    <Text style={styles.planPaymentMethodText}>
+                      Método registrado: {metodoPagoGuardado}
+                    </Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    disabled={procesandoPago}
+                    onPress={handleCancelarSuscripcionPremium}
+                    style={styles.cancelSubBtn}
+                  >
+                    <Ionicons
+                      name="close-circle-outline"
+                      size={16}
+                      color="#E11D48"
+                    />
+                    <Text style={styles.cancelSubBtnText}>
+                      {procesandoPago
+                        ? "Procesando..."
+                        : "Cancelar suscripción"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.planSummaryBoxFree}>
+                  <View style={styles.planSummaryHeader}>
+                    <Text style={styles.planSummaryName}>
+                      Plan Esencial • Gratuito
+                    </Text>
+                    <Text style={styles.planSummaryPriceFree}>$0 MXN</Text>
+                  </View>
+                  <Text style={styles.planSummaryDesc}>
+                    Incluye Anxiósometro, calendario emocional, bitácora diaria,
+                    ejercicios y vinculación con especialista.
+                  </Text>
+
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setModalPagoPremium(true)}
+                    style={{ marginTop: 6 }}
+                  >
+                    <LinearGradient
+                      colors={["#7C3AED", "#4F46E5"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.upgradePremiumBtn}
+                    >
+                      <Ionicons
+                        name="diamond-outline"
+                        size={16}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.upgradePremiumBtnText}>
+                        Cambiar a Lami Premium ($149/mes)
+                      </Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
 
             <View style={styles.card}>
               <View style={styles.especialistaHeaderRow}>
@@ -1341,7 +1686,7 @@ export default function ProfileScreen({ navigation }) {
                 <>
                   <Text style={[styles.sectionSubtitle, { marginTop: 6 }]}>
                     Ingresa el código que te dio tu psicólogo en consulta (ej.
-                    PSI-492), escanea su QR o busca especialistas cercanos.
+                    PSI-492), escanea seu QR o busca especialistas cercanos.
                   </Text>
                   <View style={styles.inputContainer}>
                     <TextInput
@@ -1513,9 +1858,15 @@ export default function ProfileScreen({ navigation }) {
                           </Text>
                         ) : (
                           <Text style={styles.solicitudEsperaText}>
-                            Solicitud enviada ({sol.modalidadSolicitada}). En
-                            cuanto el especialista responda, verás su mensaje
-                            aquí.
+                            Solicitud enviada ({sol.modalidadSolicitada}
+                            {sol.fechaSolicitada
+                              ? ` • ${sol.fechaSolicitada}`
+                              : ""}
+                            {sol.horaSolicitada
+                              ? ` • ${sol.horaSolicitada}`
+                              : ""}
+                            ). En cuanto el especialista responda, verás su
+                            mensaje aquí.
                           </Text>
                         )}
 
@@ -1526,10 +1877,17 @@ export default function ProfileScreen({ navigation }) {
                         ) : null}
 
                         {(confirmadaPorTerapeuta || yaAceptada) &&
-                          (sol.fechaCita || sol.horaCita) && (
+                          (sol.fechaCita ||
+                            sol.horaCita ||
+                            sol.fechaSolicitada) && (
                             <Text style={styles.solicitudHorarioText}>
-                              🗓️ Propuesta: {sol.fechaCita || "Próxima fecha"}{" "}
-                              {sol.horaCita ? `• ${sol.horaCita}` : ""}
+                              🗓️ Propuesta:{" "}
+                              {sol.fechaCita ||
+                                sol.fechaSolicitada ||
+                                "Próxima fecha"}{" "}
+                              {sol.horaCita || sol.horaSolicitada
+                                ? `• ${sol.horaCita || sol.horaSolicitada}`
+                                : ""}
                             </Text>
                           )}
 
@@ -1573,8 +1931,232 @@ export default function ProfileScreen({ navigation }) {
                             {solicitudReprogramando?.id === sol.id ? (
                               <View style={styles.reprogramBox}>
                                 <Text style={styles.reprogramTitle}>
-                                  Propón un nuevo horario o explica tu
-                                  disponibilidad:
+                                  Selecciona un nuevo día y hora:
+                                </Text>
+
+                                {(() => {
+                                  const anio = calMesReprogramar.getFullYear();
+                                  const mes = calMesReprogramar.getMonth();
+                                  const nombresMes = [
+                                    "Enero",
+                                    "Febrero",
+                                    "Marzo",
+                                    "Abril",
+                                    "Mayo",
+                                    "Junio",
+                                    "Julio",
+                                    "Agosto",
+                                    "Septiembre",
+                                    "Octubre",
+                                    "Noviembre",
+                                    "Diciembre",
+                                  ];
+                                  const primerDiaSemana = new Date(
+                                    anio,
+                                    mes,
+                                    1
+                                  ).getDay();
+                                  const totalDiasMes = new Date(
+                                    anio,
+                                    mes + 1,
+                                    0
+                                  ).getDate();
+                                  const hoy = new Date();
+                                  const hoyStr = `${hoy.getFullYear()}-${String(
+                                    hoy.getMonth() + 1
+                                  ).padStart(2, "0")}-${String(
+                                    hoy.getDate()
+                                  ).padStart(2, "0")}`;
+
+                                  const celdas = [];
+                                  for (let i = 0; i < primerDiaSemana; i++)
+                                    celdas.push(null);
+                                  for (let d = 1; d <= totalDiasMes; d++)
+                                    celdas.push(d);
+
+                                  return (
+                                    <View style={styles.miniCalCard}>
+                                      <View style={styles.miniCalHeader}>
+                                        <TouchableOpacity
+                                          onPress={() =>
+                                            setCalMesReprogramar(
+                                              new Date(anio, mes - 1, 1)
+                                            )
+                                          }
+                                          style={{ padding: 6 }}
+                                        >
+                                          <Ionicons
+                                            name="chevron-back"
+                                            size={18}
+                                            color="#0F766E"
+                                          />
+                                        </TouchableOpacity>
+                                        <Text style={styles.miniCalMonthTitle}>
+                                          {nombresMes[mes]} {anio}
+                                        </Text>
+                                        <TouchableOpacity
+                                          onPress={() =>
+                                            setCalMesReprogramar(
+                                              new Date(anio, mes + 1, 1)
+                                            )
+                                          }
+                                          style={{ padding: 6 }}
+                                        >
+                                          <Ionicons
+                                            name="chevron-forward"
+                                            size={18}
+                                            color="#0F766E"
+                                          />
+                                        </TouchableOpacity>
+                                      </View>
+
+                                      <View style={styles.miniCalWeekRow}>
+                                        {[
+                                          "Do",
+                                          "Lu",
+                                          "Ma",
+                                          "Mi",
+                                          "Ju",
+                                          "Vi",
+                                          "Sá",
+                                        ].map((dw) => (
+                                          <Text
+                                            key={dw}
+                                            style={styles.miniCalWeekText}
+                                          >
+                                            {dw}
+                                          </Text>
+                                        ))}
+                                      </View>
+
+                                      <View style={styles.miniCalDaysGrid}>
+                                        {celdas.map((diaNum, idx) => {
+                                          if (!diaNum) {
+                                            return (
+                                              <View
+                                                key={`empty-${idx}`}
+                                                style={styles.miniCalCell}
+                                              />
+                                            );
+                                          }
+                                          const fechaStr = `${anio}-${String(
+                                            mes + 1
+                                          ).padStart(2, "0")}-${String(
+                                            diaNum
+                                          ).padStart(2, "0")}`;
+                                          const esPasado = fechaStr < hoyStr;
+                                          const seleccionado =
+                                            fechaReprogramacion === fechaStr;
+
+                                          return (
+                                            <TouchableOpacity
+                                              key={fechaStr}
+                                              disabled={esPasado}
+                                              onPress={() =>
+                                                setFechaReprogramacion(
+                                                  fechaStr
+                                                )
+                                              }
+                                              style={styles.miniCalCell}
+                                            >
+                                              <View
+                                                style={[
+                                                  styles.miniCalDayBubble,
+                                                  seleccionado &&
+                                                    styles
+                                                      .miniCalDayBubbleSelected,
+                                                ]}
+                                              >
+                                                <Text
+                                                  style={[
+                                                    styles.miniCalDayText,
+                                                    esPasado && {
+                                                      color: "#CBD5E1",
+                                                    },
+                                                    seleccionado && {
+                                                      color: "#FFFFFF",
+                                                      fontWeight: "800",
+                                                    },
+                                                  ]}
+                                                >
+                                                  {diaNum}
+                                                </Text>
+                                              </View>
+                                            </TouchableOpacity>
+                                          );
+                                        })}
+                                      </View>
+                                    </View>
+                                  );
+                                })()}
+
+                                <Text style={styles.reprogramTitle}>
+                                  Hora seleccionada ({horaReprogPicker}:
+                                  {minutoReprogPicker} {turnoReprogPicker})
+                                </Text>
+                                <View style={styles.timeWheelRow}>
+                                  <View style={styles.timeWheelBox}>
+                                    <Picker
+                                      selectedValue={horaReprogPicker}
+                                      onValueChange={(v) =>
+                                        setHoraReprogPicker(v)
+                                      }
+                                    >
+                                      {[
+                                        "01",
+                                        "02",
+                                        "03",
+                                        "04",
+                                        "05",
+                                        "06",
+                                        "07",
+                                        "08",
+                                        "09",
+                                        "10",
+                                        "11",
+                                        "12",
+                                      ].map((h) => (
+                                        <Picker.Item
+                                          key={h}
+                                          label={`${h} hr`}
+                                          value={h}
+                                        />
+                                      ))}
+                                    </Picker>
+                                  </View>
+
+                                  <View style={styles.timeWheelBox}>
+                                    <Picker
+                                      selectedValue={minutoReprogPicker}
+                                      onValueChange={(v) =>
+                                        setMinutoReprogPicker(v)
+                                      }
+                                    >
+                                      {["00", "15", "30", "45"].map((m) => (
+                                        <Picker.Item
+                                          key={m}
+                                          label={`:${m}`}
+                                          value={m}
+                                        />
+                                      ))}
+                                    </Picker>
+                                  </View>
+
+                                  <View style={styles.timeWheelBoxSmall}>
+                                    <Picker
+                                      selectedValue={turnoReprogPicker}
+                                      onValueChange={(v) =>
+                                        setTurnoReprogPicker(v)
+                                      }
+                                    >
+                                      <Picker.Item label="AM" value="AM" />
+                                      <Picker.Item label="PM" value="PM" />
+                                    </Picker>
+                                  </View>
+                                </View>
+
+                                <Text style={styles.reprogramTitle}>
+                                  Mensaje (opcional):
                                 </Text>
                                 <TextInput
                                   style={styles.reprogramInput}
@@ -1604,7 +2186,7 @@ export default function ProfileScreen({ navigation }) {
                                     <Text style={styles.reprogramSendText}>
                                       {enviandoReprogramacion
                                         ? "Enviando..."
-                                        : "Enviar mensaje"}
+                                        : `Proponer el ${fechaReprogramacion}`}
                                     </Text>
                                   </TouchableOpacity>
                                 </View>
@@ -1639,6 +2221,16 @@ export default function ProfileScreen({ navigation }) {
                                   onPress={() => {
                                     setSolicitudReprogramando(sol);
                                     setMensajeReprogramacion("");
+                                    const baseF =
+                                      sol.fechaSolicitada ||
+                                      getTomorrowISO();
+                                    setFechaReprogramacion(baseF);
+                                    const parsed = parseHoraToPicker(
+                                      sol.horaSolicitada || "10:00 AM"
+                                    );
+                                    setHoraReprogPicker(parsed.hora);
+                                    setMinutoReprogPicker(parsed.minuto);
+                                    setTurnoReprogPicker(parsed.turno);
                                   }}
                                   style={styles.otroHorarioBtn}
                                 >
@@ -2096,6 +2688,211 @@ export default function ProfileScreen({ navigation }) {
       </LinearGradient>
 
       <Modal
+        visible={modalPagoPremium}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalPagoPremium(false)}
+      >
+        <View style={styles.dirModalOverlay}>
+          <View style={styles.payModalCard}>
+            <View style={styles.dirModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dirModalTitle}>Lami Premium ✨</Text>
+                <Text style={styles.dirModalSubtitle}>
+                  Suscripción mensual • $149 MXN/mes
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setModalPagoPremium(false)}
+                style={styles.dirModalClose}
+              >
+                <Ionicons name="close" size={22} color="#475569" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 16, gap: 12 }}
+            >
+              <View style={styles.payBenefitsBox}>
+                <Text style={styles.payBenefitsTitle}>
+                  ¿Qué incluye Lami Premium?
+                </Text>
+                <Text style={styles.payBenefitItem}>
+                  • Reportes avanzados de evolución emocional
+                </Text>
+                <Text style={styles.payBenefitItem}>
+                  • Ejercicios guiados y recursos exclusivos
+                </Text>
+                <Text style={styles.payBenefitItem}>
+                  • Puedes cancelar tu suscripción cuando quieras
+                </Text>
+              </View>
+
+              <Text style={styles.agendarLabel}>Selecciona método de pago</Text>
+              <View style={styles.payMethodRow}>
+                <TouchableOpacity
+                  onPress={() => setMetodoPagoSeleccionado("tarjeta")}
+                  style={[
+                    styles.payMethodBtn,
+                    metodoPagoSeleccionado === "tarjeta" &&
+                      styles.payMethodBtnActive,
+                  ]}
+                >
+                  <Ionicons
+                    name="card-outline"
+                    size={18}
+                    color={
+                      metodoPagoSeleccionado === "tarjeta"
+                        ? "#FFFFFF"
+                        : "#4338CA"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.payMethodBtnText,
+                      metodoPagoSeleccionado === "tarjeta" && {
+                        color: "#FFFFFF",
+                      },
+                    ]}
+                  >
+                    Tarjeta Débito / Crédito
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setMetodoPagoSeleccionado("paypal")}
+                  style={[
+                    styles.payMethodBtn,
+                    metodoPagoSeleccionado === "paypal" &&
+                      styles.payMethodBtnActive,
+                  ]}
+                >
+                  <Ionicons
+                    name="logo-paypal"
+                    size={18}
+                    color={
+                      metodoPagoSeleccionado === "paypal"
+                        ? "#FFFFFF"
+                        : "#4338CA"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.payMethodBtnText,
+                      metodoPagoSeleccionado === "paypal" && {
+                        color: "#FFFFFF",
+                      },
+                    ]}
+                  >
+                    PayPal
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {metodoPagoSeleccionado === "tarjeta" ? (
+                <View style={styles.payFormBox}>
+                  <Text style={styles.payFieldLabel}>Nombre del titular</Text>
+                  <TextInput
+                    style={styles.payInput}
+                    placeholder="Nombre como aparece en la tarjeta"
+                    placeholderTextColor="#94A3B8"
+                    value={titularTarjeta}
+                    onChangeText={setTitularTarjeta}
+                  />
+
+                  <Text style={styles.payFieldLabel}>Número de tarjeta</Text>
+                  <TextInput
+                    style={styles.payInput}
+                    placeholder="0000 0000 0000 0000"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="number-pad"
+                    maxLength={19}
+                    value={numeroTarjeta}
+                    onChangeText={(t) =>
+                      setNumeroTarjeta(formatearNumeroTarjeta(t))
+                    }
+                  />
+
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.payFieldLabel}>Vencimiento</Text>
+                      <TextInput
+                        style={styles.payInput}
+                        placeholder="MM/AA"
+                        placeholderTextColor="#94A3B8"
+                        keyboardType="number-pad"
+                        maxLength={5}
+                        value={expiracionTarjeta}
+                        onChangeText={(t) =>
+                          setExpiracionTarjeta(formatearExpiracion(t))
+                        }
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.payFieldLabel}>CVV</Text>
+                      <TextInput
+                        style={styles.payInput}
+                        placeholder="123"
+                        placeholderTextColor="#94A3B8"
+                        keyboardType="number-pad"
+                        secureTextEntry
+                        maxLength={4}
+                        value={cvvTarjeta}
+                        onChangeText={(t) =>
+                          setCvvTarjeta(t.replace(/\D/g, "").slice(0, 4))
+                        }
+                      />
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.payFormBox}>
+                  <Text style={styles.payFieldLabel}>
+                    Correo electrónico de PayPal
+                  </Text>
+                  <TextInput
+                    style={styles.payInput}
+                    placeholder="tu-cuenta@paypal.com"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={correoPaypal}
+                    onChangeText={setCorreoPaypal}
+                  />
+                  <Text style={styles.payPaypalHint}>
+                    Se vinculará tu cuenta de PayPal para la suscripción mensual
+                    de Lami Premium.
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                disabled={procesandoPago}
+                onPress={handleConfirmarPagoPremium}
+                style={{ marginTop: 4 }}
+              >
+                <LinearGradient
+                  colors={["#7C3AED", "#4F46E5"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.agendarSubmitBtn}
+                >
+                  <Text style={styles.agendarSubmitText}>
+                    {procesandoPago
+                      ? "Procesando pago..."
+                      : "Pagar $149 MXN y activar Premium"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={modalFotoUsuario}
         transparent
         animationType="fade"
@@ -2460,44 +3257,279 @@ export default function ProfileScreen({ navigation }) {
                     Pedir sesión con {especialistaSeleccionadoPedir.nombre}
                   </Text>
                   <Text style={styles.agendarHint}>
-                    Tu solicitud llegará al especialista. Cuando revise su
-                    disponibilidad y acepte agendarla, recibirás su respuesta y
-                    ubicación exacta en tu perfil.
+                    Elige el día y la hora que prefieres. Cuando el especialista
+                    acepte, la cita se agregará automáticamente a su agenda y a
+                    tu calendario.
                   </Text>
 
-                  <Text style={styles.agendarLabel}>Modalidad preferida</Text>
-                  <View style={styles.agendarModRow}>
-                    {[
-                      ["presencial", "Presencial"],
-                      ["online", "En línea"],
-                    ].map(([val, lbl]) => (
-                      <TouchableOpacity
-                        key={val}
-                        onPress={() => setModalidadSolicitada(val)}
-                        style={[
-                          styles.agendarModBtn,
-                          modalidadSolicitada === val &&
-                            styles.agendarModBtnActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.agendarModText,
-                            modalidadSolicitada === val &&
-                              styles.agendarModTextActive,
-                          ]}
+                  {(() => {
+                    const modPsi = (
+                      especialistaSeleccionadoPedir.modalidad || "presencial"
+                    ).toLowerCase();
+                    const esHibrido =
+                      modPsi === "hybrid" || modPsi === "hibrida";
+
+                    if (!esHibrido) {
+                      const esSoloOnline = modPsi === "online";
+                      return (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                            backgroundColor: "#FFFFFF",
+                            padding: 11,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: "#99F6E4",
+                            marginBottom: 14,
+                          }}
                         >
-                          {lbl}
+                          <Ionicons
+                            name={
+                              esSoloOnline
+                                ? "videocam-outline"
+                                : "business-outline"
+                            }
+                            size={17}
+                            color="#0D9488"
+                          />
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: "700",
+                              color: "#0F766E",
+                            }}
+                          >
+                            Modalidad:{" "}
+                            {esSoloOnline ? "100% En línea" : "100% Presencial"}
+                          </Text>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <>
+                        <Text style={styles.agendarLabel}>
+                          Modalidad preferida
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                        <View style={styles.agendarModRow}>
+                          {[
+                            ["presencial", "Presencial"],
+                            ["online", "En línea"],
+                          ].map(([val, lbl]) => (
+                            <TouchableOpacity
+                              key={val}
+                              onPress={() => setModalidadSolicitada(val)}
+                              style={[
+                                styles.agendarModBtn,
+                                modalidadSolicitada === val &&
+                                  styles.agendarModBtnActive,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.agendarModText,
+                                  modalidadSolicitada === val &&
+                                    styles.agendarModTextActive,
+                                ]}
+                              >
+                                {lbl}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </>
+                    );
+                  })()}
 
                   <Text style={styles.agendarLabel}>
-                    Mensaje o disponibilidad horaria
+                    Selecciona el día en el calendario
                   </Text>
+                  {(() => {
+                    const anio = calMesActual.getFullYear();
+                    const mes = calMesActual.getMonth();
+                    const nombresMes = [
+                      "Enero",
+                      "Febrero",
+                      "Marzo",
+                      "Abril",
+                      "Mayo",
+                      "Junio",
+                      "Julio",
+                      "Agosto",
+                      "Septiembre",
+                      "Octubre",
+                      "Noviembre",
+                      "Diciembre",
+                    ];
+                    const primerDiaSemana = new Date(anio, mes, 1).getDay();
+                    const totalDiasMes = new Date(anio, mes + 1, 0).getDate();
+                    const hoy = new Date();
+                    const hoyStr = `${hoy.getFullYear()}-${String(
+                      hoy.getMonth() + 1
+                    ).padStart(2, "0")}-${String(hoy.getDate()).padStart(
+                      2,
+                      "0"
+                    )}`;
+
+                    const celdas = [];
+                    for (let i = 0; i < primerDiaSemana; i++) celdas.push(null);
+                    for (let d = 1; d <= totalDiasMes; d++) celdas.push(d);
+
+                    return (
+                      <View style={styles.miniCalCard}>
+                        <View style={styles.miniCalHeader}>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setCalMesActual(new Date(anio, mes - 1, 1))
+                            }
+                            style={{ padding: 6 }}
+                          >
+                            <Ionicons
+                              name="chevron-back"
+                              size={18}
+                              color="#0F766E"
+                            />
+                          </TouchableOpacity>
+                          <Text style={styles.miniCalMonthTitle}>
+                            {nombresMes[mes]} {anio}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setCalMesActual(new Date(anio, mes + 1, 1))
+                            }
+                            style={{ padding: 6 }}
+                          >
+                            <Ionicons
+                              name="chevron-forward"
+                              size={18}
+                              color="#0F766E"
+                            />
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.miniCalWeekRow}>
+                          {["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"].map(
+                            (dw) => (
+                              <Text key={dw} style={styles.miniCalWeekText}>
+                                {dw}
+                              </Text>
+                            )
+                          )}
+                        </View>
+
+                        <View style={styles.miniCalDaysGrid}>
+                          {celdas.map((diaNum, idx) => {
+                            if (!diaNum) {
+                              return (
+                                <View
+                                  key={`empty-${idx}`}
+                                  style={styles.miniCalCell}
+                                />
+                              );
+                            }
+                            const fechaStr = `${anio}-${String(
+                              mes + 1
+                            ).padStart(2, "0")}-${String(diaNum).padStart(
+                              2,
+                              "0"
+                            )}`;
+                            const esPasado = fechaStr < hoyStr;
+                            const seleccionado =
+                              fechaSeleccionadaCita === fechaStr;
+
+                            return (
+                              <TouchableOpacity
+                                key={fechaStr}
+                                disabled={esPasado}
+                                onPress={() =>
+                                  setFechaSeleccionadaCita(fechaStr)
+                                }
+                                style={styles.miniCalCell}
+                              >
+                                <View
+                                  style={[
+                                    styles.miniCalDayBubble,
+                                    seleccionado &&
+                                      styles.miniCalDayBubbleSelected,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.miniCalDayText,
+                                      esPasado && { color: "#CBD5E1" },
+                                      seleccionado && {
+                                        color: "#FFFFFF",
+                                        fontWeight: "800",
+                                      },
+                                    ]}
+                                  >
+                                    {diaNum}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })()}
+
+                  <Text style={styles.agendarLabel}>
+                    Selecciona la hora ({horaCitaPicker}:{minutoCitaPicker}{" "}
+                    {turnoCitaPicker})
+                  </Text>
+                  <View style={styles.timeWheelRow}>
+                    <View style={styles.timeWheelBox}>
+                      <Picker
+                        selectedValue={horaCitaPicker}
+                        onValueChange={(v) => setHoraCitaPicker(v)}
+                      >
+                        {[
+                          "01",
+                          "02",
+                          "03",
+                          "04",
+                          "05",
+                          "06",
+                          "07",
+                          "08",
+                          "09",
+                          "10",
+                          "11",
+                          "12",
+                        ].map((h) => (
+                          <Picker.Item key={h} label={`${h} hr`} value={h} />
+                        ))}
+                      </Picker>
+                    </View>
+
+                    <View style={styles.timeWheelBox}>
+                      <Picker
+                        selectedValue={minutoCitaPicker}
+                        onValueChange={(v) => setMinutoCitaPicker(v)}
+                      >
+                        {["00", "15", "30", "45"].map((m) => (
+                          <Picker.Item key={m} label={`:${m}`} value={m} />
+                        ))}
+                      </Picker>
+                    </View>
+
+                    <View style={styles.timeWheelBoxSmall}>
+                      <Picker
+                        selectedValue={turnoCitaPicker}
+                        onValueChange={(v) => setTurnoCitaPicker(v)}
+                      >
+                        <Picker.Item label="AM" value="AM" />
+                        <Picker.Item label="PM" value="PM" />
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <Text style={styles.agendarLabel}>Mensaje (opcional)</Text>
                   <TextInput
-                    style={styles.agendarInput}
+                    style={[styles.agendarInput, { minHeight: 68 }]}
                     multiline
                     placeholder="Envía mensaje..."
                     placeholderTextColor="#94A3B8"
@@ -2520,7 +3552,7 @@ export default function ProfileScreen({ navigation }) {
                       <Text style={styles.agendarSubmitText}>
                         {enviandoSolicitud
                           ? "Enviando solicitud..."
-                          : "Enviar solicitud"}
+                          : `Solicitar el ${fechaSeleccionadaCita} • ${horaCitaPicker}:${minutoCitaPicker} ${turnoCitaPicker}`}
                       </Text>
                     </LinearGradient>
                   </TouchableOpacity>
@@ -3062,6 +4094,186 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 2,
     borderColor: "#FFFFFF",
+  },
+
+  planStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  planStatusPillFree: {
+    backgroundColor: "#CCFBF1",
+  },
+  planStatusPillPremium: {
+    backgroundColor: "#EDE9FE",
+  },
+  planStatusPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  planSummaryBoxFree: {
+    marginTop: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 6,
+  },
+  planSummaryBoxPremium: {
+    marginTop: 10,
+    backgroundColor: "#F5F3FF",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    gap: 6,
+  },
+  planSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  planSummaryName: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  planSummaryPrice: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#6D28D9",
+  },
+  planSummaryPriceFree: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#0F766E",
+  },
+  planSummaryDesc: {
+    fontSize: 12,
+    color: "#475569",
+    lineHeight: 17,
+  },
+  planPaymentMethodText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#5B21B6",
+    marginTop: 2,
+  },
+  upgradePremiumBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 11,
+    borderRadius: 14,
+  },
+  upgradePremiumBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  cancelSubBtn: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#FFF1F2",
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+  },
+  cancelSubBtnText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#E11D48",
+  },
+
+  payModalCard: {
+    maxHeight: "88%",
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+  },
+  payBenefitsBox: {
+    backgroundColor: "#F5F3FF",
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    gap: 4,
+  },
+  payBenefitsTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#5B21B6",
+    marginBottom: 2,
+  },
+  payBenefitItem: {
+    fontSize: 12,
+    color: "#4C1D95",
+    lineHeight: 17,
+  },
+  payMethodRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  payMethodBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  payMethodBtnActive: {
+    backgroundColor: "#4F46E5",
+    borderColor: "#4F46E5",
+  },
+  payMethodBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4338CA",
+    textAlign: "center",
+  },
+  payFormBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 8,
+  },
+  payFieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  payInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 13.5,
+    color: "#1E293B",
+  },
+  payPaypalHint: {
+    fontSize: 11.5,
+    color: "#64748B",
+    lineHeight: 16,
   },
 
   photoModalCard: {
@@ -3700,7 +4912,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   dirModalCard: {
-    height: "86%",
+    height: "88%",
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -3960,6 +5172,86 @@ const styles = StyleSheet.create({
   agendarModTextActive: {
     color: "#FFFFFF",
   },
+
+  miniCalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    marginBottom: 14,
+  },
+  miniCalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  miniCalMonthTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  miniCalWeekRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 6,
+  },
+  miniCalWeekText: {
+    width: 34,
+    textAlign: "center",
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  miniCalDaysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  miniCalCell: {
+    width: "14.28%",
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniCalDayBubble: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniCalDayBubbleSelected: {
+    backgroundColor: "#0D9488",
+  },
+  miniCalDayText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+
+  timeWheelRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 14,
+  },
+  timeWheelBox: {
+    flex: 1.15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    overflow: "hidden",
+  },
+  timeWheelBoxSmall: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    overflow: "hidden",
+  },
+
   agendarInput: {
     minHeight: 84,
     backgroundColor: "#FFFFFF",
@@ -3978,7 +5270,7 @@ const styles = StyleSheet.create({
   },
   agendarSubmitText: {
     color: "#FFFFFF",
-    fontSize: 14.5,
+    fontSize: 14,
     fontWeight: "700",
   },
 

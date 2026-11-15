@@ -121,14 +121,12 @@ export default function AgendaPsicologo({ navigation }) {
 
   const [citaConfirmadaModal, setCitaConfirmadaModal] = useState(null);
 
-  // Notificaciones del psicólogo + modales mejorados de cancelación
   const [notificacionesPsi, setNotificacionesPsi] = useState([]);
   const [notifCentroVisible, setNotifCentroVisible] = useState(false);
   const [alertaCancelacionPacienteModal, setAlertaCancelacionPacienteModal] =
     useState(null);
   const shownNotifIdsRef = useRef(new Set());
 
-  // Modal del psicólogo para eliminar/cancelar una cita con motivo al paciente
   const [citaAEliminarModal, setCitaAEliminarModal] = useState(null);
   const [motivoCancelacionPsi, setMotivoCancelacionPsi] = useState("");
   const [eliminandoCita, setEliminandoCita] = useState(false);
@@ -181,7 +179,6 @@ export default function AgendaPsicologo({ navigation }) {
     return () => unsubCitas();
   }, []);
 
-  // Escuchar notificaciones de cancelación de citas por parte de pacientes
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -249,6 +246,12 @@ export default function AgendaPsicologo({ navigation }) {
     );
     return idx >= 0 ? pacientes[idx] : pacientes[0];
   }, [pacientes, pacienteActivoKey]);
+
+  const fotoPacienteActivo =
+    pacienteSeleccionado?.fotoPerfil ||
+    pacienteSeleccionado?.fotoUrl ||
+    pacienteSeleccionado?.foto ||
+    null;
 
   const horarioFormateado = useMemo(() => {
     const sufijo = turnoHorario === "manana" ? "AM" : "PM";
@@ -334,10 +337,8 @@ export default function AgendaPsicologo({ navigation }) {
         cita.id &&
         !String(cita.id).startsWith("local-")
       ) {
-        // 1. Eliminar de citas_psicologo
         await deleteDoc(doc(db, "citas_psicologo", cita.id));
 
-        // 2. Eliminar de solicitudes_sesion para que desaparezca en el calendario del paciente
         const qSol = query(
           collection(db, "solicitudes_sesion"),
           where("citaPsicologoId", "==", cita.id)
@@ -347,7 +348,6 @@ export default function AgendaPsicologo({ navigation }) {
           await deleteDoc(doc(db, "solicitudes_sesion", docSol.id));
         }
 
-        // Respaldo por si la cita no tenía citaPsicologoId guardado
         if (snapSol.empty && cita.pacienteId) {
           const qSolFallback = query(
             collection(db, "solicitudes_sesion"),
@@ -362,7 +362,6 @@ export default function AgendaPsicologo({ navigation }) {
           }
         }
 
-        // 3. Notificar al paciente en notificaciones_paciente
         if (cita.pacienteId) {
           await addDoc(collection(db, "notificaciones_paciente"), {
             pacienteId: cita.pacienteId,
@@ -406,6 +405,20 @@ export default function AgendaPsicologo({ navigation }) {
       return;
     }
 
+    const hayChoque = agendaDelDia.some(
+      (c) =>
+        String(c.horario || "").trim().toUpperCase() ===
+        horarioFormateado.toUpperCase()
+    );
+
+    if (hayChoque) {
+      Alert.alert(
+        "Horario ocupado ⚠️",
+        `Ya tienes una cita agendada el ${infoDiaActual.labelCompleto} a las ${horarioFormateado}. Selecciona otro horario o día.`
+      );
+      return;
+    }
+
     const motivoFinal =
       enfoqueSeleccionado === "Otro enfoque personalizado"
         ? otroEnfoqueTexto.trim() || "Sesión terapéutica personalizada"
@@ -436,6 +449,7 @@ export default function AgendaPsicologo({ navigation }) {
         pacienteNombre: pacienteSeleccionado.nombre || "Paciente Lami",
         foto:
           pacienteSeleccionado.fotoPerfil ||
+          pacienteSeleccionado.fotoUrl ||
           pacienteSeleccionado.foto ||
           null,
         sesionNum: citasPreviasPaciente + 1,
@@ -546,7 +560,6 @@ export default function AgendaPsicologo({ navigation }) {
             </View>
           </View>
 
-          {/* CAMPANA DE NOTIFICACIONES + BOTÓN AGENDAR */}
           <View style={styles.heroActionsRight}>
             <TouchableOpacity
               activeOpacity={0.88}
@@ -589,14 +602,21 @@ export default function AgendaPsicologo({ navigation }) {
           {pacienteSeleccionado ? (
             <>
               <View style={styles.selectedBannerLeft}>
-                <LinearGradient
-                  colors={[PALETTE.tealMid, PALETTE.tealDeep]}
-                  style={styles.selectedPatientAvatar}
-                >
-                  <Text style={styles.selectedPatientInitial}>
-                    {(pacienteSeleccionado.nombre || "P")[0].toUpperCase()}
-                  </Text>
-                </LinearGradient>
+                {fotoPacienteActivo ? (
+                  <Image
+                    source={{ uri: fotoPacienteActivo }}
+                    style={styles.selectedPatientAvatarImg}
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={[PALETTE.tealMid, PALETTE.tealDeep]}
+                    style={styles.selectedPatientAvatar}
+                  >
+                    <Text style={styles.selectedPatientInitial}>
+                      {(pacienteSeleccionado.nombre || "P")[0].toUpperCase()}
+                    </Text>
+                  </LinearGradient>
+                )}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.selectedTag}>
                     PACIENTE SELECCIONADO PARA AGENDA
@@ -638,6 +658,7 @@ export default function AgendaPsicologo({ navigation }) {
             {pacientes.map((pac, idx) => {
               const keyUnica = getPacienteKey(pac, idx);
               const isSelected = keyUnica === pacienteActivoKey;
+              const fotoChip = pac.fotoPerfil || pac.fotoUrl || pac.foto || null;
               return (
                 <TouchableOpacity
                   key={keyUnica}
@@ -648,16 +669,23 @@ export default function AgendaPsicologo({ navigation }) {
                     isSelected && styles.heroPatientChipActive,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.chipDot,
-                      {
-                        backgroundColor: isSelected
-                          ? PALETTE.purpleVibrant
-                          : PALETTE.tealMid,
-                      },
-                    ]}
-                  />
+                  {fotoChip ? (
+                    <Image
+                      source={{ uri: fotoChip }}
+                      style={styles.chipMiniAvatar}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.chipDot,
+                        {
+                          backgroundColor: isSelected
+                            ? PALETTE.purpleVibrant
+                            : PALETTE.tealMid,
+                        },
+                      ]}
+                    />
+                  )}
                   <Text
                     style={[
                       styles.heroPatientChipText,
@@ -884,6 +912,19 @@ export default function AgendaPsicologo({ navigation }) {
               ? PALETTE.purpleVibrant
               : PALETTE.tealDeep;
             const estaSeleccionada = citaSeleccionadaId === item.id;
+            const pacVinculado = pacientes.find(
+              (p) =>
+                (p.id && p.id === item.pacienteId) ||
+                (p.uid && p.uid === item.pacienteId) ||
+                p.nombre?.trim().toLowerCase() ===
+                  item.pacienteNombre?.trim().toLowerCase()
+            );
+            const fotoCitaMostrar =
+              item.foto ||
+              pacVinculado?.fotoPerfil ||
+              pacVinculado?.fotoUrl ||
+              pacVinculado?.foto ||
+              null;
 
             return (
               <TouchableOpacity
@@ -957,9 +998,9 @@ export default function AgendaPsicologo({ navigation }) {
                       </Text>
                     </View>
 
-                    {item.foto ? (
+                    {fotoCitaMostrar ? (
                       <Image
-                        source={{ uri: item.foto }}
+                        source={{ uri: fotoCitaMostrar }}
                         style={styles.patientAvatar}
                       />
                     ) : (
@@ -1064,7 +1105,6 @@ export default function AgendaPsicologo({ navigation }) {
         )}
       </ScrollView>
 
-      {/* MODAL MEJORADO DE AVISO CUANDO UN PACIENTE CANCELA UNA CITA */}
       <Modal
         visible={!!alertaCancelacionPacienteModal}
         transparent
@@ -1106,7 +1146,9 @@ export default function AgendaPsicologo({ navigation }) {
                   {alertaCancelacionPacienteModal?.pacienteNombre ||
                     "Un paciente"}
                 </Text>{" "}
-                ha cancelado su sesión ({alertaCancelacionPacienteModal?.modalidad || "Sesión"}) y se liberó el espacio en tu agenda.
+                ha cancelado su sesión (
+                {alertaCancelacionPacienteModal?.modalidad || "Sesión"}) y se
+                liberó el espacio en tu agenda.
               </Text>
             </LinearGradient>
 
@@ -1162,7 +1204,6 @@ export default function AgendaPsicologo({ navigation }) {
         </View>
       </Modal>
 
-      {/* MODAL PARA QUE EL PSICÓLOGO ELIMINE/CANCELE UNA CITA NOTIFICANDO AL PACIENTE */}
       <Modal
         visible={!!citaAEliminarModal}
         transparent
@@ -1225,7 +1266,6 @@ export default function AgendaPsicologo({ navigation }) {
         </View>
       </Modal>
 
-      {/* CENTRO DE NOTIFICACIONES DEL PSICÓLOGO (CAMPANA SUPERIOR) */}
       <Modal
         visible={notifCentroVisible}
         transparent
@@ -1235,7 +1275,9 @@ export default function AgendaPsicologo({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
                 <Ionicons
                   name="notifications"
                   size={20}
@@ -1255,7 +1297,11 @@ export default function AgendaPsicologo({ navigation }) {
 
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ gap: 10, paddingTop: 10, paddingBottom: 16 }}
+              contentContainerStyle={{
+                gap: 10,
+                paddingTop: 10,
+                paddingBottom: 16,
+              }}
             >
               {notificacionesPsi.length === 0 ? (
                 <View style={styles.emptyNotifContainer}>
@@ -1336,11 +1382,18 @@ export default function AgendaPsicologo({ navigation }) {
                   end={{ x: 1, y: 0 }}
                   style={styles.selectedPatientPreviewCard}
                 >
-                  <View style={styles.previewBadgeCircle}>
-                    <Text style={styles.previewBadgeLetter}>
-                      {(pacienteSeleccionado.nombre || "P")[0].toUpperCase()}
-                    </Text>
-                  </View>
+                  {fotoPacienteActivo ? (
+                    <Image
+                      source={{ uri: fotoPacienteActivo }}
+                      style={styles.previewBadgeAvatarImg}
+                    />
+                  ) : (
+                    <View style={styles.previewBadgeCircle}>
+                      <Text style={styles.previewBadgeLetter}>
+                        {(pacienteSeleccionado.nombre || "P")[0].toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.previewPatientName}>
                       {pacienteSeleccionado.nombre}
@@ -2031,11 +2084,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedPatientAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  selectedPatientAvatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: "#FFFFFF",
   },
@@ -2099,6 +2159,11 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
+  },
+  chipMiniAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   heroPatientChipText: {
     fontSize: 12,
@@ -2504,12 +2569,19 @@ const styles = StyleSheet.create({
     borderColor: PALETTE.lavenderSoft,
   },
   previewBadgeCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: PALETTE.purpleVibrant,
     alignItems: "center",
     justifyContent: "center",
+  },
+  previewBadgeAvatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: PALETTE.purpleVibrant,
   },
   previewBadgeLetter: {
     color: "#FFFFFF",
@@ -2876,8 +2948,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-
-  // Centro de notificaciones del psicólogo
   emptyNotifContainer: {
     alignItems: "center",
     paddingVertical: 28,
@@ -2930,7 +3000,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 2,
   },
-
   bottomBar: {
     flexDirection: "row",
     alignItems: "center",
