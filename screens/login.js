@@ -1,5 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../config/firebaseConfig";
 import { useState } from 'react';
 import {
   Alert,
@@ -20,10 +22,6 @@ import {
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
 
-
-
-
-
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallDevice = SCREEN_HEIGHT < 700;
 
@@ -41,13 +39,19 @@ export default function Login({navigation}) {
 
     try {
       setLoading(true);
-      //  Necesitas importar esto: signInWithEmailAndPassword
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const uid = userCredential.user.uid;
 
-      Alert.alert('Éxito', 'Bienvenid@ 💜');
+      // Revisamos si este usuario está registrado como especialista en Firestore
+      const psicologoSnap = await getDoc(doc(db, 'psicologos', uid));
 
-      // Navegar a Test después del login exitoso
-      navigation.replace('Test');
+      if (psicologoSnap.exists()) {
+        Alert.alert('Bienvenido/a', 'Accediendo a tu panel profesional');
+        navigation.replace('PsicologoDashboard');
+      } else {
+        Alert.alert('Éxito');
+        navigation.replace('Test');
+      }
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
@@ -158,12 +162,6 @@ export default function Login({navigation}) {
                 </LinearGradient>
               </TouchableOpacity>
 
-              {/* Frase pequeña */}
-              <Text style={styles.helperText}>
-                🌸 Recuerda: no tienes que estar perfecta para empezar, solo
-                presente.
-              </Text>
-
               {/* Footer registrar */}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>¿Aún no tienes una cuenta? </Text>
@@ -174,15 +172,27 @@ export default function Login({navigation}) {
                 </TouchableOpacity>
               </View>
             
+    
+              
               <TouchableOpacity
-                onPress={() => navigation.replace("PsicologoDashboard")}
-                style={{ marginTop: 14, alignItems: "center" }}
+                onPress={() => navigation.navigate("RegistroPsicologo")}
+                style={{ marginTop: 8, alignItems: "center" }}
               >
-                <Text style={{ color: "#7C3AED", fontWeight: "700", fontSize: 13 }}>
-                  🩺 Entrar como Especialista / Psicólogo
+                <Text
+                  style={{
+                    color: "#6B7280",
+                    fontWeight: "600",
+                    fontSize: 12,
+                    textDecorationLine: "underline",
+                  }}
+                >
+                  ¿Eres especialista en salud mental? Registra tu consultorio aquí
                 </Text>
               </TouchableOpacity>
+
             </View>
+
+            
             
           </ScrollView>
         </KeyboardAvoidingView>
