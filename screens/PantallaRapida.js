@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function IntroArticuloAnsiedad({ navigation }) {
+export default function PantallaRapida({ navigation }) {
   const progress = useRef(new Animated.Value(0)).current;
   const animationRef = useRef(null);
   const [currentValue, setCurrentValue] = useState(0);
@@ -35,6 +35,9 @@ export default function IntroArticuloAnsiedad({ navigation }) {
 
   useEffect(() => {
     startAnimation(0);
+    return () => {
+      if (animationRef.current) animationRef.current.stop();
+    };
   }, []);
 
   const handlePause = () => {
@@ -52,7 +55,6 @@ export default function IntroArticuloAnsiedad({ navigation }) {
     outputRange: ["0%", "100%"],
   });
 
-  // Opacidades para cruzar entre dos gradientes rosa–lila
   const gradient1Opacity = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0],
@@ -110,22 +112,21 @@ export default function IntroArticuloAnsiedad({ navigation }) {
             <Text style={styles.mainText}>
               ¿Sabías que{" "}
               <Text style={styles.boldText}>
-                tu cuerpo no es tu enemigo cuando sientes ansiedad
+                tu cuerpo y tus emociones reaccionan para cuidarte
               </Text>
               ?
             </Text>
 
             <Text style={styles.secondaryText}>
-              En realidad está intentando cuidarte, solo que a veces reacciona
-              con más fuerza de la que necesitas. Conocer lo que te pasa es una
-              forma de abrazarte a ti misma. ❤️ 🩹
+              Observar cómo te sientes cada día, hacer pausas breves y conocer
+              tus señales es una forma sana de acompañar tu bienestar.
             </Text>
           </View>
 
           {/* IMAGEN */}
           <View style={styles.imageContainer}>
             <Image
-              source={require("../assets/conejo.png")} // tu imagen
+              source={require("../assets/lami_1.png")}
               style={styles.image}
               resizeMode="contain"
             />
@@ -144,7 +145,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
-
   progressBarBackground: {
     height: 6,
     backgroundColor: "#FED7AA",
@@ -158,19 +158,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#FB923C",
     borderRadius: 999,
   },
-
   textBlock: {
     paddingHorizontal: 24,
     marginTop: 40,
   },
-
   helloText: {
     fontSize: 22,
     fontWeight: "600",
     color: "#3F2A1C",
     marginBottom: 8,
   },
-
   mainText: {
     fontSize: 26,
     lineHeight: 32,
@@ -178,18 +175,15 @@ const styles = StyleSheet.create({
     color: "#3F2A1C",
     marginBottom: 12,
   },
-
   boldText: {
     fontWeight: "800",
   },
-
   secondaryText: {
     fontSize: 15,
     lineHeight: 22,
     color: "#5B4634",
     marginBottom: 10,
   },
-
   imageContainer: {
     flex: 1,
     justifyContent: "flex-end",

@@ -33,6 +33,8 @@ const ILLUSTRATIONS = {
   12: require("../assets/p12.jpg"),
 };
 
+// Check-in diario equilibrado (emoción del día + bienestar, energía, tensión, apoyo y calma).
+// Redacción propia de uso libre basada en guías abiertas de autocuidado y registro emocional diario.
 const PREGUNTAS = [
   {
     id: 1,
@@ -42,18 +44,18 @@ const PREGUNTAS = [
   {
     id: 2,
     tipo: "scale",
-    titulo: "¿Cómo ha sido tu nivel de preocupación general hoy?",
+    titulo: "¿Cómo estuvo tu nivel de energía y descanso hoy?",
     opciones: [
-      { id: "nada", label: "Nada" },
-      { id: "poco", label: "Poco" },
-      { id: "moderado", label: "Moderado" },
+      { id: "muy_baja", label: "Muy bajo" },
+      { id: "bajo", label: "Bajo" },
+      { id: "normal", label: "Normal" },
       { id: "alto", label: "Alto" },
     ],
   },
   {
     id: 3,
     tipo: "scale",
-    titulo: "¿Qué tan intensa ha sido tu tensión física?",
+    titulo: "¿Qué tan intensa ha sido tu carga o tensión física hoy?",
     opciones: [
       { id: "nada", label: "Nada" },
       { id: "leve", label: "Leve" },
@@ -64,7 +66,19 @@ const PREGUNTAS = [
   {
     id: 4,
     tipo: "scale",
-    titulo: "¿Sentiste pensamientos repetitivos difíciles de detener?",
+    titulo: "¿Cómo sentiste tu claridad mental y enfoque en tus actividades?",
+    opciones: [
+      { id: "muy_dificil", label: "Me costó mucho" },
+      { id: "algo_dificil", label: "Me costó un poco" },
+      { id: "aceptable", label: "Aceptable" },
+      { id: "clara", label: "Clara y estable" },
+    ],
+  },
+  {
+    id: 5,
+    tipo: "scale",
+    titulo:
+      "¿Sentiste pensamientos repetitivos o preocupación difícil de soltar?",
     opciones: [
       { id: "no", label: "No" },
       { id: "un_poco", label: "Un poco" },
@@ -73,64 +87,42 @@ const PREGUNTAS = [
     ],
   },
   {
-    id: 5,
-    tipo: "scale",
-    titulo: "¿Cómo estuvo tu nivel de energía hoy?",
-    opciones: [
-      { id: "muy_baja", label: "Muy baja" },
-      { id: "baja", label: "Baja" },
-      { id: "normal", label: "Normal" },
-      { id: "alta", label: "Alta" },
-    ],
-  },
-  {
     id: 6,
     tipo: "scale",
-    titulo: "¿Qué tan difícil fue concentrarte en tus actividades?",
+    titulo: "¿Cómo manejaste tus pendientes o momentos de estrés hoy?",
     opciones: [
-      { id: "no_dificil", label: "No fue difícil" },
-      { id: "poco_dificil", label: "Un poco difícil" },
-      { id: "bastante_dificil", label: "Bastante difícil" },
-      { id: "muy_dificil", label: "Muy difícil" },
+      { id: "muy_bien", label: "Muy bien" },
+      { id: "bien", label: "Bien" },
+      { id: "regular", label: "Regular" },
+      { id: "dificil", label: "Con dificultad" },
     ],
   },
   {
     id: 7,
     tipo: "scale",
-    titulo: "¿Tuviste sensación de inquietud o necesidad de moverte?",
+    titulo: "¿Lograste darte algún espacio o pausa para ti durante el día?",
     opciones: [
-      { id: "no", label: "No" },
-      { id: "leve", label: "Leve" },
-      { id: "moderada", label: "Moderada" },
-      { id: "alta", label: "Alta" },
+      { id: "si_varios", label: "Sí, varios" },
+      { id: "si_uno", label: "Sí, al menos uno" },
+      { id: "muy_poco", label: "Muy poco" },
+      { id: "ninguno", label: "Ninguno" },
     ],
   },
   {
     id: 8,
     tipo: "scale",
-    titulo: "¿Cómo manejaste el estrés hoy?",
+    titulo: "¿Cómo fue el trato contigo misma/o ante errores o cansancio?",
     opciones: [
-      { id: "muy_bien", label: "Muy bien" },
-      { id: "bien", label: "Bien" },
-      { id: "regular", label: "Regular" },
-      { id: "mal", label: "Mal" },
+      { id: "amable", label: "Comprensivo y amable" },
+      { id: "tranquilo", label: "Tranquilo" },
+      { id: "exigente", label: "Algo exigente" },
+      { id: "muy_duro", label: "Muy autocrítico" },
     ],
   },
   {
     id: 9,
     tipo: "scale",
-    titulo: "¿Tuviste pensamientos negativos sobre ti misma?",
-    opciones: [
-      { id: "nunca", label: "Nunca" },
-      { id: "a_veces", label: "A veces" },
-      { id: "varias_veces", label: "Varias veces" },
-      { id: "muy_frecuentes", label: "Muy frecuentes" },
-    ],
-  },
-  {
-    id: 10,
-    tipo: "scale",
-    titulo: "¿Te sentiste apoyada por alguien hoy?",
+    titulo: "¿Te sentiste acompañada/o o conectada/o con alguien hoy?",
     opciones: [
       { id: "mucho", label: "Sí, mucho" },
       { id: "un_poco", label: "Sí, un poco" },
@@ -139,9 +131,20 @@ const PREGUNTAS = [
     ],
   },
   {
+    id: 10,
+    tipo: "scale",
+    titulo: "¿Qué tanto sentiste que tu rutina estuvo equilibrada?",
+    opciones: [
+      { id: "equilibrada", label: "Muy equilibrada" },
+      { id: "bastante", label: "Bastante bien" },
+      { id: "ajustada", label: "Algo ajustada" },
+      { id: "saturada", label: "Muy saturada" },
+    ],
+  },
+  {
     id: 11,
     tipo: "scale",
-    titulo: "¿Tuviste momentos de calma o tranquilidad?",
+    titulo: "¿Tuviste momentos de calma o tranquilidad en el día?",
     opciones: [
       { id: "varios", label: "Sí, varios" },
       { id: "algunos", label: "Sí, algunos" },
@@ -152,7 +155,7 @@ const PREGUNTAS = [
   {
     id: 12,
     tipo: "scale",
-    titulo: "Nivel general de bienestar del día:",
+    titulo: "Balance general de tu día:",
     opciones: [
       { id: "bueno", label: "Bueno" },
       { id: "regular", label: "Regular" },
@@ -176,7 +179,7 @@ const MOOD_SCORE_MAP = {
   ansiedad: 4,
 };
 
-// Emociones (pregunta 1)
+// Emociones (pregunta 1) — se conservan las caritas y animaciones
 const EMOCIONES = [
   {
     id: "extasis",
@@ -250,7 +253,6 @@ const EMOCIONES = [
   },
 ];
 
-// Mapeo del mood del test a la emoción del CalendarioEmocional
 function mapMoodToCalendarEmotion(moodId) {
   switch (moodId) {
     case "extasis":
@@ -277,14 +279,15 @@ function mapMoodToCalendarEmotion(moodId) {
   }
 }
 
-// Guardar la emoción del día en AsyncStorage para el calendario
 async function guardarEmocionEnCalendario(moodId) {
   if (!moodId) return;
 
   const emotion = mapMoodToCalendarEmotion(moodId);
-
-  const today = new Date();
-  const dateKey = today.toISOString().slice(0, 10); // YYYY-MM-DD
+  const now = new Date();
+  const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(now.getDate()).padStart(2, "0")}`;
 
   try {
     const existing = await AsyncStorage.getItem("dayFeelings_v1");
@@ -294,10 +297,7 @@ async function guardarEmocionEnCalendario(moodId) {
     }
 
     parsed[dateKey] = emotion;
-
     await AsyncStorage.setItem("dayFeelings_v1", JSON.stringify(parsed));
-
-    console.log("Emoción guardada para", dateKey, emotion);
   } catch (e) {
     console.warn("Error guardando emoción en calendario:", e);
   }
@@ -433,7 +433,12 @@ function MoodItem({ emotion, selected, onSelect }) {
             { backgroundColor: emotion.color },
             selected && styles.moodCircleSelected,
             {
-              transform: [{ scale }, { translateY }, { translateX }, { rotate }],
+              transform: [
+                { scale },
+                { translateY },
+                { translateX },
+                { rotate },
+              ],
             },
           ]}
         >
@@ -452,14 +457,13 @@ function MoodItem({ emotion, selected, onSelect }) {
 }
 
 export default function TestDiario({ navigation }) {
-  const [currentIndex, setCurrentIndex] = useState(0); // 0..11
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedMood, setSelectedMood] = useState(null);
   const [answers, setAnswers] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const successAnim = useRef(new Animated.Value(0)).current;
 
-  // Datos dinámicos del especialista vinculado en Firestore
   const [psicologoVinculado, setPsicologoVinculado] = useState(null);
   const [compartirTerapeuta, setCompartirTerapeuta] = useState(true);
 
@@ -485,8 +489,7 @@ export default function TestDiario({ navigation }) {
   const isMoodStep = currentQuestion.tipo === "mood";
   const isLastQuestion = currentQuestion.id === 12;
 
-  const selectedEmotion =
-    EMOCIONES.find((e) => e.id === selectedMood) || null;
+  const selectedEmotion = EMOCIONES.find((e) => e.id === selectedMood) || null;
 
   const irASiguiente = () => {
     if (currentIndex < PREGUNTAS.length - 1) {
@@ -529,7 +532,7 @@ export default function TestDiario({ navigation }) {
 
     const totalScore = Object.values(scoresByQuestion).reduce(
       (acc, v) => acc + v,
-      0
+      0,
     );
 
     return { scoresByQuestion, totalScore };
@@ -573,14 +576,13 @@ export default function TestDiario({ navigation }) {
     try {
       await guardarEmocionEnCalendario(selectedMood);
 
-      // Sincroniza con Firestore y refleja en el Dashboard del terapeuta vinculado si está activado
       const emocionLabel = selectedEmotion?.label || "Neutral";
       await registrarTestDiarioYCompartir({
         emocionPrincipal: emocionLabel,
         respuestas: answers,
         notaPersonal: `Test diario: ${emocionLabel} • Puntaje ${totalScore}/48`,
         compartirConTerapeuta: Boolean(
-          psicologoVinculado && compartirTerapeuta
+          psicologoVinculado && compartirTerapeuta,
         ),
       });
     } catch (e) {
@@ -659,7 +661,6 @@ export default function TestDiario({ navigation }) {
   return (
     <View style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -681,7 +682,6 @@ export default function TestDiario({ navigation }) {
           </View>
         </View>
 
-        {/* BODY */}
         <View style={styles.body}>
           {isMoodStep ? (
             <ScrollView
@@ -741,7 +741,6 @@ export default function TestDiario({ navigation }) {
                 </TouchableOpacity>
               )}
 
-              {/* Checkbox dinámico con el nombre del especialista vinculado */}
               {renderToggleCompartir()}
 
               <View style={styles.footer}>
@@ -763,12 +762,20 @@ export default function TestDiario({ navigation }) {
                     />
                   </View>
                 </TouchableOpacity>
+
+                <Text style={styles.sourceFootnote}>
+                  Marco abierto de autocuidado y registro emocional cotidiano
+                  (redacción propia, uso libre y gratuito; no sustituye atención
+                  clínica).
+                </Text>
               </View>
             </ScrollView>
           ) : (
             <View style={styles.card}>
               <View style={styles.scaleQuestionWrapper}>
-                <View style={[styles.questionHeader, styles.scaleQuestionHeader]}>
+                <View
+                  style={[styles.questionHeader, styles.scaleQuestionHeader]}
+                >
                   <Text style={styles.questionMainTitle}>
                     {currentQuestion.titulo}
                   </Text>
@@ -790,7 +797,6 @@ export default function TestDiario({ navigation }) {
 
                   {renderScaleQuestion(currentQuestion)}
 
-                  {/* Botón para avanzar en preguntas 2–11 */}
                   {!isLastQuestion && (
                     <View style={styles.footer}>
                       <TouchableOpacity
@@ -805,7 +811,9 @@ export default function TestDiario({ navigation }) {
                         }}
                       >
                         <View style={styles.primaryButtonContent}>
-                          <Text style={styles.primaryButtonText}>Siguiente</Text>
+                          <Text style={styles.primaryButtonText}>
+                            Siguiente
+                          </Text>
                           <Ionicons
                             name="arrow-forward"
                             size={18}
@@ -817,7 +825,6 @@ export default function TestDiario({ navigation }) {
                     </View>
                   )}
 
-                  {/* Confirmación de compartir + Botón Guardar en la 12 */}
                   {isLastQuestion && (
                     <View style={styles.footer}>
                       {renderToggleCompartir()}
@@ -846,6 +853,11 @@ export default function TestDiario({ navigation }) {
                           </Text>
                         </View>
                       </TouchableOpacity>
+
+                      <Text style={styles.sourceFootnote}>
+                        Registro diario de bienestar y autocuidado · Uso libre y
+                        gratuito (fines de seguimiento, no diagnóstico médico).
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -854,7 +866,6 @@ export default function TestDiario({ navigation }) {
           )}
         </View>
 
-        {/* CARTA FLOTANTE "Datos registrados" */}
         {showSuccess && (
           <View style={styles.successOverlay}>
             <Animated.View
@@ -928,7 +939,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#4B5563",
   },
-
   body: {
     flex: 1,
     paddingHorizontal: 20,
@@ -941,7 +951,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingBottom: 16,
   },
-
   card: {
     backgroundColor: "#FEFCE8",
     borderRadius: 24,
@@ -953,7 +962,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-
   scaleQuestionWrapper: {
     paddingTop: 4,
     paddingBottom: 8,
@@ -961,7 +969,6 @@ const styles = StyleSheet.create({
   scaleQuestionHeader: {
     marginBottom: 20,
   },
-
   questionHeader: {
     alignItems: "center",
     marginBottom: 18,
@@ -978,11 +985,9 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
   },
-
   questionContent: {
     marginTop: 8,
   },
-
   selectedSummary: {
     marginTop: 10,
     alignItems: "center",
@@ -1005,7 +1010,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
   },
-
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1052,7 +1056,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
   },
-
   sparkleWrapper: {
     position: "absolute",
     top: -6,
@@ -1061,7 +1064,6 @@ const styles = StyleSheet.create({
   sparkleText: {
     fontSize: 18,
   },
-
   illustrationBox: {
     height: 160,
     width: "76%",
@@ -1079,11 +1081,9 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-
   scaleContainer: {
     marginTop: 4,
   },
-
   scaleOption: {
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -1107,7 +1107,6 @@ const styles = StyleSheet.create({
   scaleOptionTextSelected: {
     color: "#FDF2F8",
   },
-
   breathingSuggestion: {
     flexDirection: "row",
     alignItems: "center",
@@ -1128,8 +1127,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     flexShrink: 1,
   },
-
-  // Recuadro dinámico para compartir con el especialista vinculado
   shareBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -1164,7 +1161,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#7C3AED",
     borderColor: "#7C3AED",
   },
-
   footer: {
     marginTop: 10,
   },
@@ -1195,8 +1191,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-
-  // Carta flotante
+  sourceFootnote: {
+    marginTop: 10,
+    fontSize: 11,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 15,
+    paddingHorizontal: 4,
+  },
   successOverlay: {
     position: "absolute",
     top: 0,

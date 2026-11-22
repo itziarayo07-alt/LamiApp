@@ -2,6 +2,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -19,12 +20,14 @@ export async function vincularConPsicologo(patientUid, codigoInput) {
   const codigoLimpio = codigoInput.trim().toUpperCase();
   const q = query(
     collection(db, "psicologos"),
-    where("codigoVinculacion", "==", codigoLimpio)
+    where("codigoVinculacion", "==", codigoLimpio),
   );
   const snap = await getDocs(q);
 
   if (snap.empty) {
-    throw new Error("Código de especialista no encontrado. Verifica con tu psicólogo.");
+    throw new Error(
+      "Código de especialista no encontrado. Verifica con tu psicólogo.",
+    );
   }
 
   const psicologoDoc = snap.docs[0];
@@ -47,11 +50,9 @@ export async function vincularConPsicologo(patientUid, codigoInput) {
 }
 
 // 1.1 ELIMINAR EJERCICIO ASIGNADO (Desde el panel del psicólogo)
-import { deleteDoc } from "firebase/firestore";
-
 export async function eliminarEjercicioAsignado(patientUid, tareaId) {
   return await deleteDoc(
-    doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId)
+    doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId),
   );
 }
 
@@ -59,7 +60,7 @@ export async function eliminarEjercicioAsignado(patientUid, tareaId) {
 export async function enviarEjercicioAPaciente(
   patientUid,
   psicologoId,
-  ejercicio
+  ejercicio,
 ) {
   return await addDoc(
     collection(db, "usuarios", patientUid, "tareas_asignadas"),
@@ -74,7 +75,7 @@ export async function enviarEjercicioAPaciente(
       proximoDisponibleISO: null,
       registrosRespuestas: [],
       creadoEn: serverTimestamp(),
-    }
+    },
   );
 }
 
@@ -82,7 +83,7 @@ export async function enviarEjercicioAPaciente(
 export function escucharTareasDelPsicologo(patientUid, callback) {
   const q = query(
     collection(db, "usuarios", patientUid, "tareas_asignadas"),
-    orderBy("creadoEn", "desc")
+    orderBy("creadoEn", "desc"),
   );
 
   return onSnapshot(q, (snapshot) => {
@@ -100,7 +101,7 @@ export async function completarEjercicioAsignado(
   patientUid,
   tareaId,
   respuestasMap = {},
-  tareaData = {}
+  tareaData = {},
 ) {
   const tareaRef = doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId);
   const snap = await getDoc(tareaRef);
@@ -123,8 +124,8 @@ export async function completarEjercicioAsignado(
       respuestasMap[idx] !== undefined && respuestasMap[idx] !== ""
         ? respuestasMap[idx]
         : paso.tipo === "instruccion"
-        ? "Completado ✓"
-        : "Sin respuesta",
+          ? "Completado ✓"
+          : "Sin respuesta",
   }));
 
   const ahora = new Date();
@@ -173,7 +174,7 @@ export async function completarEjercicioAsignado(
 export function escucharMisPacientes(psicologoId, callback) {
   const q = query(
     collection(db, "usuarios"),
-    where("psicologoId", "==", psicologoId)
+    where("psicologoId", "==", psicologoId),
   );
 
   return onSnapshot(q, (snapshot) => {
@@ -187,11 +188,14 @@ export function escucharMisPacientes(psicologoId, callback) {
 
 // 6. GUARDAR NOTA CLÍNICA PRIVADA (Solo visible para el psicólogo)
 export async function guardarNotaClinica(patientUid, psicologoId, textoNota) {
-  return await addDoc(collection(db, "usuarios", patientUid, "notas_clinicas"), {
-    psicologoId,
-    contenido: textoNota,
-    creadoEn: serverTimestamp(),
-  });
+  return await addDoc(
+    collection(db, "usuarios", patientUid, "notas_clinicas"),
+    {
+      psicologoId,
+      contenido: textoNota,
+      creadoEn: serverTimestamp(),
+    },
+  );
 }
 
 // 7. ACTUALIZAR PROTOCOLO CLÍNICO DEL PACIENTE (Ansiedad, Duelo, Burnout, Depresión)
@@ -203,16 +207,16 @@ export async function actualizarProtocoloPaciente(patientUid, nuevoProtocolo) {
 
 // 8. GUARDAR TEST DIARIO Y REFLEJARLO AL ESPECIALISTA VINCULADO (SI EL PACIENTE AUTORIZA)
 const MAPA_EMOCIONES = {
-  "Éxtasis": { animo: 10, estado: "estable" },
+  Éxtasis: { animo: 10, estado: "estable" },
   "Muy feliz": { animo: 9, estado: "estable" },
-  "Feliz": { animo: 8, estado: "estable" },
-  "Emoción": { animo: 8, estado: "estable" },
-  "Calma": { animo: 8, estado: "estable" },
-  "Neutral": { animo: 6, estado: "atencion" },
-  "Triste": { animo: 4, estado: "atencion" },
-  "Estrés": { animo: 4, estado: "atencion" },
+  Feliz: { animo: 8, estado: "estable" },
+  Emoción: { animo: 8, estado: "estable" },
+  Calma: { animo: 8, estado: "estable" },
+  Neutral: { animo: 6, estado: "atencion" },
+  Triste: { animo: 4, estado: "atencion" },
+  Estrés: { animo: 4, estado: "atencion" },
   "Muy triste": { animo: 2, estado: "urgente" },
-  "Ansiedad": { animo: 2, estado: "urgente" },
+  Ansiedad: { animo: 2, estado: "urgente" },
 };
 
 export async function registrarTestDiarioYCompartir({

@@ -89,7 +89,7 @@ function getTomorrowISO() {
   d.setDate(d.getDate() + 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
     2,
-    "0"
+    "0",
   )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -183,7 +183,7 @@ export default function ProfileScreen({ navigation }) {
     d.setDate(d.getDate() + 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [horaCitaPicker, setHoraCitaPicker] = useState("10");
@@ -203,7 +203,7 @@ export default function ProfileScreen({ navigation }) {
     d.setDate(d.getDate() + 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [horaReprogPicker, setHoraReprogPicker] = useState("10");
@@ -302,7 +302,7 @@ export default function ProfileScreen({ navigation }) {
   const savePreferences = async (nextGoal, nextNotificationsOn) => {
     await AsyncStorage.setItem(
       PREFS_KEY,
-      JSON.stringify({ goal: nextGoal, notificationsOn: nextNotificationsOn })
+      JSON.stringify({ goal: nextGoal, notificationsOn: nextNotificationsOn }),
     );
   };
 
@@ -374,7 +374,7 @@ export default function ProfileScreen({ navigation }) {
       loadPreferences();
       loadProfileData();
       loadMisSolicitudes();
-    }, [])
+    }, []),
   );
 
   const addSession = async () => {
@@ -473,28 +473,28 @@ export default function ProfileScreen({ navigation }) {
       if (!titularTarjeta.trim()) {
         Alert.alert(
           "Dato requerido",
-          "Ingresa el nombre del titular de la tarjeta."
+          "Ingresa el nombre del titular de la tarjeta.",
         );
         return;
       }
       if (digitos.length < 16) {
         Alert.alert(
           "Tarjeta incompleta",
-          "Ingresa los 16 dígitos de tu tarjeta de débito o crédito."
+          "Ingresa los 16 dígitos de tu tarjeta de débito o crédito.",
         );
         return;
       }
       if (expiracionTarjeta.length < 5) {
         Alert.alert(
           "Fecha requerida",
-          "Ingresa la fecha de vencimiento (MM/AA)."
+          "Ingresa la fecha de vencimiento (MM/AA).",
         );
         return;
       }
       if (cvvTarjeta.length < 3) {
         Alert.alert(
           "CVV requerido",
-          "Ingresa el código de seguridad de 3 o 4 dígitos."
+          "Ingresa el código de seguridad de 3 o 4 dígitos.",
         );
         return;
       }
@@ -503,7 +503,7 @@ export default function ProfileScreen({ navigation }) {
       if (!correoPaypal.trim() || !correoPaypal.includes("@")) {
         Alert.alert(
           "Correo PayPal requerido",
-          "Ingresa el correo asociado a tu cuenta de PayPal."
+          "Ingresa el correo asociado a tu cuenta de PayPal.",
         );
         return;
       }
@@ -525,7 +525,7 @@ export default function ProfileScreen({ navigation }) {
           metodoPagoResumen: resumenMetodo,
           suscripcionActualizadaEn: serverTimestamp(),
         },
-        { merge: true }
+        { merge: true },
       );
 
       setPlanUsuario("premium");
@@ -539,12 +539,12 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "¡Suscripción activada! ✨",
-        "Tu cuenta ahora cuenta con Lami Premium ($149 MXN/mes)."
+        "Tu cuenta ahora cuenta con Lami Premium ($149 MXN/mes).",
       );
     } catch (error) {
       Alert.alert(
         "Error al procesar",
-        error?.message || "No se pudo actualizar tu plan en este momento."
+        error?.message || "No se pudo actualizar tu plan en este momento.",
       );
     } finally {
       setProcesandoPago(false);
@@ -576,7 +576,7 @@ export default function ProfileScreen({ navigation }) {
                   metodoPagoResumen: "",
                   suscripcionCanceladaEn: serverTimestamp(),
                 },
-                { merge: true }
+                { merge: true },
               );
 
               setPlanUsuario("esencial");
@@ -584,19 +584,19 @@ export default function ProfileScreen({ navigation }) {
 
               Alert.alert(
                 "Suscripción cancelada",
-                "Tu cuenta regresó al Plan Esencial gratuito. Puedes reactivar Lami Premium cuando lo desees."
+                "Tu cuenta regresó al Plan Esencial gratuito. Puedes reactivar Lami Premium cuando lo desees.",
               );
             } catch (error) {
               Alert.alert(
                 "Error",
-                error?.message || "No se pudo cancelar la suscripción."
+                error?.message || "No se pudo cancelar la suscripción.",
               );
             } finally {
               setProcesandoPago(false);
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -612,7 +612,7 @@ export default function ProfileScreen({ navigation }) {
             fotoPerfil: base64Uri,
             actualizadoEn: serverTimestamp(),
           },
-          { merge: true }
+          { merge: true },
         );
       }
     } catch (e) {
@@ -626,7 +626,7 @@ export default function ProfileScreen({ navigation }) {
     if (!permiso.granted) {
       Alert.alert(
         "Permiso requerido",
-        "Habilita el permiso de galería para elegir tu fotografía de perfil."
+        "Habilita el permiso de galería para elegir tu fotografía de perfil.",
       );
       return;
     }
@@ -641,7 +641,7 @@ export default function ProfileScreen({ navigation }) {
 
     if (!res.canceled && res.assets?.[0]?.base64) {
       await actualizarFotoUsuario(
-        `data:image/jpeg;base64,${res.assets[0].base64}`
+        `data:image/jpeg;base64,${res.assets[0].base64}`,
       );
     }
   };
@@ -652,7 +652,7 @@ export default function ProfileScreen({ navigation }) {
     if (!permiso.granted) {
       Alert.alert(
         "Permiso requerido",
-        "Habilita el permiso de cámara para tomar tu fotografía de perfil."
+        "Habilita el permiso de cámara para tomar tu fotografía de perfil.",
       );
       return;
     }
@@ -666,7 +666,7 @@ export default function ProfileScreen({ navigation }) {
 
     if (!res.canceled && res.assets?.[0]?.base64) {
       await actualizarFotoUsuario(
-        `data:image/jpeg;base64,${res.assets[0].base64}`
+        `data:image/jpeg;base64,${res.assets[0].base64}`,
       );
     }
   };
@@ -683,7 +683,7 @@ export default function ProfileScreen({ navigation }) {
     if (!email.trim()) {
       Alert.alert(
         "Correo requerido",
-        "Por favor escribe un correo electrónico válido."
+        "Por favor escribe un correo electrónico válido.",
       );
       return;
     }
@@ -699,7 +699,7 @@ export default function ProfileScreen({ navigation }) {
           if (authErr.code === "auth/requires-recent-login") {
             Alert.alert(
               "Inicio de sesión reciente requerido",
-              "Para cambiar tu correo de acceso debes volver a iniciar sesión. Se guardarán el resto de tus datos."
+              "Para cambiar tu correo de acceso debes volver a iniciar sesión. Se guardarán el resto de tus datos.",
             );
             setEmail(user.email || "");
           } else {
@@ -718,18 +718,18 @@ export default function ProfileScreen({ navigation }) {
           fotoPerfil: fotoPerfil || null,
           actualizadoEn: serverTimestamp(),
         },
-        { merge: true }
+        { merge: true },
       );
 
       Alert.alert(
         "Perfil actualizado 💜",
-        "Tus datos personales se guardaron correctamente."
+        "Tus datos personales se guardaron correctamente.",
       );
     } catch (error) {
       console.log("Error guardando datos personales:", error);
       Alert.alert(
         "Error al guardar",
-        error?.message || "No se pudieron actualizar tus datos."
+        error?.message || "No se pudieron actualizar tus datos.",
       );
     } finally {
       setGuardandoPerfil(false);
@@ -743,7 +743,7 @@ export default function ProfileScreen({ navigation }) {
 
       const q = query(
         collection(db, "solicitudes_sesion"),
-        where("pacienteId", "==", user.uid)
+        where("pacienteId", "==", user.uid),
       );
       const snap = await getDocs(q);
       const lista = snap.docs
@@ -769,7 +769,7 @@ export default function ProfileScreen({ navigation }) {
       let psiData = null;
       if (solicitud.psicologoId) {
         const psiSnap = await getDoc(
-          doc(db, "psicologos", solicitud.psicologoId)
+          doc(db, "psicologos", solicitud.psicologoId),
         );
         if (psiSnap.exists()) {
           psiData = psiSnap.data();
@@ -784,7 +784,7 @@ export default function ProfileScreen({ navigation }) {
           d.setDate(d.getDate() + 1);
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
             2,
-            "0"
+            "0",
           )}-${String(d.getDate()).padStart(2, "0")}`;
         })();
 
@@ -815,7 +815,7 @@ export default function ProfileScreen({ navigation }) {
         try {
           const resVinc = await vincularConPsicologo(
             user.uid,
-            psiData.codigoVinculacion
+            psiData.codigoVinculacion,
           );
           setPsicologoId(resVinc.psicologoId);
           setPsicologoVinculado(resVinc.psicologoNombre);
@@ -851,7 +851,7 @@ export default function ProfileScreen({ navigation }) {
       citasPrevias[fechaCita] = [...sinDuplicados, nuevaCita];
       await AsyncStorage.setItem(
         CITAS_STORAGE_KEY,
-        JSON.stringify(citasPrevias)
+        JSON.stringify(citasPrevias),
       );
 
       try {
@@ -873,7 +873,7 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "Cita guardada en tu calendario ✅",
-        `Tu sesión con ${nuevaCita.psicologoNombre} quedó agendada para el ${fechaCita} (${horaCita}). Puedes verla en la pestaña Calendario.`
+        `Tu sesión con ${nuevaCita.psicologoNombre} quedó agendada para el ${fechaCita} (${horaCita}). Puedes verla en la pestaña Calendario.`,
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo confirmar la cita: " + err.message);
@@ -891,7 +891,7 @@ export default function ProfileScreen({ navigation }) {
       const mensajeOpcional = mensajeReprogramacion.trim();
 
       const historialPrevio = Array.isArray(
-        solicitudReprogramando.historialMensajes
+        solicitudReprogramando.historialMensajes,
       )
         ? solicitudReprogramando.historialMensajes
         : [];
@@ -919,7 +919,7 @@ export default function ProfileScreen({ navigation }) {
             },
           ],
           actualizadoEn: serverTimestamp(),
-        }
+        },
       );
 
       setSolicitudReprogramando(null);
@@ -928,7 +928,7 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "Propuesta enviada 🔄",
-        `Le enviamos tu propuesta para el ${fechaReprogramacion} a las ${horaFormateada} al especialista para que la revise.`
+        `Le enviamos tu propuesta para el ${fechaReprogramacion} a las ${horaFormateada} al especialista para que la revise.`,
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo enviar tu propuesta: " + err.message);
@@ -952,14 +952,14 @@ export default function ProfileScreen({ navigation }) {
           (psi) =>
             typeof psi.nombre === "string" &&
             psi.nombre.trim().length > 2 &&
-            (psi.correo || psi.codigoVinculacion || psi.cedulaProfesional)
+            (psi.correo || psi.codigoVinculacion || psi.cedulaProfesional),
         );
       setTodosEspecialistas(lista);
     } catch (e) {
       console.log("Error cargando directorio de psicólogos:", e);
       Alert.alert(
         "Aviso",
-        "No se pudo cargar el directorio en este momento. Intenta de nuevo."
+        "No se pudo cargar el directorio en este momento. Intenta de nuevo.",
       );
     } finally {
       setCargandoDirectorio(false);
@@ -979,8 +979,8 @@ export default function ProfileScreen({ navigation }) {
         modPsi === "online"
           ? "online"
           : modPsi === "hybrid" || modPsi === "hibrida"
-          ? modalidadSolicitada
-          : "presencial";
+            ? modalidadSolicitada
+            : "presencial";
 
       const horaFormateada = `${horaCitaPicker}:${minutoCitaPicker} ${turnoCitaPicker}`;
       const mensajeOpcional = mensajeSolicitud.trim();
@@ -1011,7 +1011,7 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "Solicitud enviada ✨",
-        `Se envió tu solicitud a ${psi.nombre} para el ${fechaSeleccionadaCita} a las ${horaFormateada}.`
+        `Se envió tu solicitud a ${psi.nombre} para el ${fechaSeleccionadaCita} a las ${horaFormateada}.`,
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo enviar la solicitud: " + err.message);
@@ -1031,10 +1031,10 @@ export default function ProfileScreen({ navigation }) {
       .join(", ");
 
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      partes
+      partes,
     )}`;
     Linking.openURL(url).catch(() =>
-      Alert.alert("Error", "No se pudo abrir la aplicación de mapas.")
+      Alert.alert("Error", "No se pudo abrir la aplicación de mapas."),
     );
   };
 
@@ -1045,7 +1045,7 @@ export default function ProfileScreen({ navigation }) {
     if (!comentarioResena.trim()) {
       Alert.alert(
         "Comentario requerido",
-        "Escribe una breve reseña sobre tu experiencia con tu terapeuta."
+        "Escribe una breve reseña sobre tu experiencia con tu terapeuta.",
       );
       return;
     }
@@ -1070,7 +1070,7 @@ export default function ProfileScreen({ navigation }) {
       });
 
       const todasResenasSnap = await getDocs(
-        collection(db, "psicologos", psicologoId, "resenas")
+        collection(db, "psicologos", psicologoId, "resenas"),
       );
       let suma = 0;
       let total = 0;
@@ -1097,7 +1097,7 @@ export default function ProfileScreen({ navigation }) {
               calificacionPromedio: nuevoPromedio,
               totalResenas: total,
             }
-          : prev
+          : prev,
       );
 
       setComentarioResena("");
@@ -1107,7 +1107,7 @@ export default function ProfileScreen({ navigation }) {
         "¡Gracias por tu reseña! 💜",
         esAnonimaResena
           ? "Tu calificación se envió de forma anónima al perfil de tu especialista."
-          : "Tu calificación y comentario ya se reflejan en el perfil de tu especialista."
+          : "Tu calificación y comentario ya se reflejan en el perfil de tu especialista.",
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo guardar la reseña: " + err.message);
@@ -1145,7 +1145,7 @@ export default function ProfileScreen({ navigation }) {
 
       Alert.alert(
         "Cuenta desvinculada",
-        "Ya no estás conectada con ningún especialista. Puedes vincular otro código cuando quieras."
+        "Ya no estás conectada con ningún especialista. Puedes vincular otro código cuando quieras.",
       );
     } catch (err) {
       Alert.alert("Error", "No se pudo desvincular: " + err.message);
@@ -1160,7 +1160,7 @@ export default function ProfileScreen({ navigation }) {
       if (!res.granted) {
         Alert.alert(
           "Permiso de cámara",
-          "Activa el permiso de cámara para escanear el código QR de tu especialista."
+          "Activa el permiso de cámara para escanear el código QR de tu especialista.",
         );
         return;
       }
@@ -1174,7 +1174,9 @@ export default function ProfileScreen({ navigation }) {
     if (qrEscaneado || vinculando) return;
     setQrEscaneado(true);
 
-    const texto = String(data || "").trim().toUpperCase();
+    const texto = String(data || "")
+      .trim()
+      .toUpperCase();
     const codigoExtraido = texto.startsWith("LAMI-LINK|")
       ? texto.split("|")[1] || ""
       : texto;
@@ -1187,7 +1189,7 @@ export default function ProfileScreen({ navigation }) {
       setVinculando(true);
       const res = await vincularConPsicologo(
         auth.currentUser.uid,
-        codigoExtraido
+        codigoExtraido,
       );
       setPsicologoId(res.psicologoId);
       setPsicologoVinculado(res.psicologoNombre);
@@ -1196,7 +1198,7 @@ export default function ProfileScreen({ navigation }) {
       loadPsicologoDetalle(res.psicologoId);
       Alert.alert(
         "¡Vinculación exitosa!",
-        `Ahora estás conectado con ${res.psicologoNombre}`
+        `Ahora estás conectado con ${res.psicologoNombre}`,
       );
     } catch (err) {
       Alert.alert("Error", err.message);
@@ -1239,7 +1241,7 @@ export default function ProfileScreen({ navigation }) {
           },
         },
       ],
-      { cancelable: false }
+      { cancelable: false },
     );
   };
 
@@ -1273,7 +1275,7 @@ export default function ProfileScreen({ navigation }) {
 
               Alert.alert(
                 "Cuenta eliminada",
-                "Tu cuenta ha sido eliminada correctamente."
+                "Tu cuenta ha sido eliminada correctamente.",
               );
             } catch (error) {
               console.log("Error al eliminar cuenta:", error);
@@ -1292,7 +1294,7 @@ export default function ProfileScreen({ navigation }) {
                         });
                       },
                     },
-                  ]
+                  ],
                 );
               } else {
                 Alert.alert("Error", error.message);
@@ -1300,7 +1302,7 @@ export default function ProfileScreen({ navigation }) {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -1308,7 +1310,7 @@ export default function ProfileScreen({ navigation }) {
   const especialistasFiltrados = todosEspecialistas.filter((psi) => {
     if (!queryCiudad) return true;
     const ciudadPsi = normalizarTexto(
-      psi.ubicacion?.ciudadKey || psi.ubicacion?.ciudad || ""
+      psi.ubicacion?.ciudadKey || psi.ubicacion?.ciudad || "",
     );
     const espPsi = normalizarTexto(psi.especialidad || "");
     return ciudadPsi.includes(queryCiudad) || espPsi.includes(queryCiudad);
@@ -1370,7 +1372,7 @@ export default function ProfileScreen({ navigation }) {
             ]}
           >
             {[
-              ["stats-chart-outline", "Anxiósometro", "Anxiosimetro"],
+              ["leaf-outline", "Calma", "Anxiosimetro"],
               ["calendar-outline", "Calendario", "Calendario"],
               ["heart-outline", "Checking", "Checking"],
               ["person-circle", "Perfil", "Perfil"],
@@ -1730,11 +1732,7 @@ export default function ProfileScreen({ navigation }) {
 
                       {ubicacionVinculada?.ciudad ? (
                         <View style={styles.miniCityRow}>
-                          <Ionicons
-                            name="location"
-                            size={12}
-                            color="#0D9488"
-                          />
+                          <Ionicons name="location" size={12} color="#0D9488" />
                           <Text style={styles.miniCityText} numberOfLines={1}>
                             {ubicacionVinculada.ciudad}
                             {ubicacionVinculada.pisoConsultorio
@@ -1836,18 +1834,18 @@ export default function ProfileScreen({ navigation }) {
                         setVinculando(true);
                         const res = await vincularConPsicologo(
                           auth.currentUser.uid,
-                          codigoPsicologo
+                          codigoPsicologo,
                         );
                         setPsicologoId(res.psicologoId);
                         setPsicologoVinculado(res.psicologoNombre);
                         setPsicologoEspecialidad(
-                          res.psicologoEspecialidad || ""
+                          res.psicologoEspecialidad || "",
                         );
                         setPsicologoFoto(res.psicologoFoto);
                         loadPsicologoDetalle(res.psicologoId);
                         Alert.alert(
                           "¡Vinculación exitosa!",
-                          `Ahora estás conectado con ${res.psicologoNombre}`
+                          `Ahora estás conectado con ${res.psicologoNombre}`,
                         );
                       } catch (err) {
                         Alert.alert("Error", err.message);
@@ -1972,10 +1970,10 @@ export default function ProfileScreen({ navigation }) {
                               sinCupo
                                 ? { backgroundColor: "#FFE4E6" }
                                 : confirmadaPorTerapeuta || yaAceptada
-                                ? { backgroundColor: "#CCFBF1" }
-                                : esperandoCambio
-                                ? { backgroundColor: "#E0E7FF" }
-                                : { backgroundColor: "#FEF3C7" },
+                                  ? { backgroundColor: "#CCFBF1" }
+                                  : esperandoCambio
+                                    ? { backgroundColor: "#E0E7FF" }
+                                    : { backgroundColor: "#FEF3C7" },
                             ]}
                           >
                             <Text
@@ -1984,21 +1982,21 @@ export default function ProfileScreen({ navigation }) {
                                 sinCupo
                                   ? { color: "#BE123C" }
                                   : confirmadaPorTerapeuta || yaAceptada
-                                  ? { color: "#0F766E" }
-                                  : esperandoCambio
-                                  ? { color: "#4338CA" }
-                                  : { color: "#92400E" },
+                                    ? { color: "#0F766E" }
+                                    : esperandoCambio
+                                      ? { color: "#4338CA" }
+                                      : { color: "#92400E" },
                               ]}
                             >
                               {sinCupo
                                 ? "Sin disponibilidad"
                                 : yaAceptada
-                                ? "En tu calendario"
-                                : confirmadaPorTerapeuta
-                                ? "Propuesta recibida"
-                                : esperandoCambio
-                                ? "Cambio enviado"
-                                : "Esperando respuesta"}
+                                  ? "En tu calendario"
+                                  : confirmadaPorTerapeuta
+                                    ? "Propuesta recibida"
+                                    : esperandoCambio
+                                      ? "Cambio enviado"
+                                      : "Esperando respuesta"}
                             </Text>
                           </View>
                         </View>
@@ -2105,18 +2103,18 @@ export default function ProfileScreen({ navigation }) {
                                   const primerDiaSemana = new Date(
                                     anio,
                                     mes,
-                                    1
+                                    1,
                                   ).getDay();
                                   const totalDiasMes = new Date(
                                     anio,
                                     mes + 1,
-                                    0
+                                    0,
                                   ).getDate();
                                   const hoy = new Date();
                                   const hoyStr = `${hoy.getFullYear()}-${String(
-                                    hoy.getMonth() + 1
+                                    hoy.getMonth() + 1,
                                   ).padStart(2, "0")}-${String(
-                                    hoy.getDate()
+                                    hoy.getDate(),
                                   ).padStart(2, "0")}`;
 
                                   const celdas = [];
@@ -2131,7 +2129,7 @@ export default function ProfileScreen({ navigation }) {
                                         <TouchableOpacity
                                           onPress={() =>
                                             setCalMesReprogramar(
-                                              new Date(anio, mes - 1, 1)
+                                              new Date(anio, mes - 1, 1),
                                             )
                                           }
                                           style={{ padding: 6 }}
@@ -2148,7 +2146,7 @@ export default function ProfileScreen({ navigation }) {
                                         <TouchableOpacity
                                           onPress={() =>
                                             setCalMesReprogramar(
-                                              new Date(anio, mes + 1, 1)
+                                              new Date(anio, mes + 1, 1),
                                             )
                                           }
                                           style={{ padding: 6 }}
@@ -2191,9 +2189,9 @@ export default function ProfileScreen({ navigation }) {
                                             );
                                           }
                                           const fechaStr = `${anio}-${String(
-                                            mes + 1
+                                            mes + 1,
                                           ).padStart(2, "0")}-${String(
-                                            diaNum
+                                            diaNum,
                                           ).padStart(2, "0")}`;
                                           const esPasado = fechaStr < hoyStr;
                                           const seleccionado =
@@ -2204,9 +2202,7 @@ export default function ProfileScreen({ navigation }) {
                                               key={fechaStr}
                                               disabled={esPasado}
                                               onPress={() =>
-                                                setFechaReprogramacion(
-                                                  fechaStr
-                                                )
+                                                setFechaReprogramacion(fechaStr)
                                               }
                                               style={styles.miniCalCell}
                                             >
@@ -2214,8 +2210,7 @@ export default function ProfileScreen({ navigation }) {
                                                 style={[
                                                   styles.miniCalDayBubble,
                                                   seleccionado &&
-                                                    styles
-                                                      .miniCalDayBubbleSelected,
+                                                    styles.miniCalDayBubbleSelected,
                                                 ]}
                                               >
                                                 <Text
@@ -2373,11 +2368,10 @@ export default function ProfileScreen({ navigation }) {
                                     setSolicitudReprogramando(sol);
                                     setMensajeReprogramacion("");
                                     const baseF =
-                                      sol.fechaSolicitada ||
-                                      getTomorrowISO();
+                                      sol.fechaSolicitada || getTomorrowISO();
                                     setFechaReprogramacion(baseF);
                                     const parsed = parseHoraToPicker(
-                                      sol.horaSolicitada || "10:00 AM"
+                                      sol.horaSolicitada || "10:00 AM",
                                     );
                                     setHoraReprogPicker(parsed.hora);
                                     setMinutoReprogPicker(parsed.minuto);
@@ -2506,11 +2500,7 @@ export default function ProfileScreen({ navigation }) {
                   end={{ x: 1, y: 0 }}
                   style={styles.saveProfileBtn}
                 >
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color="#FFFFFF"
-                  />
+                  <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
                   <Text style={styles.saveProfileBtnText}>
                     {guardandoPerfil
                       ? "Guardando cambios..."
@@ -2570,7 +2560,7 @@ export default function ProfileScreen({ navigation }) {
                           if (!ok) {
                             Alert.alert(
                               "Permiso requerido",
-                              "Activa permisos de notificaciones para que te recordemos realizar los ejercicios."
+                              "Activa permisos de notificaciones para que te recordemos realizar los ejercicios.",
                             );
                             return;
                           }
@@ -2617,7 +2607,7 @@ export default function ProfileScreen({ navigation }) {
                           await savePreferences(goal, false);
                           Alert.alert(
                             "Permiso requerido",
-                            "No se pudo activar notificaciones porque no diste permisos."
+                            "No se pudo activar notificaciones porque no diste permisos.",
                           );
                           return;
                         }
@@ -2715,7 +2705,7 @@ export default function ProfileScreen({ navigation }) {
                       <TouchableOpacity
                         onPress={() =>
                           setFeedbackMsg(
-                            "Gracias por estar aquí 💜 Me alegra acompañarte en tu proceso."
+                            "Gracias por estar aquí 💜 Me alegra acompañarte en tu proceso.",
                           )
                         }
                         style={{
@@ -2734,7 +2724,7 @@ export default function ProfileScreen({ navigation }) {
                       <TouchableOpacity
                         onPress={() =>
                           setFeedbackMsg(
-                            "Gracias por decirlo 🤍 Seguiremos mejorando para ti."
+                            "Gracias por decirlo 🤍 Seguiremos mejorando para ti.",
                           )
                         }
                         style={{
@@ -2854,8 +2844,7 @@ export default function ProfileScreen({ navigation }) {
                     </Text>
 
                     <Text style={styles.crisisPhone}>
-                      📞 Línea de intervención en crisis psicológicas
-                      (Veracruz)
+                      📞 Línea de intervención en crisis psicológicas (Veracruz)
                     </Text>
 
                     <TouchableOpacity
@@ -3484,9 +3473,7 @@ export default function ProfileScreen({ navigation }) {
                     style={styles.backToListBtn}
                   >
                     <Ionicons name="arrow-back" size={16} color="#0F766E" />
-                    <Text style={styles.backToListText}>
-                      Volver a la lista
-                    </Text>
+                    <Text style={styles.backToListText}>Volver a la lista</Text>
                   </TouchableOpacity>
 
                   <Text style={styles.agendarTitle}>
@@ -3603,10 +3590,10 @@ export default function ProfileScreen({ navigation }) {
                     const totalDiasMes = new Date(anio, mes + 1, 0).getDate();
                     const hoy = new Date();
                     const hoyStr = `${hoy.getFullYear()}-${String(
-                      hoy.getMonth() + 1
+                      hoy.getMonth() + 1,
                     ).padStart(2, "0")}-${String(hoy.getDate()).padStart(
                       2,
-                      "0"
+                      "0",
                     )}`;
 
                     const celdas = [];
@@ -3651,7 +3638,7 @@ export default function ProfileScreen({ navigation }) {
                               <Text key={dw} style={styles.miniCalWeekText}>
                                 {dw}
                               </Text>
-                            )
+                            ),
                           )}
                         </View>
 
@@ -3666,10 +3653,10 @@ export default function ProfileScreen({ navigation }) {
                               );
                             }
                             const fechaStr = `${anio}-${String(
-                              mes + 1
+                              mes + 1,
                             ).padStart(2, "0")}-${String(diaNum).padStart(
                               2,
-                              "0"
+                              "0",
                             )}`;
                             const esPasado = fechaStr < hoyStr;
                             const seleccionado =
@@ -3817,19 +3804,19 @@ export default function ProfileScreen({ navigation }) {
                 ) : (
                   especialistasFiltrados.map((psi) => {
                     const ub = psi.ubicacion;
-                    const modRaw = (psi.modalidad || "presencial").toLowerCase();
+                    const modRaw = (
+                      psi.modalidad || "presencial"
+                    ).toLowerCase();
                     const modLabel =
                       modRaw === "online"
                         ? "100% Online"
                         : modRaw === "hybrid" || modRaw === "hibrida"
-                        ? "Híbrida"
-                        : "Presencial";
+                          ? "Híbrida"
+                          : "Presencial";
 
                     const totalRes = Number(psi.totalResenas || 0);
                     const ratingVal =
-                      totalRes > 0
-                        ? Number(psi.calificacionPromedio || 0)
-                        : 0;
+                      totalRes > 0 ? Number(psi.calificacionPromedio || 0) : 0;
 
                     return (
                       <View key={psi.id} style={styles.dirPsiCard}>
@@ -3911,7 +3898,7 @@ export default function ProfileScreen({ navigation }) {
                             onPress={() => {
                               setEspecialistaSeleccionadoPedir(psi);
                               setModalidadSolicitada(
-                                modRaw === "online" ? "online" : "presencial"
+                                modRaw === "online" ? "online" : "presencial",
                               );
                             }}
                             style={styles.dirRequestBtn}
@@ -4159,9 +4146,7 @@ export default function ProfileScreen({ navigation }) {
               barcodeScannerSettings={{
                 barcodeTypes: ["qr"],
               }}
-              onBarcodeScanned={
-                qrEscaneado ? undefined : handleBarCodeScanned
-              }
+              onBarcodeScanned={qrEscaneado ? undefined : handleBarCodeScanned}
             />
           )}
 

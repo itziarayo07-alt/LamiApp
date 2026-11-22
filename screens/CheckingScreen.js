@@ -54,35 +54,28 @@ const ejerciciosIniciales = [
   },
   {
     id: 4,
-    titulo: "Técnica cognitiva ABCDE",
+    titulo: "Descubre cómo se da la ansiedad",
     descripcion:
-      "Diagnostica tus pensamientos automáticos (A-B-C), debátelos (D-E) y obtén tu interpretación clínica.",
-    duracion: "5 - 8 minutos",
-  },
-  {
-    id: 5,
-    titulo: "Autoabrazo consciente",
-    descripcion:
-      "Cruza los brazos y abrázate. Inhala y exhala lento mientras repites: 'Estoy aquí conmigo'.",
-    duracion: "2 - 4 minutos",
+      "Un espacio para leer, entender qué es la ansiedad y por qué tu cuerpo reacciona como lo hace. Conocerla también es una forma de cuidarte.",
+    duracion: "Lectura breve",
+    esInfoAnsiedad: true,
   },
 ];
 
 const imagenTestDiario = require("../assets/emociones.jpg");
 const imagenTestPersonalidad = require("../assets/personalidad.jpg");
-const imagenInfoAnsiedad = require("../assets/ansiedad.jpg");
+const imagenTecnicaABCDE = require("../assets/ilustrar.jpg");
 
 const imagenesEjercicios = {
   1: require("../assets/respracion.gif"), // Respiración 4-7-8
   2: require("../assets/corporal.png"), // Escaneo corporal
   3: require("../assets/sentidos.jpg"), // Anclaje con los sentidos
-  4: require("../assets/ilustrar.jpg"), // Técnica cognitiva ABCDE
-  5: require("../assets/autoabrazo.jpg"), // Autoabrazo consciente
+  4: require("../assets/ansiedad.jpg"), // Descubre cómo se da la ansiedad
 };
 
 export default function CheckingScreen({ navigation }) {
   const [ejercicios] = useState(ejerciciosIniciales);
-  const [activeNav, setActiveNav] = useState(2); // 0=Anxiosímetro, 1=Calendario, 2=Checking, 3=Perfil
+  const [activeNav, setActiveNav] = useState(2); // 0=Calma, 1=Calendario, 2=Checking, 3=Perfil
 
   const [hiddenMap, setHiddenMap] = useState({}); // { [id]: hiddenUntilISO }
   const [testRealizadoHoy, setTestRealizadoHoy] = useState(false);
@@ -92,6 +85,7 @@ export default function CheckingScreen({ navigation }) {
   // controla si hoy ya se puede hacer el test (después de las 5:00)
   const [puedeHacerTestHoy, setPuedeHacerTestHoy] = useState(false);
   const [tareasPsicologo, setTareasPsicologo] = useState([]);
+
   useEffect(() => {
     cargarEstado();
 
@@ -106,7 +100,6 @@ export default function CheckingScreen({ navigation }) {
   }, []);
 
   const ensureNotifPermission = async () => {
-    // En emulador a veces no funcionan bien debemos probar en apk niñasss
     if (!Device.isDevice) return false;
 
     const { status } = await Notifications.getPermissionsAsync();
@@ -139,7 +132,6 @@ export default function CheckingScreen({ navigation }) {
   };
 
   const scheduleTestRemindersIfNeeded = async (hechoHoy) => {
-    // Si ya lo hizo hoy, cancelamos cualquier recordatorio pendiente.
     if (hechoHoy) {
       await cancelTestReminders();
       return;
@@ -163,7 +155,6 @@ export default function CheckingScreen({ navigation }) {
       return d;
     };
 
-    // CAMBIO: 11:20 -> 5:00 AM
     const date1120 = makeDate(5, 0);
     const date1900 = makeDate(19, 0);
 
@@ -196,7 +187,6 @@ export default function CheckingScreen({ navigation }) {
 
   const cargarEstado = async () => {
     try {
-      // Para ocultar ejercicios conforme se hayan realizado
       const data = await AsyncStorage.getItem("checkingHiddenEjercicios");
       if (data) {
         const parsed = JSON.parse(data);
@@ -215,42 +205,32 @@ export default function CheckingScreen({ navigation }) {
         if (Object.keys(cleaned).length !== Object.keys(parsed).length) {
           await AsyncStorage.setItem(
             "checkingHiddenEjercicios",
-            JSON.stringify(cleaned)
+            JSON.stringify(cleaned),
           );
         }
       }
 
-      // Test diario - una vez por día y solo después de las 5:00 am
       const storedFechaTest = await AsyncStorage.getItem("ultimaFechaTest");
       const ahora = new Date();
-      const hoyStr = ahora.toISOString().slice(0, 10); // YYYY-MM-DD
+      const hoyStr = ahora.toISOString().slice(0, 10);
 
-      // ¿ya se hizo el test hoy?
       const hechoHoy = storedFechaTest === hoyStr;
       setTestRealizadoHoy(hechoHoy);
 
-      //programar notis del test (5:00 y 19:00) si no lo ha hecho hoy
       await scheduleTestRemindersIfNeeded(hechoHoy);
 
-      // CAMBIO NIÑASSS--- ¿ya pasaron las 5:00 am? se desbloquea el test
-      const hora = ahora.getHours(); // 0-23
-      const minutos = ahora.getMinutes(); // 0-59
+      const hora = ahora.getHours();
       const yaEs1120 = hora >= 5;
 
-      // puedes hacer el test SOLO si:
-      // - todavía no lo hiciste hoy
-      // - y ya pasaron las 5:00
       setPuedeHacerTestHoy(!hechoHoy && yaEs1120);
 
-      // Test personalidad, una vez
       const storedPers = await AsyncStorage.getItem("testPersonalidadHecho");
       if (storedPers === "SI") {
         setTestPersonalidadHecho(true);
       }
 
-      // Leer resultado del test de personalidad (si existe)
       const storedResultado = await AsyncStorage.getItem(
-        "testPersonalidadResultado_v1"
+        "testPersonalidadResultado_v1",
       );
       if (storedResultado) {
         setResultadoPersonalidad(JSON.parse(storedResultado));
@@ -260,31 +240,13 @@ export default function CheckingScreen({ navigation }) {
     }
   };
 
-const handleEmpezarEjercicio = async (item) => {
+  const handleEmpezarEjercicio = async (item) => {
     console.log("Ejercicio seleccionado:", item.titulo);
 
-    // Temporalmente desactivado el bloqueo de 2 horas para pruebas
-    /*
-    const now = new Date();
-    const hiddenUntil = new Date(
-      now.getTime() + 2 * 60 * 60 * 1000
-    ).toISOString(); // +2 horas
-
-    try {
-      const data = await AsyncStorage.getItem("checkingHiddenEjercicios");
-      let map = data ? JSON.parse(data) : {};
-      map[item.id] = hiddenUntil;
-
-      await AsyncStorage.setItem(
-        "checkingHiddenEjercicios",
-        JSON.stringify(map)
-      );
-
-      setHiddenMap(map);
-    } catch (e) {
-      console.log("Error ocultando ejercicio:", e);
+    if (item.esInfoAnsiedad) {
+      navigation.navigate("PantallaRapida");
+      return;
     }
-    */
 
     if (item.id === 1) {
       navigation.navigate("Respiracion");
@@ -300,16 +262,10 @@ const handleEmpezarEjercicio = async (item) => {
       navigation.navigate("Sentidos");
       return;
     }
+  };
 
-    if (item.id === 4) {
-      navigation.navigate("TecnicaABCDE");
-      return;
-    }
-
-    if (item.id === 5) {
-      navigation.navigate("Autoabrazo");
-      return;
-    }
+  const handleTecnicaABCDE = () => {
+    navigation.navigate("TecnicaABCDE");
   };
 
   const handleTestDiario = async () => {
@@ -331,7 +287,6 @@ const handleEmpezarEjercicio = async (item) => {
     }
   };
 
-  // TEST PERSONALIDAD ------------------------------------------------chanchan
   const handleTestPersonalidad = async () => {
     try {
       const testYaHecho = await AsyncStorage.getItem("testPersonalidadHecho");
@@ -348,22 +303,16 @@ const handleEmpezarEjercicio = async (item) => {
     }
   };
 
-  const handleLeerAnsiedad = () => {
-    navigation.navigate("PantallaRapida");
-  };
-
-  // Mostramos todos los ejercicios sin filtrar durante las pruebas
   const visibleEjercicios = ejercicios;
-
   const canGoTestDiario = !testRealizadoHoy && puedeHacerTestHoy;
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        {/*Barra de navegacion*/}
+        {/* Barra de navegación */}
         <View style={styles.navBar}>
           {[
-            ["stats-chart-outline", "Anxiósometro"],
+            ["leaf-outline", "Calma"],
             ["calendar-outline", "Calendario"],
             ["heart-outline", "Checking"],
             ["person-circle-outline", "Perfil"],
@@ -401,7 +350,7 @@ const handleEmpezarEjercicio = async (item) => {
           {/* TITULO PRINCIPAL */}
           <Text style={styles.titulo}>Ejercicios del día</Text>
           <Text style={styles.subtitulo}>
-            Elige un ejercicio o recurso para acompañarte en este momento 💫
+            Elige un ejercicio o recurso para acompañarte en este momento
           </Text>
 
           {/* PRIORIDAD: TEST DIARIO */}
@@ -416,8 +365,8 @@ const handleEmpezarEjercicio = async (item) => {
 
             <Text style={styles.priorityTitle}>Test diario</Text>
             <Text style={styles.priorityText}>
-              Una vez al día, tómate unos minutos para registrar cómo estás. Este
-              espacio es solo para ti 💜
+              Una vez al día, tómate unos minutos para registrar cómo estás.
+              Este espacio es solo para ti
             </Text>
 
             <TouchableOpacity
@@ -433,8 +382,8 @@ const handleEmpezarEjercicio = async (item) => {
                 {testRealizadoHoy
                   ? "Test realizado"
                   : !puedeHacerTestHoy
-                  ? "Disponible a las 5:00 am"
-                  : "Hacer test"}
+                    ? "Disponible a las 5:00 am"
+                    : "Hacer test"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -471,37 +420,34 @@ const handleEmpezarEjercicio = async (item) => {
             </TouchableOpacity>
           </View>
 
-          {/* INFO: LEER SOBRE LA ANSIEDAD */}
+          {/* TÉCNICA COGNITIVA ABCDE */}
           <View style={styles.priorityCard}>
             <View style={styles.cardImageBox}>
               <Image
-                source={imagenInfoAnsiedad}
+                source={imagenTecnicaABCDE}
                 style={styles.cardImage}
                 resizeMode="cover"
               />
             </View>
 
-            <Text style={styles.priorityTitle}>
-              Descubre cómo se da la ansiedad
-            </Text>
+            <Text style={styles.priorityTitle}>Técnica cognitiva ABCDE</Text>
             <Text style={styles.priorityText}>
-              Un espacio para leer, entender qué es la ansiedad y por qué tu
-              cuerpo reacciona como lo hace. Conocerla también es una forma de
-              cuidarte.
+              Diagnostica tus pensamientos automáticos (A-B-C), debátelos (D-E)
+              y obtén tu interpretación clínica.
             </Text>
 
             <TouchableOpacity
               style={styles.priorityButton}
-              onPress={handleLeerAnsiedad}
+              onPress={handleTecnicaABCDE}
               activeOpacity={0.9}
             >
               <Text style={styles.priorityButtonText}>
-                Leer sobre la ansiedad
+                Empezar técnica ABCDE
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* LISTA DE EJERCICIOS: SI EL PSICÓLOGO ASIGNÓ EJERCICIOS PERSONALIZADOS, SE OCULTAN LOS POR DEFECTO */}
+          {/* LISTA DE EJERCICIOS */}
           {tareasPsicologo.length > 0 ? (
             <>
               <View
@@ -541,24 +487,22 @@ const handleEmpezarEjercicio = async (item) => {
                 const proximoMs = tarea.proximoDisponibleISO
                   ? new Date(tarea.proximoDisponibleISO).getTime()
                   : 0;
-                const enEsperaRecurrente =
-                  esRecurrente && proximoMs > ahoraMs;
+                const enEsperaRecurrente = esRecurrente && proximoMs > ahoraMs;
                 const yaCompletadoUnico =
                   !esRecurrente && Boolean(tarea.completado);
-                const deshabilitado =
-                  enEsperaRecurrente || yaCompletadoUnico;
+                const deshabilitado = enEsperaRecurrente || yaCompletadoUnico;
 
                 let textoTiempoRestante = "";
                 if (enEsperaRecurrente) {
                   const diffHoras = Math.ceil(
-                    (proximoMs - ahoraMs) / (1000 * 60 * 60)
+                    (proximoMs - ahoraMs) / (1000 * 60 * 60),
                   );
                   textoTiempoRestante =
                     diffHoras <= 1
                       ? "Disponible en menos de 1 hora"
                       : diffHoras < 24
-                      ? `Disponible en ${diffHoras} horas`
-                      : `Disponible en ${Math.ceil(diffHoras / 24)} día(s)`;
+                        ? `Disponible en ${diffHoras} horas`
+                        : `Disponible en ${Math.ceil(diffHoras / 24)} día(s)`;
                 }
 
                 return (
@@ -595,9 +539,7 @@ const handleEmpezarEjercicio = async (item) => {
                           fontSize: 11,
                           fontWeight: "700",
                           color: esRecurrente ? "#047857" : "#6D28D9",
-                          backgroundColor: esRecurrente
-                            ? "#D1FAE5"
-                            : "#EDE9FE",
+                          backgroundColor: esRecurrente ? "#D1FAE5" : "#EDE9FE",
                           paddingHorizontal: 8,
                           paddingVertical: 3,
                           borderRadius: 999,
@@ -634,8 +576,8 @@ const handleEmpezarEjercicio = async (item) => {
                         {yaCompletadoUnico
                           ? "Ejercicio completado ✓"
                           : enEsperaRecurrente
-                          ? `Realizado ✓ • ${textoTiempoRestante}`
-                          : "Realizar ejercicio personalizado"}
+                            ? `Realizado ✓ • ${textoTiempoRestante}`
+                            : "Realizar ejercicio personalizado"}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -664,7 +606,11 @@ const handleEmpezarEjercicio = async (item) => {
                   onPress={() => handleEmpezarEjercicio(item)}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.botonTexto}>Empezar ejercicio</Text>
+                  <Text style={styles.botonTexto}>
+                    {item.esInfoAnsiedad
+                      ? "Leer sobre la ansiedad"
+                      : "Empezar ejercicio"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ))

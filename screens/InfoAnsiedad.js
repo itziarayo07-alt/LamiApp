@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function InfoAnsiedad({ navigation }) {
+export default function InfoBienestar({ navigation }) {
   const scrollViewRef = useRef(null);
   const [sectionPositions, setSectionPositions] = useState({});
 
@@ -26,7 +26,7 @@ export default function InfoAnsiedad({ navigation }) {
     const y = sectionPositions[key];
     if (y != null && scrollViewRef.current) {
       scrollViewRef.current.scrollTo({
-        y: y - 80, 
+        y: y - 80,
         animated: true,
       });
     }
@@ -46,10 +46,9 @@ export default function InfoAnsiedad({ navigation }) {
 
           <View style={styles.headerCenter}>
             <Text style={styles.headerLabel}>Nota psicoeducativa</Text>
-            <Text style={styles.headerTitle}>Ansiedad y cuerpo</Text>
+            <Text style={styles.headerTitle}>Bienestar y autorregulación</Text>
           </View>
 
-          {/* espacio para balancear el header */}
           <View style={{ width: 24 }} />
         </View>
 
@@ -62,13 +61,13 @@ export default function InfoAnsiedad({ navigation }) {
               color="#4B5563"
               style={{ marginRight: 4 }}
             />
-            <Text style={styles.metaText}>Lectura breve</Text>
+            <Text style={styles.metaText}>Lectura breve · Uso libre</Text>
           </View>
 
           <View style={styles.metaDivider} />
 
           <Text style={styles.metaSecondary}>
-            Uso psicoeducativo · No diagnóstico
+            Psicoeducación y autocuidado · No diagnóstico
           </Text>
         </View>
 
@@ -80,13 +79,16 @@ export default function InfoAnsiedad({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.articleCard}>
-            <Text style={styles.articleTag}>Comprender la ansiedad</Text>
+            <Text style={styles.articleTag}>Autocuidado cotidiano en Lami</Text>
 
-            <Text style={styles.title}>Descubre cómo se da la ansiedad</Text>
+            <Text style={styles.title}>
+              Cuerpo, emociones y seguimiento diario
+            </Text>
 
             <Text style={styles.subtitle}>
-              Un espacio para entender qué es la ansiedad y por qué tu cuerpo
-              reacciona como lo hace. Conocerla también es una forma de cuidarte.
+              Un espacio neutral para comprender cómo responde tu organismo en
+              el día a día, registrar tus hábitos de bienestar y decidir a tu
+              ritmo si deseas apoyo profesional.
             </Text>
 
             {/* Nota aclaratoria */}
@@ -98,8 +100,9 @@ export default function InfoAnsiedad({ navigation }) {
                 style={{ marginRight: 6 }}
               />
               <Text style={styles.noticeText}>
-                Esta información es psicoeducativa y no reemplaza una valoración
-                profesional individual.
+                Contenido psicoeducativo de uso libre con fines de autocuidado y
+                prevención, elaborado con criterios alineados a guías abiertas
+                de salud mental. No sustituye una consulta o evaluación clínica.
               </Text>
             </View>
 
@@ -127,7 +130,7 @@ export default function InfoAnsiedad({ navigation }) {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={styles.indexText}>
-                    ¿Qué es la ansiedad?
+                    ¿Qué significa registrar tu bienestar?
                   </Text>
                 </TouchableOpacity>
 
@@ -143,7 +146,7 @@ export default function InfoAnsiedad({ navigation }) {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={styles.indexText}>
-                    Por qué se siente tan intensa
+                    Señales cotidianas de carga o tensión
                   </Text>
                 </TouchableOpacity>
 
@@ -159,7 +162,7 @@ export default function InfoAnsiedad({ navigation }) {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={styles.indexText}>
-                    Qué pasa en tu cuerpo
+                    Cómo responde el cuerpo en el día a día
                   </Text>
                 </TouchableOpacity>
 
@@ -175,7 +178,7 @@ export default function InfoAnsiedad({ navigation }) {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={styles.indexText}>
-                    Ansiedad vs. peligro real
+                    Demanda diaria vs. amenaza real
                   </Text>
                 </TouchableOpacity>
 
@@ -191,7 +194,7 @@ export default function InfoAnsiedad({ navigation }) {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={styles.indexText}>
-                    Conocer tu ansiedad
+                    Prevención y hábitos de autocuidado
                   </Text>
                 </TouchableOpacity>
 
@@ -206,33 +209,35 @@ export default function InfoAnsiedad({ navigation }) {
                     color="#4B5563"
                     style={{ marginRight: 6 }}
                   />
-                  <Text style={styles.indexText}>Cuándo pedir ayuda</Text>
+                  <Text style={styles.indexText}>
+                    Cuándo sumar acompañamiento profesional
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Sección 1 */}
             <View onLayout={(e) => handleRegisterSection("queEs", e)}>
-              <Text style={styles.sectionTitle}>¿Qué es la ansiedad?</Text>
+              <Text style={styles.sectionTitle}>
+                ¿Qué significa registrar tu bienestar?
+              </Text>
               <View style={styles.sectionDivider} />
               <Text style={styles.paragraph}>
-                La ansiedad es una respuesta natural de tu cuerpo cuando percibe
-                peligro, cambios o situaciones importantes. No es que estés{" "}
-                <Text style={styles.highlight}>rota</Text> ni que haya algo malo
-                contigo: es tu sistema intentando protegerte, a veces con demasiada
-                intensidad.
+                Las emociones, la energía y el ánimo cambian de forma natural
+                según el descanso, el trabajo, los vínculos y las etapas de la
+                vida. Tener un espacio neutro para observarlos ayuda a{" "}
+                <Text style={styles.highlight}>identificar patrones</Text> sin
+                juzgar lo que sientes.
               </Text>
 
               <Text style={styles.paragraph}>
-                Imagina que tienes una alarma interna. Cuando algo te preocupa,
-                esa alarma se enciende y tu cuerpo se prepara para reaccionar.
-                El problema no es la alarma en sí, sino cuando se activa muy
-                seguido o muy fuerte.
+                No necesitas estar en una crisis para usar Lami: el seguimiento
+                diario y los ejercicios breves también sirven como prevención y
+                cuidado cotidiano.
               </Text>
 
               <View style={styles.sectionImageBox}>
                 <Image
-                  
                   source={require("../assets/informativa/cuidar.gif")}
                   style={styles.sectionImage}
                   resizeMode="cover"
@@ -243,37 +248,33 @@ export default function InfoAnsiedad({ navigation }) {
             {/* Sección 2 */}
             <View onLayout={(e) => handleRegisterSection("intenso", e)}>
               <Text style={styles.sectionTitle}>
-                ¿Por qué se siente tan intenso?
+                Señales cotidianas de carga o tensión
               </Text>
               <View style={styles.sectionDivider} />
               <Text style={styles.paragraph}>
-                Cuando aparece la ansiedad, tu cuerpo entra en modo{" "}
-                <Text style={styles.highlight}>“alerta”</Text>. Esto puede hacer
-                que notes cosas como:
+                Cuando se acumula el estrés, el cansancio o la preocupación, el
+                organismo suele enviar señales tempranas como:
               </Text>
 
               <View style={styles.bulletList}>
                 <Text style={styles.bulletItem}>
-                  • Palpitaciones o corazón acelerado
+                  • Cambios en el ritmo cardíaco o sensación de aceleración
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Tensión en el cuerpo o temblores
+                  • Tensión muscular en hombros, cuello, mandíbula o estómago
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Sensación de nudo en la garganta o en el estómago
+                  • Cansancio mental o dificultad para sostener la atención
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Dificultad para concentrarte
-                </Text>
-                <Text style={styles.bulletItem}>
-                  • Pensamientos que se repiten una y otra vez
+                  • Pensamientos que giran repetidamente sobre pendientes o
+                  escenarios futuros
                 </Text>
               </View>
 
               <Text style={styles.paragraph}>
-                Todo esto es parte de la misma reacción: tu cuerpo cree que
-                necesitas defenderte de algo y se activa para ayudarte, aunque
-                a veces lo haga en momentos donde no hay un peligro real.
+                Notar estas señales a tiempo te permite hacer una pausa breve
+                antes de que el desgaste crezca.
               </Text>
 
               <View style={styles.sectionImageBox}>
@@ -288,39 +289,35 @@ export default function InfoAnsiedad({ navigation }) {
             {/* Sección 3 */}
             <View onLayout={(e) => handleRegisterSection("cuerpo", e)}>
               <Text style={styles.sectionTitle}>
-                Qué pasa en tu cuerpo cuando tienes ansiedad
+                Cómo responde el cuerpo en el día a día
               </Text>
               <View style={styles.sectionDivider} />
               <Text style={styles.paragraph}>
-                Algunas cosas que ocurren por dentro cuando se activa la
-                ansiedad son:
+                Desde una perspectiva psicobiológica, el cuerpo ajusta su nivel
+                de activación ante exigencias externas o internas:
               </Text>
 
               <View style={styles.bulletList}>
                 <Text style={styles.bulletItem}>
-                  • Se liberan hormonas como la adrenalina y el cortisol.
+                  • Libera mensajeros de activación (como adrenalina y cortisol)
+                  para movilizar energía.
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Tu respiración puede volverse más rápida o superficial.
+                  • Modifica el patrón respiratorio, haciéndolo más rápido o
+                  superficial.
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Tus músculos se tensan, como si te prepararas para correr o
-                  defenderte.
-                </Text>
-                <Text style={styles.bulletItem}>
-                  • Tu mente intenta anticipar todo lo que podría salir mal.
+                  • Aumenta el tono muscular como preparación para responder.
                 </Text>
               </View>
 
               <Text style={styles.paragraph}>
-                No significa que “pierdas el control”, sino que tu sistema está
-                reaccionando con demasiada intensidad. Por eso las técnicas de
-                respiración, el movimiento suave y los ejercicios de atención al
-                presente pueden ayudarte a enviarle el mensaje de{" "}
-                <Text style={styles.highlight}>“ya pasó, estoy a salvo”</Text>.
+                Practicar respiración lenta, anclaje sensorial o pausas de
+                descanso ayuda a{" "}
+                <Text style={styles.highlight}>regular esa activación</Text> de
+                forma gradual y segura.
               </Text>
 
-              
               <View style={styles.sectionImageBox}>
                 <Image
                   source={require("../assets/informativa/respirarRapido.gif")}
@@ -333,34 +330,32 @@ export default function InfoAnsiedad({ navigation }) {
             {/* Sección 4 */}
             <View onLayout={(e) => handleRegisterSection("vsPeligro", e)}>
               <Text style={styles.sectionTitle}>
-                Ansiedad vs. peligro real
+                Demanda diaria vs. amenaza real
               </Text>
               <View style={styles.sectionDivider} />
               <Text style={styles.paragraph}>
-                La ansiedad no siempre aparece cuando hay un peligro real. A
-                veces se activa por:
+                A menudo el cuerpo activa respuestas de alerta ante situaciones
+                que no implican un peligro físico inmediato, por ejemplo:
               </Text>
 
               <View style={styles.bulletList}>
-                <Text style={styles.bulletItem}>• Recuerdos difíciles</Text>
                 <Text style={styles.bulletItem}>
-                  • Preocupaciones sobre el futuro
+                  • Sobrecarga de tareas o fechas
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Exigencias internas muy altas
+                  • Cambios de rutina o decisiones
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Cambios o situaciones nuevas
+                  • Exigencias personales elevadas
                 </Text>
+                <Text style={styles.bulletItem}>• Dudas sobre el futuro</Text>
               </View>
 
               <Text style={styles.paragraph}>
-                Tu cuerpo responde como si todo eso fuera una amenaza real, pero
-                muchas veces solo estás frente a una situación retadora, no
-                peligrosa. Aprender a distinguir entre{" "}
-                <Text style={styles.highlight}>“estoy en peligro”</Text> y{" "}
-                <Text style={styles.highlight}>“esto solo me da miedo”</Text> es
-                parte del proceso de sanar.
+                Separar{" "}
+                <Text style={styles.highlight}>“una situación exigente”</Text>{" "}
+                de <Text style={styles.highlight}>“una amenaza inmediata”</Text>{" "}
+                facilita responder con mayor claridad y calma.
               </Text>
 
               <View style={styles.sectionImageBox}>
@@ -375,29 +370,31 @@ export default function InfoAnsiedad({ navigation }) {
             {/* Sección 5 */}
             <View onLayout={(e) => handleRegisterSection("conocer", e)}>
               <Text style={styles.sectionTitle}>
-                Conocer tu ansiedad es una forma de cuidarte
+                Prevención y hábitos de autocuidado
               </Text>
               <View style={styles.sectionDivider} />
               <Text style={styles.paragraph}>
-                Entender lo que te pasa no hace que desaparezca de inmediato,
-                pero sí puede ayudarte a:
+                Cuidar tu bienestar de forma preventiva consiste en sostener
+                pequeñas prácticas constantes que fortalezcan tu equilibrio:
               </Text>
 
               <View style={styles.bulletList}>
                 <Text style={styles.bulletItem}>
-                  • Dejar de pelear contigo misma por sentir ansiedad.
+                  • Registrar cómo te sientes sin exigirte estar bien todo el
+                  tiempo.
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Reconocer tus señales tempranas y darte pausas a tiempo.
+                  • Realizar ejercicios breves de regulación o reflexión cuando
+                  lo necesites.
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Buscar herramientas que realmente se adapten a ti.
+                  • Respetar límites razonables de descanso y desconexión.
                 </Text>
               </View>
 
               <Text style={styles.paragraph}>
-                Puedes usar esta app como un espacio para observarte, respirar,
-                soltar un poquito de tensión y recordar que no estás sola en esto.
+                El registro constante te da información útil para conocer qué
+                hábitos te ayudan más en cada etapa.
               </Text>
 
               <View style={styles.sectionImageBox}>
@@ -411,39 +408,41 @@ export default function InfoAnsiedad({ navigation }) {
 
             {/* Sección 6 */}
             <View onLayout={(e) => handleRegisterSection("ayuda", e)}>
-              <Text style={styles.sectionTitle}>¿Cuándo pedir ayuda?</Text>
+              <Text style={styles.sectionTitle}>
+                Cuándo sumar acompañamiento profesional
+              </Text>
               <View style={styles.sectionDivider} />
               <Text style={styles.paragraph}>
-                Pedir ayuda no significa que no puedes sola, significa que{" "}
+                En Lami puedes comenzar por tu autocuidado diario y, si en algún
+                momento lo deseas,{" "}
                 <Text style={styles.highlight}>
-                  no tienes por qué hacerlo sola
-                </Text>
-                .
+                  vincular a un especialista de salud mental
+                </Text>{" "}
+                para recibir acompañamiento profesional.
               </Text>
 
               <Text style={styles.paragraph}>
-                Puede ser buen momento de hablar con una profesional de la salud
-                mental si:
+                Considera consultar con un profesional si notas que:
               </Text>
 
               <View style={styles.bulletList}>
                 <Text style={styles.bulletItem}>
-                  • La ansiedad interfiere con tus estudios, trabajo o relaciones.
+                  • El malestar o la tensión persisten durante semanas y afectan
+                  tu rutina.
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Sientes miedo casi todos los días y te cuesta descansar.
+                  • Tu descanso, concentración o vínculos se ven limitados con
+                  frecuencia.
                 </Text>
                 <Text style={styles.bulletItem}>
-                  • Evitas muchas cosas por miedo a cómo te vas a sentir.
-                </Text>
-                <Text style={styles.bulletItem}>
-                  • Te sientes sobrepasada y sin fuerzas para seguir el día.
+                  • Sientes que necesitas orientación estructurada para abordar
+                  lo que vives.
                 </Text>
               </View>
 
               <Text style={styles.paragraph}>
-                Buscar ayuda es un acto de valentía y autocuidado. Tú mereces
-                estar acompañada en este proceso.
+                Buscar apoyo profesional es una opción válida y constructiva en
+                cualquier momento de tu proceso.
               </Text>
 
               <View style={styles.sectionImageBox}>
@@ -455,7 +454,7 @@ export default function InfoAnsiedad({ navigation }) {
               </View>
             </View>
 
-            {/* Cuadro donde esta el cierre */}
+            {/* Cierre */}
             <View style={styles.closingBox}>
               <Ionicons
                 name="sparkles-outline"
@@ -465,12 +464,14 @@ export default function InfoAnsiedad({ navigation }) {
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.closingText}>
-                  No eres tu ansiedad. Eres mucho más que lo que estás sintiendo
-                  hoy. Paso a pasito, estás aprendiendo a cuidarte mejor.
+                  Cuidarte cada día es un proceso gradual. Observar tus señales
+                  y construir hábitos saludables te ayuda a avanzar con mayor
+                  claridad.
                 </Text>
                 <Text style={styles.closingFootnote}>
-                  Esta sección no sustituye terapia ni evaluación profesional. Si
-                  lo necesitas, buscar ayuda es un paso muy valioso.
+                  Recurso psicoeducativo de uso libre y gratuito basado en
+                  principios abiertos de bienestar y autorregulación; no
+                  sustituye atención psicológica o médica profesional.
                 </Text>
               </View>
             </View>
@@ -486,7 +487,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -516,7 +516,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
   },
-
   metaBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -550,7 +549,6 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     flexShrink: 1,
   },
-
   content: {
     flex: 1,
     paddingHorizontal: 16,
@@ -559,7 +557,6 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingTop: 12,
   },
-
   articleCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -592,7 +589,6 @@ const styles = StyleSheet.create({
     color: "#4B5563",
     marginBottom: 14,
   },
-
   noticeBox: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -609,7 +605,6 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
-
   indexBox: {
     marginBottom: 16,
     padding: 10,
@@ -642,7 +637,6 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
     textDecorationColor: "#9CA3AF",
   },
-
   sectionTitle: {
     fontSize: 15,
     fontWeight: "700",
@@ -664,7 +658,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#4F46E5",
   },
-
   bulletList: {
     marginTop: 4,
     marginBottom: 8,
@@ -676,7 +669,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 4,
   },
-
   sectionImageBox: {
     marginTop: 8,
     marginBottom: 14,
@@ -688,9 +680,8 @@ const styles = StyleSheet.create({
   },
   sectionImage: {
     width: "100%",
-    height: 180, // mismo tamaño para todos los GIFs / imágenes
+    height: 180,
   },
-
   closingBox: {
     marginTop: 20,
     padding: 12,
@@ -709,6 +700,6 @@ const styles = StyleSheet.create({
   closingFootnote: {
     fontSize: 11,
     color: "#6B7280",
+    lineHeight: 16,
   },
 });
- 

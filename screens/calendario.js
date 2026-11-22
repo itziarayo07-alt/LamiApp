@@ -155,7 +155,7 @@ export default function CalendarioEmocional({ navigation }) {
 
         const q = query(
           collection(db, "solicitudes_sesion"),
-          where("pacienteId", "==", user.uid)
+          where("pacienteId", "==", user.uid),
         );
 
         unsubFirestore = onSnapshot(q, async (snap) => {
@@ -163,9 +163,7 @@ export default function CalendarioEmocional({ navigation }) {
 
           // Mantener solo citas locales que no provengan de Firestore borrado
           Object.keys(localBase).forEach((fecha) => {
-            merged[fecha] = localBase[fecha].filter(
-              (c) => !c.fromFirestore
-            );
+            merged[fecha] = localBase[fecha].filter((c) => !c.fromFirestore);
             if (merged[fecha].length === 0) delete merged[fecha];
           });
 
@@ -189,10 +187,11 @@ export default function CalendarioEmocional({ navigation }) {
             const lugarStr = esOnline
               ? "Videollamada en Sala de Teleconsulta Lami"
               : ub
-              ? `${ub.nombreLugar || "Consultorio privado"} • ${ub.direccion}${
-                  ub.pisoConsultorio ? ` (${ub.pisoConsultorio})` : ""
-                }${ub.ciudad ? `, ${ub.ciudad}` : ""}`
-              : sol.lugarCita || "Consulta presencial (ubicación al confirmar)";
+                ? `${ub.nombreLugar || "Consultorio privado"} • ${ub.direccion}${
+                    ub.pisoConsultorio ? ` (${ub.pisoConsultorio})` : ""
+                  }${ub.ciudad ? `, ${ub.ciudad}` : ""}`
+                : sol.lugarCita ||
+                  "Consulta presencial (ubicación al confirmar)";
 
             const itemCita = {
               id: docSnap.id,
@@ -217,7 +216,7 @@ export default function CalendarioEmocional({ navigation }) {
               merged[fechaTarget] = [...listaDia, itemCita];
             } else {
               merged[fechaTarget] = listaDia.map((c) =>
-                c.id === docSnap.id ? { ...c, ...itemCita } : c
+                c.id === docSnap.id ? { ...c, ...itemCita } : c,
               );
             }
           });
@@ -242,7 +241,7 @@ export default function CalendarioEmocional({ navigation }) {
 
     const qNotifPac = query(
       collection(db, "notificaciones_paciente"),
-      where("pacienteId", "==", user.uid)
+      where("pacienteId", "==", user.uid),
     );
 
     const unsubNotifPac = onSnapshot(qNotifPac, (snap) => {
@@ -256,7 +255,7 @@ export default function CalendarioEmocional({ navigation }) {
 
       // Mostrar modal elegante para la notificación no leída más reciente
       const nuevaNoLeida = lista.find(
-        (n) => !n.leida && !shownPsiNotifIdsRef.current.has(n.id)
+        (n) => !n.leida && !shownPsiNotifIdsRef.current.has(n.id),
       );
       if (nuevaNoLeida) {
         shownPsiNotifIdsRef.current.add(nuevaNoLeida.id);
@@ -283,7 +282,7 @@ export default function CalendarioEmocional({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       // Refresca estados al volver a enfocar la pantalla
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
@@ -300,7 +299,7 @@ export default function CalendarioEmocional({ navigation }) {
                 item &&
                 typeof item.color === "string" &&
                 item.color.startsWith("#") &&
-                item.color.length >= 4
+                item.color.length >= 4,
             );
             if (valid.length > 0) cleaned[k] = valid;
           });
@@ -314,7 +313,7 @@ export default function CalendarioEmocional({ navigation }) {
         if (done === "SI") setPersonalityDone(true);
 
         const resJson = await AsyncStorage.getItem(
-          "testPersonalidadResultado_v1"
+          "testPersonalidadResultado_v1",
         );
         if (resJson) {
           try {
@@ -332,13 +331,13 @@ export default function CalendarioEmocional({ navigation }) {
 
   useEffect(() => {
     AsyncStorage.setItem("dayFeelings_v1", JSON.stringify(dayFeelings)).catch(
-      (e) => console.warn("Error saving feelings:", e)
+      (e) => console.warn("Error saving feelings:", e),
     );
   }, [dayFeelings]);
 
   useEffect(() => {
     AsyncStorage.setItem("dayNotes_v1", JSON.stringify(dayNotes)).catch((e) =>
-      console.warn("Error saving notes:", e)
+      console.warn("Error saving notes:", e),
     );
   }, [dayNotes]);
 
@@ -353,7 +352,7 @@ export default function CalendarioEmocional({ navigation }) {
         item &&
         typeof item.color === "string" &&
         item.color.startsWith("#") &&
-        item.color.length >= 4
+        item.color.length >= 4,
     );
 
     let newValue;
@@ -398,7 +397,7 @@ export default function CalendarioEmocional({ navigation }) {
     if (!trimmed) {
       return Alert.alert(
         "Escribe algo primero",
-        "Añade un pensamiento o recordatorio antes de guardar."
+        "Añade un pensamiento o recordatorio antes de guardar.",
       );
     }
 
@@ -435,7 +434,7 @@ export default function CalendarioEmocional({ navigation }) {
     } catch (e) {
       Alert.alert(
         "Sala de Teleconsulta",
-        `Conectando a la videollamada con ${cita.psicologoNombre}...`
+        `Conectando a la videollamada con ${cita.psicologoNombre}...`,
       );
     }
   };
@@ -451,7 +450,7 @@ export default function CalendarioEmocional({ navigation }) {
     if (!motivoLimpio) {
       Alert.alert(
         "Motivo requerido",
-        "Por favor escribe el motivo por el cual cancelas tu cita."
+        "Por favor escribe el motivo por el cual cancelas tu cita.",
       );
       return;
     }
@@ -485,13 +484,13 @@ export default function CalendarioEmocional({ navigation }) {
       // 2. Eliminar la cita de la agenda del psicólogo (citas_psicologo)
       if (citaACancelar.citaPsicologoId) {
         await deleteDoc(
-          doc(db, "citas_psicologo", citaACancelar.citaPsicologoId)
+          doc(db, "citas_psicologo", citaACancelar.citaPsicologoId),
         );
       } else if (citaACancelar.psicologoId && user?.uid) {
         const qPsi = query(
           collection(db, "citas_psicologo"),
           where("psicologoId", "==", citaACancelar.psicologoId),
-          where("pacienteId", "==", user.uid)
+          where("pacienteId", "==", user.uid),
         );
         const snapPsi = await getDocs(qPsi);
         for (const docPsi of snapPsi.docs) {
@@ -519,7 +518,7 @@ export default function CalendarioEmocional({ navigation }) {
         const fechaKey = citaACancelar.fecha || selectedDay;
         if (Array.isArray(parsed[fechaKey])) {
           parsed[fechaKey] = parsed[fechaKey].filter(
-            (c) => c.id !== citaACancelar.id
+            (c) => c.id !== citaACancelar.id,
           );
           if (parsed[fechaKey].length === 0) {
             delete parsed[fechaKey];
@@ -544,14 +543,16 @@ export default function CalendarioEmocional({ navigation }) {
       console.error("Error al cancelar cita:", error);
       Alert.alert(
         "Error",
-        "No se pudo cancelar la cita en este momento. Intenta nuevamente."
+        "No se pudo cancelar la cita en este momento. Intenta nuevamente.",
       );
     } finally {
       setCancelandoCita(false);
     }
   };
 
-  const unreadNotifCount = notificacionesPaciente.filter((n) => !n.leida).length;
+  const unreadNotifCount = notificacionesPaciente.filter(
+    (n) => !n.leida,
+  ).length;
 
   const sortedDates = Object.keys(dayFeelings).sort();
   const recentDates = sortedDates.slice(-7);
@@ -649,7 +650,7 @@ export default function CalendarioEmocional({ navigation }) {
     if (sortedDates.length === 0) {
       return Alert.alert(
         "No hay datos",
-        "Registra al menos una emoción en el calendario para exportar tu reporte PDF."
+        "Registra al menos una emoción en el calendario para exportar tu reporte PDF.",
       );
     }
 
@@ -662,7 +663,7 @@ export default function CalendarioEmocional({ navigation }) {
           const dataUri = await Promise.race([
             chartRef.current.capture(),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Timeout captura")), 2500)
+              setTimeout(() => reject(new Error("Timeout captura")), 2500),
             ),
           ]);
 
@@ -700,7 +701,7 @@ export default function CalendarioEmocional({ navigation }) {
             .map((e) =>
               e.hora
                 ? `<strong>[${escapeHtml(e.hora)}]</strong> ${escapeHtml(e.texto)}`
-                : escapeHtml(e.texto)
+                : escapeHtml(e.texto),
             )
             .join("<br/>");
 
@@ -772,7 +773,7 @@ export default function CalendarioEmocional({ navigation }) {
       console.error("PDF Error:", e);
       Alert.alert(
         "Error al generar PDF",
-        e?.message || "No se pudo crear el archivo PDF."
+        e?.message || "No se pudo crear el archivo PDF.",
       );
     } finally {
       setExportandoPDF(false);
@@ -804,7 +805,7 @@ export default function CalendarioEmocional({ navigation }) {
         {/* BARRA SUPERIOR */}
         <View style={styles.navBar}>
           {[
-            ["stats-chart-outline", "Anxiósometro"],
+            ["leaf-outline", "Calma"],
             ["calendar-outline", "Calendario"],
             ["heart-outline", "Checking"],
             ["person-circle-outline", "Perfil"],
@@ -982,9 +983,7 @@ export default function CalendarioEmocional({ navigation }) {
                         <View style={styles.citaNotaBox}>
                           <Ionicons
                             name={
-                              esOnline
-                                ? "laptop-outline"
-                                : "location-outline"
+                              esOnline ? "laptop-outline" : "location-outline"
                             }
                             size={15}
                             color={esOnline ? "#0D9488" : "#4F46E5"}
@@ -1108,9 +1107,7 @@ export default function CalendarioEmocional({ navigation }) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.journalTitle}>
                         Bitácora del{" "}
-                        {isTodaySelected
-                          ? `día (${selectedDay})`
-                          : selectedDay}
+                        {isTodaySelected ? `día (${selectedDay})` : selectedDay}
                       </Text>
                       <Text style={styles.journalSubtitle}>
                         {isTodaySelected
@@ -1760,14 +1757,12 @@ function DayWithEmotions({
   const hasColor = validColors.length > 0;
 
   const tieneCita = citasDelDia.length > 0;
-  const tieneCitaConfirmada = citasDelDia.some(
-    (c) => c.estado !== "pendiente"
-  );
+  const tieneCitaConfirmada = citasDelDia.some((c) => c.estado !== "pendiente");
   const tieneCitaOnline = citasDelDia.some(
     (c) =>
       c.esOnline ||
       (c.modalidad || "").toLowerCase() === "online" ||
-      (c.modalidad || "").toLowerCase() === "en línea"
+      (c.modalidad || "").toLowerCase() === "en línea",
   );
 
   return (
