@@ -27,11 +27,8 @@
       "expo-sqlite",
       "expo-font",
       "expo-audio",
-<<<<<<< HEAD
-      "expo-sharing"
-=======
+      "expo-sharing",
       "expo-video"
->>>>>>> 40c34cc (Soy dev mar y he actualizado pantallas, ejercicios y he modificado detalles)
     ],
     "extra": {
       "eas": {

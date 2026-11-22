@@ -1,9 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Notifications from 'expo-notifications';
-import { useEffect, useRef, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Notifications from "expo-notifications";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -14,12 +14,12 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import ConfettiCannon from 'react-native-confetti-cannon';
+} from "react-native";
+import ConfettiCannon from "react-native-confetti-cannon";
 
 const ES_EXPO_GO =
-  Constants.executionEnvironment === 'storeClient' ||
-  Constants.appOwnership === 'expo';
+  Constants.executionEnvironment === "storeClient" ||
+  Constants.appOwnership === "expo";
 
 // Configurar notificaciones solo fuera de Expo Go para evitar Uncaught Promise Error
 if (!ES_EXPO_GO) {
@@ -38,88 +38,88 @@ if (!ES_EXPO_GO) {
 const PREGUNTAS_GAD7 = [
   {
     id: 1,
-    texto: 'Sentirte nervioso/a, ansioso/a o con los nervios de punta.',
-    tag: 'Inquietud',
-    icono: 'pulse-outline',
+    texto: "Sentirte nervioso/a, ansioso/a o con los nervios de punta.",
+    tag: "Inquietud",
+    icono: "pulse-outline",
   },
   {
     id: 2,
-    texto: 'No poder dejar de preocuparte o controlar la preocupación.',
-    tag: 'Control mental',
-    icono: 'cloud-outline',
+    texto: "No poder dejar de preocuparte o controlar la preocupación.",
+    tag: "Control mental",
+    icono: "cloud-outline",
   },
   {
     id: 3,
-    texto: 'Preocuparte demasiado por diferentes cosas.',
-    tag: 'Sobrepensar',
-    icono: 'sync-outline',
+    texto: "Preocuparte demasiado por diferentes cosas.",
+    tag: "Sobrepensar",
+    icono: "sync-outline",
   },
   {
     id: 4,
-    texto: 'Tener dificultad para relajarte.',
-    tag: 'Tensión',
-    icono: 'body-outline',
+    texto: "Tener dificultad para relajarte.",
+    tag: "Tensión",
+    icono: "body-outline",
   },
   {
     id: 5,
-    texto: 'Estar tan inquieto/a que te cuesta quedarte quieto/a.',
-    tag: 'Agitación',
-    icono: 'walk-outline',
+    texto: "Estar tan inquieto/a que te cuesta quedarte quieto/a.",
+    tag: "Agitación",
+    icono: "walk-outline",
   },
   {
     id: 6,
-    texto: 'Molestarte o irritarte con facilidad.',
-    tag: 'Irritabilidad',
-    icono: 'flash-outline',
+    texto: "Molestarte o irritarte con facilidad.",
+    tag: "Irritabilidad",
+    icono: "flash-outline",
   },
   {
     id: 7,
-    texto: 'Sentir miedo, como si algo terrible pudiera pasar.',
-    tag: 'Alerta',
-    icono: 'shield-outline',
+    texto: "Sentir miedo, como si algo terrible pudiera pasar.",
+    tag: "Alerta",
+    icono: "shield-outline",
   },
 ];
 
 const OPCIONES_GAD7 = [
   {
-    label: 'Nunca',
-    sublabel: 'Ningún día',
+    label: "Nunca",
+    sublabel: "Ningún día",
     valor: 0,
-    emoji: '🌿',
-    bg: '#ECFDF5',
-    border: '#6EE7B7',
-    text: '#065F46',
-    activeBg: '#10B981',
+    emoji: "🌿",
+    bg: "#ECFDF5",
+    border: "#6EE7B7",
+    text: "#065F46",
+    activeBg: "#10B981",
   },
   {
-    label: 'Varios días',
-    sublabel: 'Menos de la mitad',
+    label: "Varios días",
+    sublabel: "Menos de la mitad",
     valor: 1,
-    emoji: '🌤️',
-    bg: '#F3E8FF',
-    border: '#D8B4FE',
-    text: '#5B21B6',
-    activeBg: '#8B5CF6',
+    emoji: "🌤️",
+    bg: "#F3E8FF",
+    border: "#D8B4FE",
+    text: "#5B21B6",
+    activeBg: "#8B5CF6",
   },
   {
-    label: 'Más de la mitad de los días',
-    sublabel: 'Con frecuencia',
+    label: "Más de la mitad de los días",
+    sublabel: "Con frecuencia",
     valor: 2,
-    emoji: '🌥️',
-    bg: '#FEF3C7',
-    border: '#FCD34D',
-    text: '#92400E',
-    activeBg: '#F59E0B',
+    emoji: "🌥️",
+    bg: "#FEF3C7",
+    border: "#FCD34D",
+    text: "#92400E",
+    activeBg: "#F59E0B",
   },
   {
-    label: 'Casi todos los días',
-    sublabel: 'De forma constante',
+    label: "Casi todos los días",
+    sublabel: "De forma constante",
     valor: 3,
-    emoji: '🌧️',
-    bg: '#FFE4E6',
-    border: '#FDA4AF',
-    text: '#9F1239',
-    activeBg: '#F43F5E',
+    emoji: "🌧️",
+    bg: "#FFE4E6",
+    border: "#FDA4AF",
+    text: "#9F1239",
+    activeBg: "#F43F5E",
   },
 ];
 
@@ -157,7 +157,7 @@ function BreathingOrb({ valorActual }) {
             useNativeDriver: true,
           }),
         ]),
-      ])
+      ]),
     );
     loop.start();
     return () => loop.stop();
@@ -165,21 +165,21 @@ function BreathingOrb({ valorActual }) {
 
   const orbColors =
     valorActual === 3
-      ? ['#FB7185', '#A855F7']
+      ? ["#FB7185", "#A855F7"]
       : valorActual === 2
-      ? ['#FBBF24', '#A855F7']
-      : valorActual === 1
-      ? ['#A78BFA', '#60A5FA']
-      : ['#6EE7B7', '#818CF8'];
+        ? ["#FBBF24", "#A855F7"]
+        : valorActual === 1
+          ? ["#A78BFA", "#60A5FA"]
+          : ["#6EE7B7", "#818CF8"];
 
   const orbEmoji =
     valorActual === 3
-      ? '🫂'
+      ? "🫂"
       : valorActual === 2
-      ? '🫧'
-      : valorActual === 1
-      ? '✨'
-      : '🪷';
+        ? "🫧"
+        : valorActual === 1
+          ? "✨"
+          : "🪷";
 
   return (
     <View style={styles.orbWrapper}>
@@ -202,7 +202,7 @@ function BreathingOrb({ valorActual }) {
 }
 
 // Partículas flotantes suaves para resultado MODERADO
-function FloatingParticles({ emoji = '🫧' }) {
+function FloatingParticles({ emoji = "🫧" }) {
   const items = Array.from({ length: 14 }, (_, i) => i);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -232,7 +232,7 @@ function SingleParticle({ emoji, index }) {
           duration: 0,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     loop.start();
     return () => loop.stop();
@@ -241,8 +241,8 @@ function SingleParticle({ emoji, index }) {
   return (
     <Animated.Text
       style={{
-        position: 'absolute',
-        left: '50%',
+        position: "absolute",
+        left: "50%",
         fontSize: 24,
         opacity: 0.85,
         transform: [{ translateX: startX }, { translateY: animY }],
@@ -274,7 +274,7 @@ function DotLoader() {
             duration: 280,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
 
     const l1 = pulse(a1, 0);
@@ -303,7 +303,7 @@ function DotLoader() {
 
 export default function Test({ navigation }) {
   const [respuestas, setRespuestas] = useState(
-    Array(PREGUNTAS_GAD7.length).fill(null)
+    Array(PREGUNTAS_GAD7.length).fill(null),
   );
   const [indice, setIndice] = useState(0);
   const [opcionTocada, setOpcionTocada] = useState(null);
@@ -323,9 +323,9 @@ export default function Test({ navigation }) {
     const configurarNotificaciones = async () => {
       try {
         const { status } = await Notifications.requestPermissionsAsync();
-        if (status === 'granted') {
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
+        if (status === "granted") {
+          await Notifications.setNotificationChannelAsync("default", {
+            name: "default",
             importance: Notifications.AndroidImportance.MAX,
           });
         }
@@ -400,45 +400,45 @@ export default function Test({ navigation }) {
   // Puntos de corte clínicos oficiales GAD-7 (0 a 21 pts)
   const calcularResultado = (respuestasFinales) => {
     const total = respuestasFinales.reduce((acc, cur) => acc + (cur || 0), 0);
-    let nivel = '';
-    let subnivel = '';
-    let color = '';
+    let nivel = "";
+    let subnivel = "";
+    let color = "";
     let fondo = [];
-    let consejo = '';
-    let emojiResultado = '🌿';
+    let consejo = "";
+    let emojiResultado = "🌿";
 
     if (total <= 4) {
-      nivel = 'MÍNIMA / LEVE';
-      subnivel = 'Equilibrio emocional estable';
-      color = '#059669';
-      fondo = ['#D1FAE5', '#DDD6FE'];
-      emojiResultado = '🌿';
+      nivel = "MÍNIMA / LEVE";
+      subnivel = "Equilibrio emocional estable";
+      color = "#059669";
+      fondo = ["#D1FAE5", "#DDD6FE"];
+      emojiResultado = "🌿";
       consejo =
-        'Tu nivel de ansiedad se encuentra en rango mínimo. Sigue cultivando tus espacios de calma y autocuidado.';
+        "Tu nivel de ansiedad se encuentra en rango mínimo. Sigue cultivando tus espacios de calma y autocuidado.";
     } else if (total <= 9) {
-      nivel = 'LEVE';
-      subnivel = 'Inquietud cotidiana manejable';
-      color = '#0D9488';
-      fondo = ['#CCFBF1', '#E9D5FF'];
-      emojiResultado = '🌤️';
+      nivel = "LEVE";
+      subnivel = "Inquietud cotidiana manejable";
+      color = "#0D9488";
+      fondo = ["#CCFBF1", "#E9D5FF"];
+      emojiResultado = "🌤️";
       consejo =
-        'Presentas señales leves de tensión. Ejercicios breves de respiración y pausas activas te ayudarán mucho.';
+        "Presentas señales leves de tensión. Ejercicios breves de respiración y pausas activas te ayudarán mucho.";
     } else if (total <= 14) {
-      nivel = 'MODERADO';
-      subnivel = 'Sobrecarga emocional presente';
-      color = '#7C3AED';
-      fondo = ['#C7D2FE', '#E9D5FF'];
-      emojiResultado = '💜';
+      nivel = "MODERADO";
+      subnivel = "Sobrecarga emocional presente";
+      color = "#7C3AED";
+      fondo = ["#C7D2FE", "#E9D5FF"];
+      emojiResultado = "💜";
       consejo =
-        'Sentir ansiedad no te hace débil, te hace humana. Vamos a acompañarte paso a paso para bajar esa carga.';
+        "Sentir ansiedad no te hace débil, te hace humana. Vamos a acompañarte paso a paso para bajar esa carga.";
     } else {
-      nivel = 'ALTO';
-      subnivel = 'Alta activación y alerta';
-      color = '#E11D48';
-      fondo = ['#FECDD3', '#DDD6FE'];
-      emojiResultado = '🫂';
+      nivel = "ALTO";
+      subnivel = "Alta activación y alerta";
+      color = "#E11D48";
+      fondo = ["#FECDD3", "#DDD6FE"];
+      emojiResultado = "🫂";
       consejo =
-        'Tu mente se puede cansar, pero también puede sanar. Tu psicólogo y las herramientas de calma están contigo.';
+        "Tu mente se puede cansar, pero también puede sanar. Tu psicólogo y las herramientas de calma están contigo.";
     }
 
     setResultado({
@@ -460,16 +460,16 @@ export default function Test({ navigation }) {
       setShowConfigModal(true);
 
       const hoy = new Date().toISOString();
-      await AsyncStorage.setItem('startDate', hoy);
+      await AsyncStorage.setItem("startDate", hoy);
 
       if (resultado) {
         await AsyncStorage.setItem(
-          'ultimoResultadoGAD7',
+          "ultimoResultadoGAD7",
           JSON.stringify({
             total: resultado.total,
             nivel: resultado.nivel,
             fecha: hoy,
-          })
+          }),
         );
       }
 
@@ -478,10 +478,10 @@ export default function Test({ navigation }) {
           const trigger = new Date(Date.now() + 24 * 60 * 60 * 1000);
           await Notifications.scheduleNotificationAsync({
             content: {
-              title: '🌱 ¡Primer día completado!',
-              body: 'Felicidades, llevas 1 día cuidando tu bienestar mental 💚',
+              title: "🌱 ¡Primer día completado!",
+              body: "Felicidades, llevas 1 día cuidando tu bienestar mental 💚",
             },
-            trigger: { type: 'date', date: trigger },
+            trigger: { type: "date", date: trigger },
           });
         } catch (_) {}
       }
@@ -489,7 +489,7 @@ export default function Test({ navigation }) {
       setTimeout(() => {
         setShowConfigModal(false);
         setIsConfiguring(false);
-        navigation.navigate('Anxiosimetro');
+        navigation.navigate("Anxiosimetro");
       }, 4500);
     } catch (_) {
       setShowConfigModal(false);
@@ -499,7 +499,7 @@ export default function Test({ navigation }) {
 
   const widthInterpolada = progresoAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
+    outputRange: ["0%", "100%"],
   });
 
   // ================== PANTALLA DE RESULTADO ==================
@@ -511,7 +511,7 @@ export default function Test({ navigation }) {
             <View style={styles.modalOverlay}>
               <View style={styles.modalCard}>
                 <LinearGradient
-                  colors={['#EDE9FE', '#E0F2FE']}
+                  colors={["#EDE9FE", "#E0F2FE"]}
                   style={styles.modalIconCircle}
                 >
                   <Ionicons name="sparkles" size={28} color="#7C3AED" />
@@ -535,7 +535,9 @@ export default function Test({ navigation }) {
               </Text>
             </View>
 
-            <Text style={styles.resultEmojiBig}>{resultado.emojiResultado}</Text>
+            <Text style={styles.resultEmojiBig}>
+              {resultado.emojiResultado}
+            </Text>
 
             <Text style={styles.resultTitle}>Nivel de Ansiedad</Text>
             <Text style={[styles.levelHighlight, { color: resultado.color }]}>
@@ -559,7 +561,7 @@ export default function Test({ navigation }) {
               disabled={isConfiguring}
             >
               <LinearGradient
-                colors={['#7C3AED', '#6192A4']}
+                colors={["#7C3AED", "#6192A4"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.monitorButton}
@@ -570,8 +572,8 @@ export default function Test({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {(resultado.nivel === 'MÍNIMA / LEVE' ||
-            resultado.nivel === 'LEVE') && (
+          {(resultado.nivel === "MÍNIMA / LEVE" ||
+            resultado.nivel === "LEVE") && (
             <ConfettiCannon
               count={130}
               origin={{ x: 190, y: 0 }}
@@ -580,9 +582,9 @@ export default function Test({ navigation }) {
             />
           )}
 
-          {resultado.nivel === 'MODERADO' && <FloatingParticles emoji="💜" />}
+          {resultado.nivel === "MODERADO" && <FloatingParticles emoji="💜" />}
 
-          {resultado.nivel === 'ALTO' && <FloatingParticles emoji="🫂" />}
+          {resultado.nivel === "ALTO" && <FloatingParticles emoji="🫂" />}
         </SafeAreaView>
       </LinearGradient>
     );
@@ -595,7 +597,7 @@ export default function Test({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#B8C6F8', '#D8B4FE', '#F5D0FE']}
+        colors={["#B8C6F8", "#D8B4FE", "#F5D0FE"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.background}
@@ -646,7 +648,7 @@ export default function Test({ navigation }) {
             {/* Orbe animado que respira */}
             <BreathingOrb
               valorActual={
-                opcionTocada !== null ? opcionTocada : respuestaPrevia ?? 0
+                opcionTocada !== null ? opcionTocada : (respuestaPrevia ?? 0)
               }
             />
 
@@ -677,11 +679,7 @@ export default function Test({ navigation }) {
 
             {/* Contexto temporal oficial GAD-7 */}
             <View style={styles.contextTagRow}>
-              <Ionicons
-                name={preguntaActual.icono}
-                size={14}
-                color="#7C3AED"
-              />
+              <Ionicons name={preguntaActual.icono} size={14} color="#7C3AED" />
               <Text style={styles.contextTagText}>
                 En las últimas 2 semanas • {preguntaActual.tag}
               </Text>
@@ -704,12 +702,8 @@ export default function Test({ navigation }) {
                     style={[
                       styles.optionCard,
                       {
-                        backgroundColor: seleccionada
-                          ? item.activeBg
-                          : item.bg,
-                        borderColor: seleccionada
-                          ? item.activeBg
-                          : item.border,
+                        backgroundColor: seleccionada ? item.activeBg : item.bg,
+                        borderColor: seleccionada ? item.activeBg : item.border,
                       },
                     ]}
                   >
@@ -719,7 +713,7 @@ export default function Test({ navigation }) {
                       <Text
                         style={[
                           styles.optionTitle,
-                          { color: seleccionada ? '#FFFFFF' : item.text },
+                          { color: seleccionada ? "#FFFFFF" : item.text },
                         ]}
                       >
                         {item.label}
@@ -729,8 +723,8 @@ export default function Test({ navigation }) {
                           styles.optionSublabel,
                           {
                             color: seleccionada
-                              ? 'rgba(255,255,255,0.9)'
-                              : '#64748B',
+                              ? "rgba(255,255,255,0.9)"
+                              : "#64748B",
                           },
                         ]}
                       >
@@ -742,10 +736,10 @@ export default function Test({ navigation }) {
                       style={[
                         styles.optionRadio,
                         {
-                          borderColor: seleccionada ? '#FFFFFF' : item.border,
+                          borderColor: seleccionada ? "#FFFFFF" : item.border,
                           backgroundColor: seleccionada
-                            ? 'rgba(255,255,255,0.25)'
-                            : '#FFFFFF',
+                            ? "rgba(255,255,255,0.25)"
+                            : "#FFFFFF",
                         },
                       ]}
                     >
@@ -775,91 +769,91 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 20,
   },
   topHeaderBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
     marginBottom: 8,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.88)",
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 2,
   },
   clinicalHeaderBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: "rgba(255,255,255,0.85)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
   },
   clinicalHeaderText: {
     fontSize: 11.5,
-    fontWeight: '800',
-    color: '#4C1D95',
+    fontWeight: "800",
+    color: "#4C1D95",
   },
   counterPill: {
-    backgroundColor: '#4C1D95',
+    backgroundColor: "#4C1D95",
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
   },
   counterPillText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
   scrollCenter: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingBottom: 24,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.97)',
+    backgroundColor: "rgba(255,255,255,0.97)",
     borderRadius: 30,
     padding: 22,
     elevation: 8,
-    shadowColor: '#4C1D95',
+    shadowColor: "#4C1D95",
     shadowOpacity: 0.14,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
   },
   orbWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 12,
     height: 62,
   },
   orbHalo: {
-    position: 'absolute',
+    position: "absolute",
     width: 66,
     height: 66,
     borderRadius: 33,
-    backgroundColor: '#DDD6FE',
+    backgroundColor: "#DDD6FE",
   },
   orbCore: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 4,
   },
   orbEmoji: {
     fontSize: 22,
   },
   stepDotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 6,
     marginBottom: 10,
   },
@@ -867,34 +861,34 @@ const styles = StyleSheet.create({
     height: 5,
     width: 22,
     borderRadius: 3,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: "#E2E8F0",
   },
   stepCapsuleDone: {
-    backgroundColor: '#A78BFA',
+    backgroundColor: "#A78BFA",
   },
   stepCapsuleActive: {
     width: 34,
-    backgroundColor: '#7C3AED',
+    backgroundColor: "#7C3AED",
   },
   progressBarBackground: {
     height: 7,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: "#F1F5F9",
     borderRadius: 6,
     marginBottom: 14,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressBarFill: {
-    height: '100%',
-    backgroundColor: '#7C3AED',
+    height: "100%",
+    backgroundColor: "#7C3AED",
     borderRadius: 6,
   },
   contextTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    backgroundColor: '#F5F3FF',
-    alignSelf: 'center',
+    backgroundColor: "#F5F3FF",
+    alignSelf: "center",
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 999,
@@ -902,14 +896,14 @@ const styles = StyleSheet.create({
   },
   contextTagText: {
     fontSize: 11.5,
-    fontWeight: '700',
-    color: '#6D28D9',
+    fontWeight: "700",
+    color: "#6D28D9",
   },
   question: {
     fontSize: 18.5,
-    fontWeight: '800',
-    color: '#1E293B',
-    textAlign: 'center',
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
     lineHeight: 25,
     marginBottom: 18,
   },
@@ -917,8 +911,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     paddingVertical: 12.5,
     paddingHorizontal: 15,
@@ -930,11 +924,11 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     fontSize: 14.5,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   optionSublabel: {
     fontSize: 11.5,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 1,
   },
   optionRadio: {
@@ -942,13 +936,13 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   sourceFooterText: {
     fontSize: 10.5,
-    color: '#94A3B8',
-    textAlign: 'center',
+    color: "#94A3B8",
+    textAlign: "center",
     marginTop: 16,
     lineHeight: 14,
   },
@@ -956,27 +950,27 @@ const styles = StyleSheet.create({
   // Resultado
   resultContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   resultSafeArea: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   resultBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     padding: 28,
     borderRadius: 30,
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
     elevation: 10,
   },
   clinicalSealPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: "#F3E8FF",
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 999,
@@ -984,8 +978,8 @@ const styles = StyleSheet.create({
   },
   clinicalSealText: {
     fontSize: 10.5,
-    fontWeight: '800',
-    color: '#6D28D9',
+    fontWeight: "800",
+    color: "#6D28D9",
     letterSpacing: 0.4,
   },
   resultEmojiBig: {
@@ -994,121 +988,121 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    color: '#475569',
+    fontWeight: "700",
+    color: "#475569",
     marginBottom: 4,
   },
   levelHighlight: {
     fontSize: 26,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subnivelText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#64748B',
+    fontWeight: "700",
+    color: "#64748B",
     marginTop: 2,
   },
   scoreBadge: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    backgroundColor: '#F8FAFC',
+    flexDirection: "row",
+    alignItems: "baseline",
+    backgroundColor: "#F8FAFC",
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 16,
     marginVertical: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: "#E2E8F0",
   },
   scoreText: {
     fontSize: 30,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   scoreMaxText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#64748B',
+    fontWeight: "700",
+    color: "#64748B",
   },
   consejo: {
     fontSize: 14.5,
-    textAlign: 'center',
-    color: '#334155',
+    textAlign: "center",
+    color: "#334155",
     lineHeight: 21,
     marginBottom: 22,
   },
   monitorButtonWrapper: {
-    width: '100%',
+    width: "100%",
   },
   monitorButton: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     paddingVertical: 15,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   monitorText: {
-    color: 'white',
-    fontWeight: '800',
+    color: "white",
+    fontWeight: "800",
     fontSize: 16,
   },
 
   // Modal de configuración
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.48)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(15, 23, 42, 0.48)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   modalCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 26,
     paddingVertical: 28,
     paddingHorizontal: 22,
-    width: '92%',
+    width: "92%",
     maxWidth: 420,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 10,
   },
   modalIconCircle: {
     width: 58,
     height: 58,
     borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 12,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '900',
-    color: '#4C1D95',
+    fontWeight: "900",
+    color: "#4C1D95",
     marginBottom: 8,
   },
   modalText: {
     fontSize: 14,
-    color: '#475569',
-    textAlign: 'center',
+    color: "#475569",
+    textAlign: "center",
     lineHeight: 20,
   },
   modalHint: {
     fontSize: 12,
-    color: '#6B7280',
+    color: "#6B7280",
     marginTop: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   dotsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   dot: {
     fontSize: 38,
     marginHorizontal: 5,
-    color: '#7C3AED',
-    fontWeight: '900',
+    color: "#7C3AED",
+    fontWeight: "900",
   },
 });

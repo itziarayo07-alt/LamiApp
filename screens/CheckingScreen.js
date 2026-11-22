@@ -1,12 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -15,7 +18,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { auth } from "../config/firebaseConfig";
-import { escucharTareasDelPsicologo } from "../services/lamiSyncService";
+import {
+  completarEjercicioAsignado,
+  escucharTareasDelPsicologo,
+} from "../services/lamiSyncService";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -65,6 +71,7 @@ const ejerciciosIniciales = [
 const imagenTestDiario = require("../assets/emociones.jpg");
 const imagenTestPersonalidad = require("../assets/personalidad.jpg");
 const imagenTecnicaABCDE = require("../assets/ilustrar.jpg");
+const imagenPreguntaDefault = require("../assets/ansiedad.jpg");
 
 const imagenesEjercicios = {
   1: require("../assets/respracion.gif"), // Respiración 4-7-8
@@ -72,6 +79,57 @@ const imagenesEjercicios = {
   3: require("../assets/sentidos.jpg"), // Anclaje con los sentidos
   4: require("../assets/ansiedad.jpg"), // Descubre cómo se da la ansiedad
 };
+
+function identificarClaveEjercicio(tarea) {
+  const tituloNorm = String(tarea?.titulo || "")
+    .trim()
+    .toLowerCase();
+  const plantillaNorm = String(tarea?.plantillaId || "")
+    .trim()
+    .toLowerCase();
+
+  if (plantillaNorm === "abcde" || tituloNorm.includes("abcde")) {
+    return "abcde";
+  }
+  if (
+    plantillaNorm === "respiracion-478" ||
+    tituloNorm.includes("respiración") ||
+    tituloNorm.includes("respiracion")
+  ) {
+    return "respiracion";
+  }
+  if (plantillaNorm === "escaneo-corporal" || tituloNorm.includes("escaneo")) {
+    return "escaneo";
+  }
+  if (
+    plantillaNorm === "anclaje-sentidos" ||
+    tituloNorm.includes("sentidos") ||
+    tituloNorm.includes("anclaje")
+  ) {
+    return "sentidos";
+  }
+
+  return "otro";
+}
+
+function obtenerImagenTareaAsignada(tarea) {
+  const clave = identificarClaveEjercicio(tarea);
+  if (clave === "abcde") return imagenTecnicaABCDE;
+  if (clave === "respiracion") return imagenesEjercicios[1];
+  if (clave === "escaneo") return imagenesEjercicios[2];
+  if (clave === "sentidos") return imagenesEjercicios[3];
+  if (tarea?.categoriaEnvio === "pregunta") return imagenPreguntaDefault;
+  return imagenTecnicaABCDE;
+}
+
+function resolverRutaEjercicioAsignado(tarea) {
+  const clave = identificarClaveEjercicio(tarea);
+  if (clave === "abcde") return "TecnicaABCDE";
+  if (clave === "respiracion") return "Respiracion";
+  if (clave === "escaneo") return "Escaneo";
+  if (clave === "sentidos") return "Sentidos";
+  return "EjercicioDinamico";
+}
 
 export default function CheckingScreen({ navigation }) {
   const [ejercicios] = useState(ejerciciosIniciales);
@@ -85,6 +143,42 @@ export default function CheckingScreen({ navigation }) {
   // controla si hoy ya se puede hacer el test (después de las 5:00)
   const [puedeHacerTestHoy, setPuedeHacerTestHoy] = useState(false);
   const [tareasPsicologo, setTareasPsicologo] = useState([]);
+  const [ahoraTick, setAhoraTick] = useState(Date.now());
+
+  // Ejercicio asignado que el paciente acaba de abrir para hacer
+  const [ejercicioEnCurso, setEjercicioEnCurso] = useState(null);
+
+  // Respuestas en línea para envíos tipo pregunta / escala / indicación
+  const [respuestasPorTarea, setRespuestasPorTarea] = useState({});
+  const [enviandoTareaId, setEnviandoTareaId] = useState(null);
+
+  // Modal con diseño propio (reemplaza cualquier alerta por default)
+  const [modalAviso, setModalAviso] = useState({
+    visible: false,
+    tipo: "exito", // "exito" | "aviso"
+    badge: "LAMI • CHECKING",
+    titulo: "",
+    mensaje: "",
+  });
+
+  const mostrarModal = ({
+    tipo = "exito",
+    badge = "LAMI • CHECKING",
+    titulo = "",
+    mensaje = "",
+  }) => {
+    setModalAviso({
+      visible: true,
+      tipo,
+      badge,
+      titulo,
+      mensaje,
+    });
+  };
+
+  const cerrarModal = () => {
+    setModalAviso((prev) => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     cargarEstado();
@@ -93,11 +187,39 @@ export default function CheckingScreen({ navigation }) {
     if (!uid) return;
 
     const unsubscribe = escucharTareasDelPsicologo(uid, (nuevasTareas) => {
-      setTareasPsicologo(nuevasTareas);
+      setTareasPsicologo(nuevasTareas || []);
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Revisa periódicamente si ya venció el tiempo de espera de alguna actividad recurrente
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      setAhoraTick(Date.now());
+    }, 30000);
+    return () => clearInterval(intervalo);
+  }, []);
+
+  // Al regresar de realizar un ejercicio asignado, registra su ejecución para aplicar recurrencia o desaparición
+  useFocusEffect(
+    useCallback(() => {
+      setAhoraTick(Date.now());
+      const uid = auth.currentUser?.uid;
+      if (ejercicioEnCurso && uid) {
+        const tareaCompletada = ejercicioEnCurso;
+        setEjercicioEnCurso(null);
+        completarEjercicioAsignado(
+          uid,
+          tareaCompletada.id,
+          { 0: `Ejercicio completado: ${tareaCompletada.titulo}` },
+          tareaCompletada,
+        ).catch((err) => {
+          console.log("Error al registrar ejercicio completado:", err);
+        });
+      }
+    }, [ejercicioEnCurso]),
+  );
 
   const ensureNotifPermission = async () => {
     if (!Device.isDevice) return false;
@@ -293,7 +415,13 @@ export default function CheckingScreen({ navigation }) {
 
       if (testYaHecho === "SI" || testPersonalidadHecho) {
         setTestPersonalidadHecho(true);
-        alert("Ya completaste este test 💜");
+        mostrarModal({
+          tipo: "aviso",
+          badge: "TEST COMPLETADO",
+          titulo: "Ya completaste este test",
+          mensaje:
+            "Por el momento este test de personalidad ya fue respondido.",
+        });
         return;
       }
 
@@ -303,8 +431,139 @@ export default function CheckingScreen({ navigation }) {
     }
   };
 
+  const cambiarValorPasoTarea = (tareaId, pasoIdx, valor) => {
+    setRespuestasPorTarea((prev) => ({
+      ...prev,
+      [tareaId]: {
+        ...(prev[tareaId] || {}),
+        [pasoIdx]: valor,
+      },
+    }));
+  };
+
+  const handleEnviarRespuestaPregunta = async (tarea) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      mostrarModal({
+        tipo: "aviso",
+        badge: "SESIÓN REQUERIDA",
+        titulo: "Inicia sesión para responder",
+        mensaje: "Necesitas tener tu sesión activa para enviar tu respuesta.",
+      });
+      return;
+    }
+
+    const pasos =
+      Array.isArray(tarea.pasos) && tarea.pasos.length > 0
+        ? tarea.pasos
+        : [{ tipo: "pregunta", label: tarea.descripcion || "Tu respuesta" }];
+
+    const respuestasActuales = respuestasPorTarea[tarea.id] || {};
+    const tieneAlMenosUnaRespuesta = pasos.some((paso, idx) => {
+      if (paso.tipo === "instruccion") return true;
+      const val = respuestasActuales[idx];
+      return val !== undefined && String(val).trim() !== "";
+    });
+
+    if (!tieneAlMenosUnaRespuesta) {
+      mostrarModal({
+        tipo: "aviso",
+        badge: "RESPUESTA PENDIENTE",
+        titulo: "Completa tu respuesta",
+        mensaje:
+          "Escribe tu respuesta o selecciona un puntaje antes de enviarla.",
+      });
+      return;
+    }
+
+    try {
+      setEnviandoTareaId(tarea.id);
+      await completarEjercicioAsignado(
+        uid,
+        tarea.id,
+        respuestasActuales,
+        tarea,
+      );
+
+      setRespuestasPorTarea((prev) => {
+        const copia = { ...prev };
+        delete copia[tarea.id];
+        return copia;
+      });
+      setAhoraTick(Date.now());
+
+      mostrarModal({
+        tipo: "exito",
+        badge: "RESPUESTA ENVIADA",
+        titulo: "¡Listo! Respuesta enviada",
+        mensaje: "Tu especialista ya puede ver tu respuesta en su panel.",
+      });
+    } catch (e) {
+      console.log("Error enviando respuesta de pregunta:", e);
+      mostrarModal({
+        tipo: "aviso",
+        badge: "ERROR DE ENVÍO",
+        titulo: "No se pudo enviar tu respuesta",
+        mensaje: "Intenta de nuevo en unos momentos.",
+      });
+    } finally {
+      setEnviandoTareaId(null);
+    }
+  };
+
+  const handleAbrirEjercicioAsignado = async (tarea) => {
+    const uid = auth.currentUser?.uid;
+    const destino = resolverRutaEjercicioAsignado(tarea);
+
+    if (destino === "EjercicioDinamico") {
+      if (!uid) return;
+      try {
+        setEnviandoTareaId(tarea.id);
+        await completarEjercicioAsignado(
+          uid,
+          tarea.id,
+          { 0: `Ejercicio completado: ${tarea.titulo}` },
+          tarea,
+        );
+        setAhoraTick(Date.now());
+        mostrarModal({
+          tipo: "exito",
+          badge: "EJERCICIO COMPLETADO",
+          titulo: "¡Ejercicio registrado!",
+          mensaje: "Quedó registrado en el panel de tu especialista.",
+        });
+      } catch (e) {
+        console.log("Error registrando ejercicio dinámico:", e);
+      } finally {
+        setEnviandoTareaId(null);
+      }
+      return;
+    }
+
+    setEjercicioEnCurso(tarea);
+    navigation.navigate(destino, { tarea });
+  };
+
+  // Filtra tareas: si ya se completó una de única vez desaparece; si es recurrente desaparece hasta que llegue su próxima hora
+  const tareasDisponiblesAhora = tareasPsicologo.filter((tarea) => {
+    const esRecurrente = tarea.frecuenciaTipo === "recurrente";
+    const proximoMs = tarea.proximoDisponibleISO
+      ? new Date(tarea.proximoDisponibleISO).getTime()
+      : 0;
+
+    if (esRecurrente) {
+      if (proximoMs > ahoraTick) return false;
+      return true;
+    }
+
+    return !Boolean(tarea.completado);
+  });
+
   const visibleEjercicios = ejercicios;
   const canGoTestDiario = !testRealizadoHoy && puedeHacerTestHoy;
+  const tieneHistorialEspecialista = tareasPsicologo.length > 0;
+  const todoRespondidoPorHoy =
+    tieneHistorialEspecialista && tareasDisponiblesAhora.length === 0;
 
   return (
     <View style={styles.container}>
@@ -350,10 +609,12 @@ export default function CheckingScreen({ navigation }) {
           {/* TITULO PRINCIPAL */}
           <Text style={styles.titulo}>Ejercicios del día</Text>
           <Text style={styles.subtitulo}>
-            Elige un ejercicio o recurso para acompañarte en este momento
+            {tieneHistorialEspecialista
+              ? "Actividades y preguntas enviadas por tu especialista junto con tus tests"
+              : "Elige un ejercicio o recurso para acompañarte en este momento"}
           </Text>
 
-          {/* PRIORIDAD: TEST DIARIO */}
+          {/* 1. TEST DIARIO (SIEMPRE VISIBLE) */}
           <View style={styles.priorityCard}>
             <View style={styles.cardImageBox}>
               <Image
@@ -388,7 +649,7 @@ export default function CheckingScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* SEGUNDO TEST: PERSONALIDAD */}
+          {/* 2. TEST PERSONALIDAD (SIEMPRE VISIBLE) */}
           <View style={styles.priorityCard}>
             <View style={styles.cardImageBox}>
               <Image
@@ -420,202 +681,328 @@ export default function CheckingScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* TÉCNICA COGNITIVA ABCDE */}
-          <View style={styles.priorityCard}>
-            <View style={styles.cardImageBox}>
-              <Image
-                source={imagenTecnicaABCDE}
-                style={styles.cardImage}
-                resizeMode="cover"
-              />
-            </View>
-
-            <Text style={styles.priorityTitle}>Técnica cognitiva ABCDE</Text>
-            <Text style={styles.priorityText}>
-              Diagnostica tus pensamientos automáticos (A-B-C), debátelos (D-E)
-              y obtén tu interpretación clínica.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.priorityButton}
-              onPress={handleTecnicaABCDE}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.priorityButtonText}>
-                Empezar técnica ABCDE
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* LISTA DE EJERCICIOS */}
-          {tareasPsicologo.length > 0 ? (
+          {/* SI EL ESPECIALISTA HA ASIGNADO ACTIVIDADES, SE OCULTAN LOS EJERCICIOS POR DEFECTO */}
+          {tieneHistorialEspecialista ? (
             <>
-              <View
-                style={{
-                  backgroundColor: "#EDE9FE",
-                  borderRadius: 14,
-                  padding: 12,
-                  marginBottom: 12,
-                  borderWidth: 1,
-                  borderColor: "#C4B5FD",
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "800",
-                    color: "#4C1D95",
-                  }}
-                >
-                  🩺 Plan de Ejercicios Personalizado por tu Especialista
+              <View style={styles.psicologoBanner}>
+                <Text style={styles.psicologoBannerTitle}>
+                  🩺 Enviado por tu especialista
                 </Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: "#5B21B6",
-                    marginTop: 2,
-                  }}
-                >
-                  Tu psicólogo configuró estos ejercicios especialmente para tu
-                  proceso terapéutico.
+                <Text style={styles.psicologoBannerSub}>
+                  Completa o responde lo asignado según su frecuencia.
                 </Text>
               </View>
 
-              {tareasPsicologo.map((tarea) => {
-                const esRecurrente = tarea.frecuenciaTipo === "recurrente";
-                const ahoraMs = Date.now();
-                const proximoMs = tarea.proximoDisponibleISO
-                  ? new Date(tarea.proximoDisponibleISO).getTime()
-                  : 0;
-                const enEsperaRecurrente = esRecurrente && proximoMs > ahoraMs;
-                const yaCompletadoUnico =
-                  !esRecurrente && Boolean(tarea.completado);
-                const deshabilitado = enEsperaRecurrente || yaCompletadoUnico;
+              {todoRespondidoPorHoy ? (
+                <View style={styles.doneForTodayCard}>
+                  <Ionicons
+                    name="checkmark-done-circle"
+                    size={36}
+                    color="#0F766E"
+                  />
+                  <Text style={styles.doneForTodayTitle}>
+                    ¡Es todo por hoy!
+                  </Text>
+                  <Text style={styles.doneForTodayText}>
+                    Ya respondiste o completaste lo pendiente por hoy. Vuelve
+                    mañana para continuar con tu seguimiento.
+                  </Text>
+                </View>
+              ) : (
+                tareasDisponiblesAhora.map((tarea) => {
+                  const esPregunta = tarea.categoriaEnvio === "pregunta";
+                  const esRecurrente = tarea.frecuenciaTipo === "recurrente";
+                  const imagenTarea = obtenerImagenTareaAsignada(tarea);
 
-                let textoTiempoRestante = "";
-                if (enEsperaRecurrente) {
-                  const diffHoras = Math.ceil(
-                    (proximoMs - ahoraMs) / (1000 * 60 * 60),
-                  );
-                  textoTiempoRestante =
-                    diffHoras <= 1
-                      ? "Disponible en menos de 1 hora"
-                      : diffHoras < 24
-                        ? `Disponible en ${diffHoras} horas`
-                        : `Disponible en ${Math.ceil(diffHoras / 24)} día(s)`;
-                }
+                  const pasos =
+                    Array.isArray(tarea.pasos) && tarea.pasos.length > 0
+                      ? tarea.pasos
+                      : [{ tipo: "pregunta", label: tarea.descripcion || "" }];
 
-                return (
-                  <View
-                    key={tarea.id}
-                    style={[
-                      styles.card,
-                      {
-                        borderColor: deshabilitado ? "#D1D5DB" : "#7C3AED",
-                        borderWidth: 2,
-                        opacity: deshabilitado ? 0.85 : 1,
-                      },
-                    ]}
-                  >
+                  const respuestasActuales = respuestasPorTarea[tarea.id] || {};
+
+                  return (
                     <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          fontWeight: "800",
-                          color: "#7C3AED",
-                        }}
-                      >
-                        🩺 {tarea.enfoque?.toUpperCase() || "TERAPIA"}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          fontWeight: "700",
-                          color: esRecurrente ? "#047857" : "#6D28D9",
-                          backgroundColor: esRecurrente ? "#D1FAE5" : "#EDE9FE",
-                          paddingHorizontal: 8,
-                          paddingVertical: 3,
-                          borderRadius: 999,
-                        }}
-                      >
-                        {tarea.frecuenciaLabel ||
-                          (esRecurrente ? "Recurrente" : "Única vez")}
-                      </Text>
-                    </View>
-
-                    <Text style={styles.cardTitulo}>{tarea.titulo}</Text>
-                    <Text style={styles.cardDescripcion}>
-                      {tarea.descripcion}
-                    </Text>
-                    <Text style={styles.cardDuracion}>
-                      ⏱ Duración: {tarea.duracion || "5 min"} •{" "}
-                      {tarea.pasos?.length || 1} paso(s)
-                      {tarea.vecesCompletado > 0
-                        ? ` • Realizado ${tarea.vecesCompletado} vez/veces`
-                        : ""}
-                    </Text>
-
-                    <TouchableOpacity
+                      key={tarea.id}
                       style={[
-                        styles.boton,
-                        deshabilitado && { backgroundColor: "#9CA3AF" },
+                        styles.card,
+                        {
+                          borderColor: "#7C3AED",
+                          borderWidth: 2,
+                        },
                       ]}
-                      disabled={deshabilitado}
-                      onPress={() =>
-                        navigation.navigate("EjercicioDinamico", { tarea })
-                      }
                     >
-                      <Text style={styles.botonTexto}>
-                        {yaCompletadoUnico
-                          ? "Ejercicio completado ✓"
-                          : enEsperaRecurrente
-                            ? `Realizado ✓ • ${textoTiempoRestante}`
-                            : "Realizar ejercicio personalizado"}
+                      <View style={styles.cardImageBox}>
+                        <Image
+                          source={imagenTarea}
+                          style={styles.cardImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+
+                      <View style={styles.tareaTopRow}>
+                        <Text style={styles.tareaTipoTag}>
+                          {esPregunta
+                            ? "💬 ENVIADO POR TU ESPECIALISTA"
+                            : `🩺 ${tarea.enfoque?.toUpperCase() || "EJERCICIO"}`}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.tareaFreqBadge,
+                            {
+                              color: esRecurrente ? "#047857" : "#6D28D9",
+                              backgroundColor: esRecurrente
+                                ? "#D1FAE5"
+                                : "#EDE9FE",
+                            },
+                          ]}
+                        >
+                          {tarea.frecuenciaLabel ||
+                            (esRecurrente ? "Recurrente" : "Única vez")}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.cardTitulo}>{tarea.titulo}</Text>
+                      <Text style={styles.cardDescripcion}>
+                        {tarea.descripcion}
                       </Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+
+                      {esPregunta ? (
+                        <View style={styles.preguntaBox}>
+                          {pasos.map((paso, idx) => {
+                            const valActual = respuestasActuales[idx];
+                            return (
+                              <View key={idx} style={styles.pasoItemBox}>
+                                <Text style={styles.pasoLabelText}>
+                                  {idx + 1}. {paso.label}
+                                </Text>
+
+                                {paso.tipo === "escala" ? (
+                                  <View style={styles.escalaRow}>
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
+                                      (n) => {
+                                        const sel = Number(valActual) === n;
+                                        return (
+                                          <TouchableOpacity
+                                            key={n}
+                                            onPress={() =>
+                                              cambiarValorPasoTarea(
+                                                tarea.id,
+                                                idx,
+                                                n,
+                                              )
+                                            }
+                                            style={[
+                                              styles.escalaChip,
+                                              sel && styles.escalaChipActive,
+                                            ]}
+                                          >
+                                            <Text
+                                              style={[
+                                                styles.escalaChipText,
+                                                sel && { color: "#FFFFFF" },
+                                              ]}
+                                            >
+                                              {n}
+                                            </Text>
+                                          </TouchableOpacity>
+                                        );
+                                      },
+                                    )}
+                                  </View>
+                                ) : paso.tipo === "instruccion" ? (
+                                  <TouchableOpacity
+                                    onPress={() =>
+                                      cambiarValorPasoTarea(
+                                        tarea.id,
+                                        idx,
+                                        valActual === "Realizado ✓"
+                                          ? ""
+                                          : "Realizado ✓",
+                                      )
+                                    }
+                                    style={[
+                                      styles.checkInstruccionBtn,
+                                      valActual === "Realizado ✓" &&
+                                        styles.checkInstruccionBtnActive,
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.checkInstruccionText,
+                                        valActual === "Realizado ✓" && {
+                                          color: "#FFFFFF",
+                                        },
+                                      ]}
+                                    >
+                                      {valActual === "Realizado ✓"
+                                        ? "Indicación marcada ✓"
+                                        : "Marcar indicación como realizada"}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <TextInput
+                                    style={styles.respuestaInput}
+                                    multiline
+                                    placeholder="Escribe tu respuesta aquí..."
+                                    placeholderTextColor="#94A3B8"
+                                    value={valActual ? String(valActual) : ""}
+                                    onChangeText={(txt) =>
+                                      cambiarValorPasoTarea(tarea.id, idx, txt)
+                                    }
+                                  />
+                                )}
+                              </View>
+                            );
+                          })}
+
+                          <TouchableOpacity
+                            style={styles.boton}
+                            disabled={enviandoTareaId === tarea.id}
+                            onPress={() => handleEnviarRespuestaPregunta(tarea)}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={styles.botonTexto}>
+                              {enviandoTareaId === tarea.id
+                                ? "Enviando respuesta..."
+                                : "Enviar respuesta"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.boton}
+                          disabled={enviandoTareaId === tarea.id}
+                          onPress={() => handleAbrirEjercicioAsignado(tarea)}
+                          activeOpacity={0.9}
+                        >
+                          <Text style={styles.botonTexto}>
+                            {enviandoTareaId === tarea.id
+                              ? "Registrando..."
+                              : "Hacer ejercicio"}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })
+              )}
             </>
           ) : (
-            visibleEjercicios.map((item) => (
-              <View key={item.id} style={styles.card}>
+            <>
+              {/* ACTIVIDADES POR DEFECTO (CUANDO NO HAY ENVÍOS DEL ESPECIALISTA) */}
+              <View style={styles.priorityCard}>
                 <View style={styles.cardImageBox}>
                   <Image
-                    source={imagenesEjercicios[item.id]}
+                    source={imagenTecnicaABCDE}
                     style={styles.cardImage}
                     resizeMode="cover"
                   />
                 </View>
 
-                <Text style={styles.cardTitulo}>{item.titulo}</Text>
-                <Text style={styles.cardDescripcion}>{item.descripcion}</Text>
-                <Text style={styles.cardDuracion}>
-                  Duración: {item.duracion}
+                <Text style={styles.priorityTitle}>
+                  Técnica cognitiva ABCDE
+                </Text>
+                <Text style={styles.priorityText}>
+                  Diagnostica tus pensamientos automáticos (A-B-C), debátelos
+                  (D-E) y obtén tu interpretación clínica.
                 </Text>
 
                 <TouchableOpacity
-                  style={styles.boton}
-                  onPress={() => handleEmpezarEjercicio(item)}
+                  style={styles.priorityButton}
+                  onPress={handleTecnicaABCDE}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.botonTexto}>
-                    {item.esInfoAnsiedad
-                      ? "Leer sobre la ansiedad"
-                      : "Empezar ejercicio"}
+                  <Text style={styles.priorityButtonText}>
+                    Empezar técnica ABCDE
                   </Text>
                 </TouchableOpacity>
               </View>
-            ))
+
+              {visibleEjercicios.map((item) => (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardImageBox}>
+                    <Image
+                      source={imagenesEjercicios[item.id]}
+                      style={styles.cardImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+
+                  <Text style={styles.cardTitulo}>{item.titulo}</Text>
+                  <Text style={styles.cardDescripcion}>{item.descripcion}</Text>
+                  <Text style={styles.cardDuracion}>
+                    Duración: {item.duracion}
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.boton}
+                    onPress={() => handleEmpezarEjercicio(item)}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.botonTexto}>
+                      {item.esInfoAnsiedad
+                        ? "Leer sobre la ansiedad"
+                        : "Empezar ejercicio"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
           )}
         </ScrollView>
+
+        {/* MODAL CON DISEÑO PROPIO PARA CONFIRMACIONES Y NOTAS */}
+        <Modal
+          visible={modalAviso.visible}
+          transparent
+          animationType="fade"
+          onRequestClose={cerrarModal}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View
+                style={[
+                  styles.modalBadge,
+                  modalAviso.tipo === "exito"
+                    ? { backgroundColor: "#D1FAE5" }
+                    : { backgroundColor: "#EDE9FE" },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    modalAviso.tipo === "exito"
+                      ? "checkmark-circle"
+                      : "sparkles"
+                  }
+                  size={16}
+                  color={modalAviso.tipo === "exito" ? "#047857" : "#5B21B6"}
+                />
+                <Text
+                  style={[
+                    styles.modalBadgeText,
+                    modalAviso.tipo === "exito"
+                      ? { color: "#047857" }
+                      : { color: "#5B21B6" },
+                  ]}
+                >
+                  {modalAviso.badge}
+                </Text>
+              </View>
+
+              <Text style={styles.modalTitle}>{modalAviso.titulo}</Text>
+              <Text style={styles.modalMessage}>{modalAviso.mensaje}</Text>
+
+              <TouchableOpacity
+                style={styles.modalBtn}
+                onPress={cerrarModal}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.modalBtnText}>Entendido</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </View>
   );
@@ -704,29 +1091,134 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  resultadoBox: {
-    marginBottom: 10,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "#F3E8FF",
+  psicologoBanner: {
+    backgroundColor: "#EDE9FE",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#D8B4FE",
+    borderColor: "#C4B5FD",
   },
-  resultadoLabel: {
-    fontSize: 12,
-    color: "#6B21A8",
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  resultadoTitle: {
-    fontSize: 14,
+  psicologoBannerTitle: {
+    fontSize: 13.5,
     fontWeight: "800",
     color: "#4C1D95",
-    marginBottom: 4,
   },
-  resultadoScore: {
+  psicologoBannerSub: {
     fontSize: 12,
-    color: "#6B21A8",
+    color: "#5B21B6",
+    marginTop: 2,
+  },
+
+  doneForTodayCard: {
+    backgroundColor: "#ECFDF5",
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: "#6EE7B7",
+    alignItems: "center",
+    gap: 6,
+  },
+  doneForTodayTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#065F46",
+  },
+  doneForTodayText: {
+    fontSize: 13.5,
+    color: "#047857",
+    textAlign: "center",
+    lineHeight: 19,
+  },
+
+  tareaTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  tareaTipoTag: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#7C3AED",
+    flex: 1,
+  },
+  tareaFreqBadge: {
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+
+  preguntaBox: {
+    marginTop: 6,
+    gap: 10,
+  },
+  pasoItemBox: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E5D2FF",
+  },
+  pasoLabelText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  respuestaInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    borderRadius: 10,
+    padding: 10,
+    minHeight: 62,
+    fontSize: 13.5,
+    color: "#1E293B",
+    textAlignVertical: "top",
+  },
+  escalaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  escalaChip: {
+    width: 30,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#F3E8FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  escalaChipActive: {
+    backgroundColor: "#6D28D9",
+  },
+  escalaChipText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#4C1D95",
+  },
+  checkInstruccionBtn: {
+    backgroundColor: "#F3E8FF",
+    borderWidth: 1,
+    borderColor: "#C4B5FD",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  checkInstruccionBtnActive: {
+    backgroundColor: "#0F766E",
+    borderColor: "#0F766E",
+  },
+  checkInstruccionText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#4C1D95",
   },
 
   titulo: {
@@ -755,7 +1247,7 @@ const styles = StyleSheet.create({
   cardTitulo: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: 6,
     color: "#333",
   },
   cardDescripcion: {
@@ -773,10 +1265,69 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 22,
     alignItems: "center",
+    marginTop: 4,
   },
   botonTexto: {
     color: "white",
     fontWeight: "bold",
     fontSize: 14,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  modalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  modalBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1E293B",
+    marginTop: 10,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 13,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  modalBtn: {
+    width: "100%",
+    backgroundColor: "#7C3AED",
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  modalBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13.5,
+    fontWeight: "800",
   },
 });

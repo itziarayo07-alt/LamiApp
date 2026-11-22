@@ -1429,7 +1429,7 @@ export default function ProfileScreen({ navigation }) {
                   style={styles.badge}
                 >
                   <Ionicons name="sparkles" size={14} color="#6D28D9" />
-                  <Text style={styles.badgeText}>Tu espacio privado 💜</Text>
+                  <Text style={styles.badgeText}>Tu espacio privado</Text>
                 </LinearGradient>
               </View>
 
@@ -1486,7 +1486,7 @@ export default function ProfileScreen({ navigation }) {
                   {calmStreak} {calmStreak === 1 ? "día" : "días"}
                 </Text>
                 <Text style={[styles.statHint, { color: "#B45309" }]}>
-                  Sigue así, lo haces genial ✨
+                  Sigue así, lo haces genial
                 </Text>
               </LinearGradient>
 
@@ -1513,7 +1513,7 @@ export default function ProfileScreen({ navigation }) {
                   {sessionsCount}
                 </Text>
                 <Text style={[styles.statHint, { color: "#5B21B6" }]}>
-                  Tu mente se está cuidando 💜
+                  Tu mente se está cuidando
                 </Text>
               </LinearGradient>
             </View>
