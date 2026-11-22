@@ -44,15 +44,48 @@ const PALETTE = {
   textMuted: "#64748B",
 };
 
-const DIAS_SEMANA = [
-  { key: "lun", dia: "Lun", num: "09", labelCompleto: "Lunes 09 Nov" },
-  { key: "mar", dia: "Mar", num: "10", labelCompleto: "Martes 10 Nov" },
-  { key: "mie", dia: "Mié", num: "11", labelCompleto: "Miércoles 11 Nov" },
-  { key: "jue", dia: "Jue", num: "12", labelCompleto: "Jueves 12 Nov • Hoy" },
-  { key: "vie", dia: "Vie", num: "13", labelCompleto: "Viernes 13 Nov" },
-  { key: "sab", dia: "Sáb", num: "14", labelCompleto: "Sábado 14 Nov" },
-  { key: "dom", dia: "Dom", num: "15", labelCompleto: "Domingo 15 Nov" },
+const NOMBRES_MESES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
 ];
+
+const MESES_CORTOS = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic",
+];
+
+const DIAS_SEMANA_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const DIAS_SEMANA_LARGOS = [
+  "Domingo",
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
+const KEYS_DIA_COMPAT = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
+const ENCABEZADOS_CALENDARIO = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 const HORAS_LISTA = [
   "01",
@@ -90,7 +123,31 @@ const OBJETIVOS_TERAPEUTICOS = [
 const getPacienteKey = (pac, index = 0) =>
   pac?.id || pac?.uid || pac?.correo || `${pac?.nombre || "pac"}-${index}`;
 
+const formatISO = (dateObj) => {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const parseISO = (isoStr) => {
+  const [y, m, d] = String(isoStr).split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+};
+
+const formatearEtiquetaFecha = (isoStr, hoyISO) => {
+  const fecha = parseISO(isoStr);
+  const diaLargo = DIAS_SEMANA_LARGOS[fecha.getDay()];
+  const numDia = String(fecha.getDate()).padStart(2, "0");
+  const mesCorto = MESES_CORTOS[fecha.getMonth()];
+  const base = `${diaLargo} ${numDia} ${mesCorto}`;
+  return isoStr === hoyISO ? `${base} • Hoy` : base;
+};
+
 export default function AgendaPsicologo({ navigation }) {
+  const hoyReal = useMemo(() => new Date(), []);
+  const hoyISO = useMemo(() => formatISO(hoyReal), [hoyReal]);
+
   const [perfilPsicologo, setPerfilPsicologo] = useState(null);
   const [pacientes, setPacientes] = useState([]);
   const [citasFirestore, setCitasFirestore] = useState([]);
@@ -98,13 +155,24 @@ export default function AgendaPsicologo({ navigation }) {
   const [pacienteActivoKey, setPacienteActivoKey] = useState(null);
   const [citaSeleccionadaId, setCitaSeleccionadaId] = useState(null);
 
+  // Buscador desplegable de pacientes con lupa
+  const [buscadorPacientesAbierto, setBuscadorPacientesAbierto] =
+    useState(false);
+  const [textoBusquedaPaciente, setTextoBusquedaPaciente] = useState("");
+
   const [modalidadGlobal, setModalidadGlobal] = useState("consultorio");
   const [direccionConsultorio, setDireccionConsultorio] = useState(
     "Torre Médica #402, Consultorio 4B"
   );
   const [editandoDireccion, setEditandoDireccion] = useState(false);
 
-  const [diaSeleccionado, setDiaSeleccionado] = useState("jue");
+  // Estado del calendario mensual y selector desplegable de Mes/Año
+  const [fechaSeleccionadaISO, setFechaSeleccionadaISO] = useState(hoyISO);
+  const [mesVisible, setMesVisible] = useState({
+    year: hoyReal.getFullYear(),
+    month: hoyReal.getMonth(),
+  });
+  const [selectorMesAnioAbierto, setSelectorMesAnioAbierto] = useState(false);
 
   const [modalNuevaCita, setModalNuevaCita] = useState(false);
   const [turnoHorario, setTurnoHorario] = useState("manana");
@@ -132,6 +200,11 @@ export default function AgendaPsicologo({ navigation }) {
   const [eliminandoCita, setEliminandoCita] = useState(false);
 
   const psicologoId = auth.currentUser?.uid || "PSI-DEMO-492";
+
+  const aniosDisponibles = useMemo(() => {
+    const baseYear = hoyReal.getFullYear();
+    return [baseYear - 1, baseYear, baseYear + 1, baseYear + 2];
+  }, [hoyReal]);
 
   useEffect(() => {
     if (!auth.currentUser?.uid) return;
@@ -247,6 +320,16 @@ export default function AgendaPsicologo({ navigation }) {
     return idx >= 0 ? pacientes[idx] : pacientes[0];
   }, [pacientes, pacienteActivoKey]);
 
+  const pacientesFiltradosBuscador = useMemo(() => {
+    const q = textoBusquedaPaciente.trim().toLowerCase();
+    if (!q) return pacientes;
+    return pacientes.filter(
+      (p) =>
+        (p.nombre || "").toLowerCase().includes(q) ||
+        (p.correo || "").toLowerCase().includes(q)
+    );
+  }, [pacientes, textoBusquedaPaciente]);
+
   const fotoPacienteActivo =
     pacienteSeleccionado?.fotoPerfil ||
     pacienteSeleccionado?.fotoUrl ||
@@ -258,12 +341,179 @@ export default function AgendaPsicologo({ navigation }) {
     return `${horaInicio}:${minutoInicio} - ${horaFin}:${minutoFin} ${sufijo}`;
   }, [horaInicio, minutoInicio, horaFin, minutoFin, turnoHorario]);
 
-  const agendaDelDia = useMemo(() => {
-    return citasFirestore.filter((item) => item.diaKey === diaSeleccionado);
-  }, [citasFirestore, diaSeleccionado]);
+  const celdasCalendarioMes = useMemo(() => {
+    const { year, month } = mesVisible;
+    const primerDiaMes = new Date(year, month, 1);
+    const totalDiasMes = new Date(year, month + 1, 0).getDate();
+    const offsetInicio = (primerDiaMes.getDay() + 6) % 7;
 
-  const infoDiaActual =
-    DIAS_SEMANA.find((d) => d.key === diaSeleccionado) || DIAS_SEMANA[3];
+    const celdas = [];
+    for (let i = 0; i < offsetInicio; i++) {
+      celdas.push({ empty: true, key: `empty-start-${i}` });
+    }
+    for (let d = 1; d <= totalDiasMes; d++) {
+      const dateObj = new Date(year, month, d);
+      const iso = formatISO(dateObj);
+      celdas.push({
+        empty: false,
+        key: iso,
+        iso,
+        num: String(d).padStart(2, "0"),
+        diaNombre: DIAS_SEMANA_CORTOS[dateObj.getDay()],
+        diaKeyCompat: KEYS_DIA_COMPAT[dateObj.getDay()],
+      });
+    }
+    while (celdas.length % 7 !== 0) {
+      celdas.push({ empty: true, key: `empty-end-${celdas.length}` });
+    }
+    return celdas;
+  }, [mesVisible]);
+
+  const fechasConCitasSet = useMemo(() => {
+    const set = new Set();
+    citasFirestore.forEach((c) => {
+      if (c.fechaISO) set.add(c.fechaISO);
+    });
+    return set;
+  }, [citasFirestore]);
+
+  const totalCitasEnMesVisible = useMemo(() => {
+    const prefijo = `${mesVisible.year}-${String(mesVisible.month + 1).padStart(
+      2,
+      "0"
+    )}`;
+    return citasFirestore.filter((c) =>
+      String(c.fechaISO || "").startsWith(prefijo)
+    ).length;
+  }, [citasFirestore, mesVisible]);
+
+  const agendaDelDia = useMemo(() => {
+    const fechaObj = parseISO(fechaSeleccionadaISO);
+    const diaKeyCompat = KEYS_DIA_COMPAT[fechaObj.getDay()];
+
+    return citasFirestore.filter((item) => {
+      if (item.fechaISO) {
+        return item.fechaISO === fechaSeleccionadaISO;
+      }
+      return item.diaKey === diaKeyCompat;
+    });
+  }, [citasFirestore, fechaSeleccionadaISO]);
+
+  const etiquetaDiaActual = useMemo(
+    () => formatearEtiquetaFecha(fechaSeleccionadaISO, hoyISO),
+    [fechaSeleccionadaISO, hoyISO]
+  );
+
+  const diaKeyCompatActual = useMemo(() => {
+    const fechaObj = parseISO(fechaSeleccionadaISO);
+    return KEYS_DIA_COMPAT[fechaObj.getDay()];
+  }, [fechaSeleccionadaISO]);
+
+  // NAVEGACIÓN ROBUSTA ENTRE PANTALLAS (detecta automáticamente el nombre exacto de la ruta)
+  const irAPantalla = (routeName, params = {}) => {
+    const rutasDisponibles = navigation?.getState?.()?.routeNames || [];
+
+    const aliasRutas = {
+      ExpedientePaciente: [
+        "ExpedientePaciente",
+        "Expediente",
+        "Expedientes",
+        "ExpedientesPsicologo",
+        "DetallePaciente",
+      ],
+      PsicologoDashboard: [
+        "PsicologoDashboard",
+        "Pacientes",
+        "DashboardPsicologo",
+        "InicioPsicologo",
+      ],
+      EjerciciosPsicologo: [
+        "EjerciciosPsicologo",
+        "Ejercicios",
+        "BibliotecaEjercicios",
+      ],
+      FlywheelQR: ["FlywheelQR", "CodigoQR", "QRPsicologo", "VincularQR"],
+      SalaTeleconsulta: [
+        "SalaTeleconsulta",
+        "Teleconsulta",
+        "VideollamadaPsicologo",
+      ],
+    };
+
+    const candidatos = aliasRutas[routeName] || [routeName];
+    const rutaEncontrada = candidatos.find((nombre) =>
+      rutasDisponibles.includes(nombre)
+    );
+
+    if (rutaEncontrada) {
+      navigation.navigate(rutaEncontrada, params);
+      return;
+    }
+
+    const parentNav = navigation?.getParent?.();
+    const rutasPadre = parentNav?.getState?.()?.routeNames || [];
+    const rutaEnPadre = candidatos.find((nombre) =>
+      rutasPadre.includes(nombre)
+    );
+
+    if (rutaEnPadre && parentNav) {
+      parentNav.navigate(rutaEnPadre, params);
+      return;
+    }
+
+    Alert.alert(
+      "Ruta no encontrada",
+      `No se encontró la pantalla en el navegador.\nRutas activas: ${rutasDisponibles.join(
+        ", "
+      )}`
+    );
+  };
+
+  const cambiarMes = (delta) => {
+    setMesVisible((prev) => {
+      let m = prev.month + delta;
+      let y = prev.year;
+      if (m < 0) {
+        m = 11;
+        y -= 1;
+      } else if (m > 11) {
+        m = 0;
+        y += 1;
+      }
+      return { year: y, month: m };
+    });
+  };
+
+  const seleccionarMesDesdeDesplegable = (nuevoMesIdx) => {
+    setMesVisible((prev) => {
+      const nuevaFecha = new Date(prev.year, nuevoMesIdx, 1);
+      setFechaSeleccionadaISO(formatISO(nuevaFecha));
+      return { year: prev.year, month: nuevoMesIdx };
+    });
+    setSelectorMesAnioAbierto(false);
+  };
+
+  const seleccionarAnioDesdeDesplegable = (nuevoAnio) => {
+    setMesVisible((prev) => {
+      const nuevaFecha = new Date(nuevoAnio, prev.month, 1);
+      setFechaSeleccionadaISO(formatISO(nuevaFecha));
+      return { year: nuevoAnio, month: prev.month };
+    });
+  };
+
+  const irAHoy = () => {
+    const ahora = new Date();
+    const isoAhora = formatISO(ahora);
+    setMesVisible({ year: ahora.getFullYear(), month: ahora.getMonth() });
+    setFechaSeleccionadaISO(isoAhora);
+    setCitaSeleccionadaId(null);
+    setSelectorMesAnioAbierto(false);
+  };
+
+  const esMesActualYHoySeleccionado =
+    fechaSeleccionadaISO === hoyISO &&
+    mesVisible.year === hoyReal.getFullYear() &&
+    mesVisible.month === hoyReal.getMonth();
 
   const handleCompartirUbicacion = async () => {
     try {
@@ -294,7 +544,7 @@ export default function AgendaPsicologo({ navigation }) {
   };
 
   const handleUnirseVideollamada = (cita) => {
-    navigation.navigate("SalaTeleconsulta", {
+    irAPantalla("SalaTeleconsulta", {
       paciente: {
         uid: cita.pacienteId || "general",
         nombre: cita.pacienteNombre,
@@ -314,7 +564,7 @@ export default function AgendaPsicologo({ navigation }) {
         nombre: cita.pacienteNombre,
         motivoConsulta: cita.motivo,
       };
-    navigation.navigate("ExpedientePaciente", { paciente: pacienteMatch });
+    irAPantalla("ExpedientePaciente", { paciente: pacienteMatch });
   };
 
   const handleEliminarCita = (cita) => {
@@ -414,7 +664,7 @@ export default function AgendaPsicologo({ navigation }) {
     if (hayChoque) {
       Alert.alert(
         "Horario ocupado ⚠️",
-        `Ya tienes una cita agendada el ${infoDiaActual.labelCompleto} a las ${horarioFormateado}. Selecciona otro horario o día.`
+        `Ya tienes una cita agendada el ${etiquetaDiaActual} a las ${horarioFormateado}. Selecciona otro horario o día.`
       );
       return;
     }
@@ -435,11 +685,14 @@ export default function AgendaPsicologo({ navigation }) {
       const pacienteTargetId =
         pacienteSeleccionado.id || pacienteSeleccionado.uid || null;
 
+      const labelLimpio = etiquetaDiaActual.replace(" • Hoy", "");
+
       const nueva = {
         psicologoId: auth.currentUser?.uid || "PSI-DEMO-492",
         pacienteId: pacienteTargetId,
-        diaKey: diaSeleccionado,
-        diaLabel: infoDiaActual.labelCompleto,
+        fechaISO: fechaSeleccionadaISO,
+        diaKey: diaKeyCompatActual,
+        diaLabel: labelLimpio,
         tipo: "cita",
         modalidad: nuevaModalidad,
         turno: turnoHorario,
@@ -479,7 +732,7 @@ export default function AgendaPsicologo({ navigation }) {
             psicologoNombre: nombreMostrar,
             modalidadSolicitada: esPresencial ? "presencial" : "online",
             modalidadConfirmada: esPresencial ? "presencial" : "online",
-            fechaCita: new Date().toISOString().slice(0, 10),
+            fechaCita: fechaSeleccionadaISO,
             horaCita: horarioFormateado,
             ubicacionConfirmada: esPresencial
               ? perfilPsicologo?.ubicacion || {
@@ -488,7 +741,7 @@ export default function AgendaPsicologo({ navigation }) {
                   ciudad: "",
                 }
               : null,
-            respuestaTerapeuta: `Sesión programada (${infoDiaActual.labelCompleto} • ${horarioFormateado}): ${motivoFinal}`,
+            respuestaTerapeuta: `Sesión programada (${labelLimpio} • ${horarioFormateado}): ${motivoFinal}`,
             estado: "confirmada",
             creadoEn: serverTimestamp(),
           });
@@ -508,10 +761,6 @@ export default function AgendaPsicologo({ navigation }) {
     } finally {
       setGuardandoCita(false);
     }
-  };
-
-  const irAPantalla = (routeName, params = {}) => {
-    navigation.navigate(routeName, params);
   };
 
   return (
@@ -598,10 +847,17 @@ export default function AgendaPsicologo({ navigation }) {
           </View>
         </View>
 
+        {/* TARJETA DE PACIENTE ACTIVO + LUPA DESPLEGABLE */}
         <View style={styles.selectedPatientBanner}>
           {pacienteSeleccionado ? (
             <>
-              <View style={styles.selectedBannerLeft}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() =>
+                  setBuscadorPacientesAbierto(!buscadorPacientesAbierto)
+                }
+                style={styles.selectedBannerLeft}
+              >
                 {fotoPacienteActivo ? (
                   <Image
                     source={{ uri: fotoPacienteActivo }}
@@ -619,21 +875,56 @@ export default function AgendaPsicologo({ navigation }) {
                 )}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.selectedTag}>
-                    PACIENTE SELECCIONADO PARA AGENDA
+                    PACIENTE ACTIVO ({pacientes.length})
                   </Text>
-                  <Text style={styles.selectedName} numberOfLines={1}>
-                    {pacienteSeleccionado.nombre}
-                  </Text>
+                  <View style={styles.selectedNameChevronRow}>
+                    <Text style={styles.selectedName} numberOfLines={1}>
+                      {pacienteSeleccionado.nombre}
+                    </Text>
+                    <Ionicons
+                      name={
+                        buscadorPacientesAbierto
+                          ? "chevron-up"
+                          : "chevron-down"
+                      }
+                      size={15}
+                      color="#FFFFFF"
+                    />
+                  </View>
                 </View>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setModalNuevaCita(true)}
-                style={styles.quickSchedulePill}
-              >
-                <Ionicons name="calendar-outline" size={14} color="#FFFFFF" />
-                <Text style={styles.quickScheduleText}>Citar</Text>
               </TouchableOpacity>
+
+              <View style={styles.bannerRightActions}>
+                <TouchableOpacity
+                  onPress={() =>
+                    setBuscadorPacientesAbierto(!buscadorPacientesAbierto)
+                  }
+                  activeOpacity={0.85}
+                  style={[
+                    styles.searchPatientIconBtn,
+                    buscadorPacientesAbierto &&
+                      styles.searchPatientIconBtnActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={buscadorPacientesAbierto ? "close" : "search"}
+                    size={17}
+                    color={
+                      buscadorPacientesAbierto
+                        ? PALETTE.purpleVibrant
+                        : "#FFFFFF"
+                    }
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setModalNuevaCita(true)}
+                  style={styles.quickSchedulePill}
+                >
+                  <Ionicons name="calendar-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.quickScheduleText}>Citar</Text>
+                </TouchableOpacity>
+              </View>
             </>
           ) : (
             <View style={styles.selectedBannerLeft}>
@@ -649,62 +940,103 @@ export default function AgendaPsicologo({ navigation }) {
           )}
         </View>
 
-        {pacientes.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.heroPatientsScroll}
-          >
-            {pacientes.map((pac, idx) => {
-              const keyUnica = getPacienteKey(pac, idx);
-              const isSelected = keyUnica === pacienteActivoKey;
-              const fotoChip = pac.fotoPerfil || pac.fotoUrl || pac.foto || null;
-              return (
-                <TouchableOpacity
-                  key={keyUnica}
-                  onPress={() => setPacienteActivoKey(keyUnica)}
-                  activeOpacity={0.85}
-                  style={[
-                    styles.heroPatientChip,
-                    isSelected && styles.heroPatientChipActive,
-                  ]}
-                >
-                  {fotoChip ? (
-                    <Image
-                      source={{ uri: fotoChip }}
-                      style={styles.chipMiniAvatar}
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.chipDot,
-                        {
-                          backgroundColor: isSelected
-                            ? PALETTE.purpleVibrant
-                            : PALETTE.tealMid,
-                        },
-                      ]}
-                    />
-                  )}
-                  <Text
-                    style={[
-                      styles.heroPatientChipText,
-                      isSelected && styles.heroPatientChipTextActive,
-                    ]}
-                  >
-                    {pac.nombre}
-                  </Text>
-                  {isSelected && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={14}
-                      color={PALETTE.purpleVibrant}
-                    />
-                  )}
+        {/* PANEL DESPLEGABLE DE BÚSQUEDA Y LISTA COMPLETA DE PACIENTES */}
+        {buscadorPacientesAbierto && pacientes.length > 0 && (
+          <View style={styles.patientDropdownCard}>
+            <View style={styles.patientDropdownSearchRow}>
+              <Ionicons
+                name="search"
+                size={16}
+                color={PALETTE.purpleVibrant}
+              />
+              <TextInput
+                style={styles.patientDropdownInput}
+                placeholder="Buscar paciente por nombre..."
+                placeholderTextColor="#94A3B8"
+                value={textoBusquedaPaciente}
+                onChangeText={setTextoBusquedaPaciente}
+                autoFocus
+              />
+              {textoBusquedaPaciente !== "" && (
+                <TouchableOpacity onPress={() => setTextoBusquedaPaciente("")}>
+                  <Ionicons name="close-circle" size={16} color="#94A3B8" />
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+              )}
+            </View>
+
+            <ScrollView
+              style={styles.patientDropdownList}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {pacientesFiltradosBuscador.length === 0 ? (
+                <Text style={styles.patientDropdownEmpty}>
+                  No se encontraron pacientes con ese nombre.
+                </Text>
+              ) : (
+                pacientesFiltradosBuscador.map((pac, idx) => {
+                  const keyUnica = getPacienteKey(pac, idx);
+                  const isSelected = keyUnica === pacienteActivoKey;
+                  const fotoItem =
+                    pac.fotoPerfil || pac.fotoUrl || pac.foto || null;
+                  return (
+                    <TouchableOpacity
+                      key={keyUnica}
+                      activeOpacity={0.82}
+                      onPress={() => {
+                        setPacienteActivoKey(keyUnica);
+                        setBuscadorPacientesAbierto(false);
+                        setTextoBusquedaPaciente("");
+                      }}
+                      style={[
+                        styles.patientDropdownItem,
+                        isSelected && styles.patientDropdownItemActive,
+                      ]}
+                    >
+                      {fotoItem ? (
+                        <Image
+                          source={{ uri: fotoItem }}
+                          style={styles.dropdownItemAvatar}
+                        />
+                      ) : (
+                        <View style={styles.dropdownItemAvatarFallback}>
+                          <Text style={styles.dropdownItemInitial}>
+                            {(pac.nombre || "P")[0].toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.dropdownItemName,
+                            isSelected && { color: PALETTE.purpleVibrant },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {pac.nombre}
+                        </Text>
+                        {pac.correo ? (
+                          <Text
+                            style={styles.dropdownItemSub}
+                            numberOfLines={1}
+                          >
+                            {pac.correo}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={19}
+                          color={PALETTE.purpleVibrant}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
         )}
       </LinearGradient>
 
@@ -712,50 +1044,237 @@ export default function AgendaPsicologo({ navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.weekStripCard}>
-          {DIAS_SEMANA.map((item) => {
-            const seleccionado = diaSeleccionado === item.key;
-            const tieneCitasReales = citasFirestore.some(
-              (c) => c.diaKey === item.key
-            );
-            return (
+        {/* CALENDARIO MENSUAL REDONDEADO CON DESPLEGABLE DE MES Y AÑO */}
+        <View style={styles.monthCalendarCard}>
+          <LinearGradient
+            colors={["#F6F3FF", "#EAF5F8"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.monthHeaderBanner}
+          >
+            <TouchableOpacity
+              onPress={() => cambiarMes(-1)}
+              activeOpacity={0.8}
+              style={styles.monthNavBtn}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={18}
+                color={PALETTE.indigoMuted}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() =>
+                setSelectorMesAnioAbierto(!selectorMesAnioAbierto)
+              }
+              style={styles.monthDropdownTrigger}
+            >
+              <Ionicons
+                name="calendar"
+                size={15}
+                color={PALETTE.purpleVibrant}
+              />
+              <Text style={styles.monthTitleText}>
+                {NOMBRES_MESES[mesVisible.month]} {mesVisible.year}
+              </Text>
+              <Ionicons
+                name={selectorMesAnioAbierto ? "chevron-up" : "chevron-down"}
+                size={15}
+                color={PALETTE.purpleVibrant}
+              />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {!esMesActualYHoySeleccionado && (
+                <TouchableOpacity
+                  onPress={irAHoy}
+                  activeOpacity={0.8}
+                  style={styles.todayPillBtn}
+                >
+                  <Text style={styles.todayPillText}>Hoy</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
-                key={item.key}
-                onPress={() => {
-                  setDiaSeleccionado(item.key);
-                  setCitaSeleccionadaId(null);
-                }}
-                activeOpacity={0.85}
-                style={styles.dayTouchable}
+                onPress={() => cambiarMes(1)}
+                activeOpacity={0.8}
+                style={styles.monthNavBtn}
               >
-                {seleccionado ? (
-                  <LinearGradient
-                    colors={[PALETTE.tealDeep, PALETTE.tealMid]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={styles.dayPillActive}
-                  >
-                    <Text style={styles.dayNameActive}>{item.dia}</Text>
-                    <Text style={styles.dayNumActive}>{item.num}</Text>
-                    <View style={styles.dayDotActive} />
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.dayPillInactive}>
-                    <Text style={styles.dayNameInactive}>{item.dia}</Text>
-                    <Text style={styles.dayNumInactive}>{item.num}</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={PALETTE.indigoMuted}
+                />
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+
+          {/* DESPLEGABLE DE SELECCIÓN RÁPIDA DE AÑO Y MES */}
+          {selectorMesAnioAbierto && (
+            <View style={styles.monthPickerDropdownPanel}>
+              <Text style={styles.pickerSectionTag}>SELECCIONA EL AÑO</Text>
+              <View style={styles.yearsRow}>
+                {aniosDisponibles.map((yr) => {
+                  const activoAnio = mesVisible.year === yr;
+                  return (
+                    <TouchableOpacity
+                      key={yr}
+                      onPress={() => seleccionarAnioDesdeDesplegable(yr)}
+                      style={[
+                        styles.yearChip,
+                        activoAnio && styles.yearChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.yearChipText,
+                          activoAnio && styles.yearChipTextActive,
+                        ]}
+                      >
+                        {yr}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.pickerSectionTag, { marginTop: 8 }]}>
+                SELECCIONA EL MES
+              </Text>
+              <View style={styles.monthsGrid}>
+                {NOMBRES_MESES.map((nombreMes, idxMes) => {
+                  const activoMes = mesVisible.month === idxMes;
+                  return (
+                    <TouchableOpacity
+                      key={nombreMes}
+                      onPress={() => seleccionarMesDesdeDesplegable(idxMes)}
+                      style={[
+                        styles.monthOptionCell,
+                        activoMes && styles.monthOptionCellActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.monthOptionText,
+                          activoMes && styles.monthOptionTextActive,
+                        ]}
+                      >
+                        {nombreMes.slice(0, 3)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {/* BARRA DE DÍAS DE LA SEMANA */}
+          <View style={styles.weekDaysHeaderBar}>
+            {ENCABEZADOS_CALENDARIO.map((nombreDia, i) => (
+              <View key={nombreDia} style={styles.weekDayHeaderCell}>
+                <Text
+                  style={[
+                    styles.weekDayHeaderText,
+                    i >= 5 && { color: PALETTE.indigoMuted },
+                  ]}
+                >
+                  {nombreDia}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* CUADRÍCULA DE DÍAS DEL MES */}
+          <View style={styles.monthGridWrap}>
+            {celdasCalendarioMes.map((celda) => {
+              if (celda.empty) {
+                return <View key={celda.key} style={styles.monthDayCell} />;
+              }
+
+              const seleccionado = celda.iso === fechaSeleccionadaISO;
+              const esHoy = celda.iso === hoyISO;
+              const tieneCitas = fechasConCitasSet.has(celda.iso);
+
+              return (
+                <TouchableOpacity
+                  key={celda.key}
+                  onPress={() => {
+                    setFechaSeleccionadaISO(celda.iso);
+                    setCitaSeleccionadaId(null);
+                  }}
+                  activeOpacity={0.85}
+                  style={styles.monthDayCell}
+                >
+                  {seleccionado ? (
+                    <LinearGradient
+                      colors={[PALETTE.tealDeep, PALETTE.tealMid]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.monthDayPillActive}
+                    >
+                      <Text style={styles.monthDayNumActive}>{celda.num}</Text>
+                      <View style={styles.monthDotActive} />
+                    </LinearGradient>
+                  ) : (
                     <View
                       style={[
-                        styles.dayDotInactive,
-                        tieneCitasReales && {
-                          backgroundColor: PALETTE.purpleVibrant,
-                        },
+                        styles.monthDayPillInactive,
+                        esHoy && styles.monthDayPillToday,
+                        tieneCitas && !esHoy && styles.monthDayPillWithCita,
                       ]}
-                    />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+                    >
+                      <Text
+                        style={[
+                          styles.monthDayNumInactive,
+                          esHoy && styles.monthDayNumToday,
+                        ]}
+                      >
+                        {celda.num}
+                      </Text>
+                      {tieneCitas ? (
+                        <View style={styles.monthDotCita} />
+                      ) : esHoy ? (
+                        <View style={styles.monthDotHoy} />
+                      ) : (
+                        <View style={styles.monthDotPlaceholder} />
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* LEYENDA INFERIOR DEL CALENDARIO */}
+          <View style={styles.calendarFooterLegend}>
+            <View style={styles.legendGroup}>
+              <View style={styles.legendItem}>
+                <View
+                  style={[
+                    styles.legendDot,
+                    { backgroundColor: PALETTE.tealDeep },
+                  ]}
+                />
+                <Text style={styles.legendText}>Hoy</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View
+                  style={[
+                    styles.legendDot,
+                    { backgroundColor: PALETTE.purpleVibrant },
+                  ]}
+                />
+                <Text style={styles.legendText}>Con cita</Text>
+              </View>
+            </View>
+
+            <Text style={styles.monthSummaryText}>
+              {totalCitasEnMesVisible}{" "}
+              {totalCitasEnMesVisible === 1 ? "cita en el mes" : "citas en el mes"}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.modalityCompactCard}>
@@ -862,7 +1381,7 @@ export default function AgendaPsicologo({ navigation }) {
         </View>
 
         <View style={styles.dayHeaderRow}>
-          <Text style={styles.dayHeadingText}>{infoDiaActual.labelCompleto}</Text>
+          <Text style={styles.dayHeadingText}>{etiquetaDiaActual}</Text>
           <View style={styles.summaryBadge}>
             <Text style={styles.summaryBadgeText}>
               {agendaDelDia.length}{" "}
@@ -886,8 +1405,8 @@ export default function AgendaPsicologo({ navigation }) {
             <Text style={styles.emptyTitle}>Agenda despejada</Text>
             <Text style={styles.emptySubtitle}>
               {pacienteSeleccionado
-                ? `¿Quieres agendar una sesión con ${pacienteSeleccionado.nombre} para el ${infoDiaActual.labelCompleto}?`
-                : "Selecciona un paciente arriba y toca Agendar para programar su consulta."}
+                ? `¿Quieres agendar una sesión con ${pacienteSeleccionado.nombre} para el ${etiquetaDiaActual}?`
+                : "Selecciona un paciente arriba con la lupa y toca Agendar."}
             </Text>
             <TouchableOpacity
               onPress={() => setModalNuevaCita(true)}
@@ -1105,6 +1624,7 @@ export default function AgendaPsicologo({ navigation }) {
         )}
       </ScrollView>
 
+      {/* MODALES EXISTENTES */}
       <Modal
         visible={!!alertaCancelacionPacienteModal}
         transparent
@@ -1360,7 +1880,7 @@ export default function AgendaPsicologo({ navigation }) {
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>Programar Sesión</Text>
-                <Text style={styles.modalSub}>{infoDiaActual.labelCompleto}</Text>
+                <Text style={styles.modalSub}>{etiquetaDiaActual}</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setModalNuevaCita(false)}
@@ -1926,7 +2446,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: "hidden",
-    gap: 12,
+    gap: 11,
   },
   heroBubbleOne: {
     position: "absolute",
@@ -2066,6 +2586,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: PALETTE.purpleVibrant,
   },
+
+  // TARJETA DE PACIENTE + LUPA DESPLEGABLE
   selectedPatientBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -2110,11 +2632,17 @@ const styles = StyleSheet.create({
     color: "#EDE9FE",
     letterSpacing: 0.4,
   },
+  selectedNameChevronRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 1,
+  },
   selectedName: {
     fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
-    marginTop: 1,
+    flexShrink: 1,
   },
   selectedEmptyText: {
     fontSize: 12,
@@ -2122,13 +2650,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flex: 1,
   },
+  bannerRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  searchPatientIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchPatientIconBtnActive: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
+  },
   quickSchedulePill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     backgroundColor: PALETTE.tealDeep,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 7.5,
     borderRadius: 12,
   },
   quickScheduleText: {
@@ -2136,44 +2683,75 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-  heroPatientsScroll: {
+  patientDropdownCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 10,
     gap: 8,
-    paddingTop: 2,
+    elevation: 4,
   },
-  heroPatientChip: {
+  patientDropdownSearchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 6.5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.25)",
+    gap: 8,
+    backgroundColor: "#F5F3FF",
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    height: 38,
   },
-  heroPatientChipActive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
+  patientDropdownInput: {
+    flex: 1,
+    fontSize: 13,
+    color: PALETTE.textDark,
   },
-  chipDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+  patientDropdownList: {
+    maxHeight: 165,
   },
-  chipMiniAvatar: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-  },
-  heroPatientChipText: {
+  patientDropdownEmpty: {
     fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    color: PALETTE.textMuted,
+    textAlign: "center",
+    paddingVertical: 12,
   },
-  heroPatientChipTextActive: {
-    color: PALETTE.purpleVibrant,
+  patientDropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  patientDropdownItemActive: {
+    backgroundColor: "#F5F3FF",
+  },
+  dropdownItemAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  dropdownItemAvatarFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: PALETTE.lavenderSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownItemInitial: {
+    fontSize: 13,
     fontWeight: "800",
+    color: PALETTE.textDark,
   },
+  dropdownItemName: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: PALETTE.textDark,
+  },
+  dropdownItemSub: {
+    fontSize: 11,
+    color: PALETTE.textMuted,
+  },
+
   scrollContent: {
     padding: 16,
     paddingBottom: 34,
@@ -2181,69 +2759,253 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: 13,
   },
-  weekStripCard: {
+
+  // CALENDARIO MENSUAL REDISEÑADO
+  monthCalendarCard: {
     backgroundColor: PALETTE.cardWhite,
-    borderRadius: 22,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    borderRadius: 26,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#E8E4F8",
+    gap: 10,
+    elevation: 3,
+    shadowColor: "#1E1B4B",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
-  dayTouchable: {
-    flex: 1,
+  monthHeaderBanner: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  dayPillActive: {
-    width: 44,
-    paddingVertical: 9,
+    justifyContent: "space-between",
+    paddingVertical: 7,
+    paddingHorizontal: 8,
     borderRadius: 16,
+  },
+  monthNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
-    gap: 3,
+    justifyContent: "center",
+    elevation: 1,
+  },
+  monthDropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    elevation: 1,
+  },
+  monthTitleText: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: PALETTE.textDark,
+  },
+  todayPillBtn: {
+    backgroundColor: PALETTE.purpleVibrant,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  todayPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  monthPickerDropdownPanel: {
+    backgroundColor: "#FAF8FF",
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+  },
+  pickerSectionTag: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: PALETTE.indigoMuted,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  yearsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  yearChip: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+  },
+  yearChipActive: {
+    backgroundColor: PALETTE.indigoMuted,
+    borderColor: PALETTE.indigoMuted,
+  },
+  yearChipText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: PALETTE.textDark,
+  },
+  yearChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+  monthsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  monthOptionCell: {
+    width: "23.2%",
+    paddingVertical: 8,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+  },
+  monthOptionCellActive: {
+    backgroundColor: PALETTE.purpleVibrant,
+    borderColor: PALETTE.purpleVibrant,
+  },
+  monthOptionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: PALETTE.textDark,
+  },
+  monthOptionTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+  weekDaysHeaderBar: {
+    flexDirection: "row",
+    backgroundColor: "#F8FAFC",
+    paddingVertical: 6,
+    borderRadius: 11,
+  },
+  weekDayHeaderCell: {
+    width: "14.285%",
+    alignItems: "center",
+  },
+  weekDayHeaderText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: PALETTE.textMuted,
+  },
+  monthGridWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  monthDayCell: {
+    width: "14.285%",
+    alignItems: "center",
+    paddingVertical: 3,
+  },
+  monthDayPillActive: {
+    width: 39,
+    height: 41,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
     elevation: 3,
   },
-  dayPillInactive: {
-    width: 44,
-    paddingVertical: 9,
-    borderRadius: 16,
+  monthDayPillInactive: {
+    width: 39,
+    height: 41,
+    borderRadius: 14,
     alignItems: "center",
-    gap: 3,
+    justifyContent: "center",
+    gap: 2,
   },
-  dayNameActive: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#F8FAFC",
+  monthDayPillToday: {
+    backgroundColor: "#EDF6F8",
+    borderWidth: 1.5,
+    borderColor: PALETTE.tealDeep,
   },
-  dayNumActive: {
-    fontSize: 15,
+  monthDayPillWithCita: {
+    backgroundColor: "#FAF5FF",
+  },
+  monthDayNumActive: {
+    fontSize: 13.5,
     fontWeight: "900",
     color: "#FFFFFF",
   },
-  dayDotActive: {
+  monthDayNumInactive: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: PALETTE.textDark,
+  },
+  monthDayNumToday: {
+    color: PALETTE.tealDeep,
+    fontWeight: "900",
+  },
+  monthDotActive: {
     width: 4.5,
     height: 4.5,
     borderRadius: 2.5,
     backgroundColor: "#FFFFFF",
-    marginTop: 1,
   },
-  dayNameInactive: {
-    fontSize: 10.5,
-    fontWeight: "600",
-    color: PALETTE.textMuted,
+  monthDotCita: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: PALETTE.purpleVibrant,
   },
-  dayNumInactive: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: PALETTE.textDark,
-  },
-  dayDotInactive: {
+  monthDotHoy: {
     width: 4.5,
     height: 4.5,
     borderRadius: 2.5,
-    backgroundColor: "#CBD5E1",
-    marginTop: 1,
+    backgroundColor: PALETTE.tealDeep,
   },
+  monthDotPlaceholder: {
+    width: 4,
+    height: 4,
+  },
+  calendarFooterLegend: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 8,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  legendGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  legendDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: PALETTE.textMuted,
+  },
+  monthSummaryText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: PALETTE.indigoMuted,
+  },
+
   modalityCompactCard: {
     backgroundColor: PALETTE.cardWhite,
     borderRadius: 20,

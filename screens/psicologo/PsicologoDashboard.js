@@ -1007,7 +1007,7 @@ export default function PsicologoDashboard({ navigation }) {
                 key={pac.uid}
                 activeOpacity={0.86}
                 onPress={() =>
-                  irAPantalla("ExpedientePaciente", { paciente: pac })
+                  irAPantalla("ExpedientesPsicologo", { pacienteId: pac.uid })
                 }
                 style={[styles.patientCard, { borderColor: cfg.borderColor }]}
               >
@@ -1189,11 +1189,7 @@ export default function PsicologoDashboard({ navigation }) {
         <TouchableOpacity
           style={styles.navItem}
           activeOpacity={0.8}
-          onPress={() =>
-            irAPantalla("ExpedientePaciente", {
-              paciente: pacientePrioritario || null,
-            })
-          }
+          onPress={() => irAPantalla("ExpedientesPsicologo")}
         >
           <Ionicons name="document-text-outline" size={21} color="#94A3B8" />
           <Text style={styles.navLabel}>Expediente</Text>
@@ -1360,17 +1356,8 @@ export default function PsicologoDashboard({ navigation }) {
                   const target = pacientePerfilModal;
                   setPacientePerfilModal(null);
                   setModalAlertas(false);
-                  irAPantalla("ExpedientePaciente", {
-                    paciente: {
-                      uid: target.uid,
-                      nombre: target.nombre,
-                      correo: target.correo,
-                      telefono: target.telefono,
-                      fotoUrl: target.fotoPerfil,
-                      protocoloClinico: target.protocoloClinico,
-                      ultimoAnimo: target.ultimoAnimo ?? 7,
-                      sesionNum: target.sesionNum || 1,
-                    },
+                  irAPantalla("ExpedientesPsicologo", {
+                    pacienteId: target.uid,
                   });
                 }}
               >
@@ -1916,7 +1903,9 @@ export default function PsicologoDashboard({ navigation }) {
                           style={styles.alertItemBox}
                           onPress={() => {
                             setModalAlertas(false);
-                            irAPantalla("ExpedientePaciente", { paciente: p });
+                            irAPantalla("ExpedientesPsicologo", {
+                              pacienteId: p.uid,
+                            });
                           }}
                         >
                           <Text style={styles.alertItemTitle}>

@@ -26,7 +26,8 @@
     "plugins": [
       "expo-sqlite",
       "expo-font",
-      "expo-audio"
+      "expo-audio",
+      "expo-sharing"
     ],
     "extra": {
       "eas": {
