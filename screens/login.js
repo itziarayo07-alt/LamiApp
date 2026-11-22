@@ -1,9 +1,10 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../config/firebaseConfig";
-import { useState } from 'react';
+import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
@@ -11,49 +12,52 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
+  View,
+} from "react-native";
 
-//base de datos 
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../config/firebaseConfig';
+import { auth, db } from "../config/firebaseConfig";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const isSmallDevice = SCREEN_HEIGHT < 700;
 
-
-export default function Login({navigation}) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export default function Login({ navigation }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Ingresa correo y contraseña');
+      Alert.alert("Error", "Ingresa correo y contraseña");
       return;
     }
 
     try {
       setLoading(true);
-      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password,
+      );
       const uid = userCredential.user.uid;
 
       // Revisamos si este usuario está registrado como especialista en Firestore
-      const psicologoSnap = await getDoc(doc(db, 'psicologos', uid));
+      const psicologoSnap = await getDoc(doc(db, "psicologos", uid));
 
       if (psicologoSnap.exists()) {
-        Alert.alert('Bienvenido/a', 'Accediendo a tu panel profesional');
-        navigation.replace('PsicologoDashboard');
+        Alert.alert("Bienvenido/a", "Accediendo a tu panel profesional");
+        navigation.replace("PsicologoDashboard");
       } else {
-        Alert.alert('Éxito');
-        navigation.replace('Test');
+        Alert.alert("Éxito");
+        navigation.replace("Test");
       }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert("Error", error.message);
     } finally {
       setLoading(false);
     }
@@ -61,25 +65,37 @@ export default function Login({navigation}) {
 
   return (
     <LinearGradient
-      colors={['#fdf2ff', '#e0f2fe']}
+      colors={["#ECFDF5", "#E0F2FE", "#F0FDFA", "#FFFFFF"]}
+      locations={[0, 0.35, 0.75, 1]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.background}
     >
+      <StatusBar backgroundColor="#ECFDF5" barStyle="dark-content" />
+
+      {/* Orbes decorativos atmosféricos */}
+      <View style={styles.orbTopRight} />
+      <View style={styles.orbMiddleLeft} />
+      <View style={styles.orbBottomRight} />
+
       <SafeAreaView style={{ flex: 1 }}>
-        {/*Esto hace que la pantalla se mueva con el teclado */}
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
           <ScrollView
             contentContainerStyle={styles.container}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            {/* PÍLDORA DE MARCA SUPERIOR */}
+            <View style={styles.brandBadge}>
+              <View style={styles.brandDot} />
+              <Text style={styles.appName}>LAMI • BIENESTAR</Text>
+            </View>
+
             {/* ENCABEZADO */}
-            <Text style={styles.appName}>Lami</Text>
             <Text style={styles.title}>Qué bueno que estás aquí</Text>
             <Text style={styles.subtitle}>
               Este es tu espacio seguro para respirar y sentirte mejor.
@@ -87,61 +103,103 @@ export default function Login({navigation}) {
 
             {/* CHIPS MOTIVACIONALES */}
             <View style={styles.chipsRow}>
-              <View style={[styles.chip, { backgroundColor: '#ede9fe' }]}>
-                <Text style={styles.chipText}>Respira profundo</Text>
+              <View style={[styles.chip, styles.chipMint]}>
+                <Ionicons name="leaf-outline" size={13} color="#0F766E" />
+                <Text style={[styles.chipText, { color: "#0F766E" }]}>
+                  Respira profundo
+                </Text>
               </View>
-              <View style={[styles.chip, { backgroundColor: '#fee2e2' }]}>
-                <Text style={styles.chipText}>Ten paciencia</Text>
+              <View style={[styles.chip, styles.chipSky]}>
+                <Ionicons name="water-outline" size={13} color="#0369A1" />
+                <Text style={[styles.chipText, { color: "#0369A1" }]}>
+                  Ten paciencia
+                </Text>
               </View>
             </View>
 
             {/* TARJETA DEL FORMULARIO */}
             <View style={styles.card}>
-              {/* Imagen */}
-              <Image
-                source={require('../assets/ilustrar.jpg')}
-                style={styles.image}
+              <LinearGradient
+                colors={["#6EE7B7", "#14B8A6", "#0284C7"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.cardTopAccent}
               />
 
+              {/* MASCOTA LAMI_1 CON HALO AQUA-MENTA */}
+              <View style={styles.mascotShowcase}>
+                <LinearGradient
+                  colors={["#D1FAE5", "#CCFBF1", "#E0F2FE"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.mascotHaloOuter}
+                >
+                  <View style={styles.mascotHaloInner}>
+                    <Image
+                      source={require("../assets/lami_1.png")}
+                      style={styles.image}
+                    />
+                  </View>
+                </LinearGradient>
+
+                <View style={styles.floatingSparkleLeft}>
+                  <Ionicons name="sparkles" size={13} color="#14B8A6" />
+                </View>
+                <View style={styles.floatingSparkleRight}>
+                  <Ionicons name="heart" size={11} color="#0284C7" />
+                </View>
+              </View>
+
               {/* TÍTULO DENTRO DEL CARD */}
-              <Text style={styles.cardTitle}>Iniciar sesión</Text>
-              <Text style={styles.cardSubtitle}>
-                Ingresa tus datos para continuar con tu proceso de calma.
-              </Text>
+              <View style={styles.cardHeaderBlock}>
+                <Text style={styles.cardTitle}>Iniciar sesión</Text>
+                <Text style={styles.cardSubtitle}>
+                  Ingresa tus datos para continuar con tu proceso de calma.
+                </Text>
+              </View>
 
               {/* Input correo */}
-              <View style={styles.inputBox}>
-                <MaterialIcons
-                  name="email"
-                  size={20}
-                  color="#7C3AED"
-                  style={{ marginRight: 10 }}
-                />
+              <View
+                style={[
+                  styles.inputBox,
+                  focusedField === "email" && styles.inputBoxFocused,
+                ]}
+              >
+                <View style={styles.inputIconWrap}>
+                  <MaterialIcons name="email" size={18} color="#0D9488" />
+                </View>
                 <TextInput
                   placeholder="Correo electrónico o número"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   value={email}
                   onChangeText={setEmail}
+                  onFocus={() => setFocusedField("email")}
+                  onBlur={() => setFocusedField(null)}
                   keyboardType="email-address"
+                  autoCapitalize="none"
                   style={styles.input}
                   returnKeyType="next"
                 />
               </View>
 
               {/* Input contraseña */}
-              <View style={styles.inputBox}>
-                <MaterialIcons
-                  name="lock"
-                  size={20}
-                  color="#7C3AED"
-                  style={{ marginRight: 10 }}
-                />
+              <View
+                style={[
+                  styles.inputBox,
+                  focusedField === "password" && styles.inputBoxFocused,
+                ]}
+              >
+                <View style={styles.inputIconWrap}>
+                  <MaterialIcons name="lock" size={18} color="#0D9488" />
+                </View>
                 <TextInput
                   placeholder="Contraseña"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   secureTextEntry
                   value={password}
                   onChangeText={setPassword}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
                   style={styles.input}
                   returnKeyType="done"
                 />
@@ -150,50 +208,58 @@ export default function Login({navigation}) {
               {/* Botón iniciar sesión */}
               <TouchableOpacity
                 onPress={handleLogin}
-                style={styles.buttonContainer}
+                disabled={loading}
+                activeOpacity={0.9}
+                style={[styles.buttonContainer, loading && { opacity: 0.75 }]}
               >
                 <LinearGradient
-                  colors={['#5B0EAD', '#ec4899']}
+                  colors={["#10B981", "#0D9488", "#0284C7"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.button}
                 >
-                  <Text style={styles.buttonText}>INICIAR SESIÓN</Text>
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.buttonText}>INICIAR SESIÓN</Text>
+                      <Ionicons
+                        name="arrow-forward-circle"
+                        size={20}
+                        color="#FFFFFF"
+                      />
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 
               {/* Footer registrar */}
               <View style={styles.footer}>
-                <Text style={styles.footerText}>¿Aún no tienes una cuenta? </Text>
+                <Text style={styles.footerText}>
+                  ¿Aún no tienes una cuenta?{" "}
+                </Text>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('Registro')}
+                  onPress={() => navigation.navigate("Registro")}
                 >
                   <Text style={styles.register}>Registrarse</Text>
                 </TouchableOpacity>
               </View>
-            
-    
-              
+
+              <View style={styles.cardDivider} />
+
+              {/* Enlace especialista */}
               <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={() => navigation.navigate("RegistroPsicologo")}
-                style={{ marginTop: 8, alignItems: "center" }}
+                style={styles.specialistPillBtn}
               >
-                <Text
-                  style={{
-                    color: "#6B7280",
-                    fontWeight: "600",
-                    fontSize: 12,
-                    textDecorationLine: "underline",
-                  }}
-                >
-                  ¿Eres especialista en salud mental? Registra tu consultorio aquí
+                <Ionicons name="medkit-outline" size={14} color="#0F766E" />
+                <Text style={styles.specialistText}>
+                  ¿Eres especialista en salud mental? Registra tu consultorio
+                  aquí
                 </Text>
               </TouchableOpacity>
-
             </View>
-
-            
-            
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -205,146 +271,318 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
   },
+  orbTopRight: {
+    position: "absolute",
+    top: -60,
+    right: -45,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    backgroundColor: "rgba(110, 231, 183, 0.25)",
+  },
+  orbMiddleLeft: {
+    position: "absolute",
+    top: SCREEN_HEIGHT * 0.28,
+    left: -70,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(125, 211, 252, 0.24)",
+  },
+  orbBottomRight: {
+    position: "absolute",
+    bottom: -50,
+    right: -30,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: "rgba(94, 234, 212, 0.22)",
+  },
   container: {
     flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: isSmallDevice ? 20 : 32,
-    paddingBottom: 40, // un extra para que pueda subir sobre el teclado
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+    paddingVertical: isSmallDevice ? 18 : 28,
+    paddingBottom: 38,
   },
 
-  // TEXTOS ARRIBA
+  // TEXTOS SUPERIORES
+  brandBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    paddingHorizontal: 13,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginBottom: 8,
+  },
+  brandDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#10B981",
+  },
   appName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#4C1D95',
-    marginBottom: 4,
-    textAlign: 'center',
+    fontSize: 11.5,
+    fontWeight: "900",
+    color: "#0F766E",
+    letterSpacing: 1.2,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
-    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#0F172A",
+    textAlign: "center",
+    letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 13,
-    color: '#6B7280',
-    textAlign: 'center',
+    color: "#475569",
+    textAlign: "center",
     marginTop: 4,
-    marginBottom: 14,
+    marginBottom: 13,
+    paddingHorizontal: 12,
+    lineHeight: 18,
   },
 
   // CHIPS SUPERIORES
   chipsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     marginBottom: 16,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
     gap: 8,
   },
   chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipMint: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#A7F3D0",
+  },
+  chipSky: {
+    backgroundColor: "#F0F9FF",
+    borderColor: "#BAE6FD",
   },
   chipText: {
     fontSize: 12,
-    color: '#4B5563',
+    fontWeight: "700",
   },
 
-  // CARD
+  // TARJETA PRINCIPAL
   card: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 30,
     paddingHorizontal: 20,
-    paddingVertical: isSmallDevice ? 18 : 22,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    paddingTop: 22,
+    paddingBottom: isSmallDevice ? 18 : 22,
+    borderWidth: 1.2,
+    borderColor: "#CCFBF1",
+    overflow: "hidden",
+    shadowColor: "#0F766E",
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
+  cardTopAccent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 5,
+  },
+
+  // PROTAGONISTA LAMI_1
+  mascotShowcase: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: isSmallDevice ? 10 : 14,
+    position: "relative",
+  },
+  mascotHaloOuter: {
+    width: isSmallDevice ? 136 : 158,
+    height: isSmallDevice ? 136 : 158,
+    borderRadius: isSmallDevice ? 68 : 79,
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#14B8A6",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
+  },
+  mascotHaloInner: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#99F6E4",
+    overflow: "hidden",
+  },
   image: {
-    width: SCREEN_WIDTH * 0.6,
-    height: SCREEN_WIDTH * 0.55,
-    maxHeight: 260,
-    alignSelf: 'center',
-    resizeMode: 'contain',
-    marginBottom: isSmallDevice ? 8 : 12,
+    width: isSmallDevice ? 108 : 126,
+    height: isSmallDevice ? 108 : 126,
+    resizeMode: "contain",
+  },
+  floatingSparkleLeft: {
+    position: "absolute",
+    top: 10,
+    left: SCREEN_WIDTH * 0.2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#F0FDFA",
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingSparkleRight: {
+    position: "absolute",
+    bottom: 10,
+    right: SCREEN_WIDTH * 0.2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  cardHeaderBlock: {
+    marginBottom: 14,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-    textAlign: 'left',
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#0F172A",
+    marginBottom: 3,
+    textAlign: "left",
+    letterSpacing: -0.3,
   },
   cardSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 16,
+    fontSize: 12.5,
+    color: "#64748B",
+    lineHeight: 18,
   },
 
   // INPUTS
   inputBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     borderRadius: 18,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderWidth: 1.3,
+    borderColor: "#E2E8F0",
+  },
+  inputBoxFocused: {
+    backgroundColor: "#F0FDFA",
+    borderColor: "#14B8A6",
+  },
+  inputIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "#CCFBF1",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
   },
   input: {
     flex: 1,
     fontSize: 14,
-    color: '#111827',
+    color: "#0F172A",
+    fontWeight: "500",
   },
 
-  // BOTÓN
+  // BOTÓN PRINCIPAL
   buttonContainer: {
-    width: '100%',
-    marginTop: 10,
-    marginBottom: 10,
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 12,
+    borderRadius: 20,
+    shadowColor: "#0D9488",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   button: {
-    paddingVertical: 14,
-    borderRadius: 22,
-    alignItems: 'center',
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 14.5,
+    letterSpacing: 0.6,
   },
 
-  helperText: {
-    fontSize: 11,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 10,
+  // FOOTER Y ESPECIALISTA
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 2,
   },
-
-  // FOOTER
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
   footerText: {
-    color: '#6B7280',
+    color: "#64748B",
     fontSize: 13,
   },
   register: {
-    color: '#7C3AED',
-    fontWeight: '700',
+    color: "#0D9488",
+    fontWeight: "800",
     fontSize: 13,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: 13,
+  },
+  specialistPillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#F0FDFA",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#CCFBF1",
+  },
+  specialistText: {
+    flex: 1,
+    color: "#0F766E",
+    fontWeight: "700",
+    fontSize: 11.5,
+    textAlign: "center",
+    lineHeight: 16,
   },
 });

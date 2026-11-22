@@ -5,6 +5,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Easing,
   Image,
   Linking,
   Modal,
@@ -222,6 +223,29 @@ export default function ProfileScreen({ navigation }) {
   const [qrEscaneado, setQrEscaneado] = useState(false);
   const [camaraLista, setCamaraLista] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
+  // Animación decorativa sutil en el aura del avatar
+  const auraPulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(auraPulse, {
+          toValue: 1.07,
+          duration: 2600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(auraPulse, {
+          toValue: 1,
+          duration: 2600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [auraPulse]);
 
   useEffect(() => {
     if (!modalEscanerQR) {
@@ -1353,16 +1377,19 @@ export default function ProfileScreen({ navigation }) {
 
   const esPremiumActivo = planUsuario === "premium";
 
+  const streakProgressPct = Math.min(100, Math.max(12, calmStreak * 14));
+  const sessionsProgressPct = Math.min(100, Math.max(14, sessionsCount * 12));
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F8F5FF" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F3FF" }}>
       <LinearGradient
-        colors={["#FAF7FF", "#F3EEFF", "#EEF6FF"]}
+        colors={["#F8F5FF", "#F1ECFF", "#EBF5FF", "#F9F7FF"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ flex: 1 }}
       >
         <View style={styles.screen}>
-          {/* Barra superior moderna con cápsula activa */}
+          {/* Barra superior flotante con indicador activo iluminado */}
           <View
             style={[
               styles.navBar,
@@ -1390,8 +1417,8 @@ export default function ProfileScreen({ navigation }) {
                 >
                   <Ionicons
                     name={icon}
-                    size={22}
-                    color={isSelected ? "#7C3AED" : "#94A3B8"}
+                    size={21}
+                    color={isSelected ? "#6D28D9" : "#94A3B8"}
                   />
                   {isSelected && (
                     <Text style={styles.navLabelActive}>{label}</Text>
@@ -1403,43 +1430,57 @@ export default function ProfileScreen({ navigation }) {
 
           <ScrollView
             style={styles.container}
-            contentContainerStyle={{ paddingBottom: 32 }}
+            contentContainerStyle={{ paddingBottom: 38 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* Hero Card de Bienvenida */}
+            {/* Hero Card de Bienvenida — Editorial Luxury */}
             <LinearGradient
-              colors={["#FFFFFF", "#F6F1FF", "#EFF6FF"]}
+              colors={["#FFFFFF", "#F8F3FF", "#EEF6FF"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.headerCard}
             >
               <View style={styles.heroOrbTopRight} />
               <View style={styles.heroOrbBottomLeft} />
+              <View style={styles.heroTopShine} />
 
               <View style={{ flex: 1, paddingRight: 10 }}>
+                <View style={styles.heroKickerRow}>
+                  <View style={styles.heroKickerDot} />
+                  <Text style={styles.heroKickerText}>
+                    TU SANTUARIO PERSONAL
+                  </Text>
+                </View>
+
                 <Text style={styles.helloText}>Bienvenida de nuevo,</Text>
                 <Text style={styles.nameBig} numberOfLines={2}>
                   {name || "Usuario Lami"}
                 </Text>
 
                 <LinearGradient
-                  colors={["#EDE9FE", "#E0F2FE"]}
+                  colors={["#F3E8FF", "#E0F2FE"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.badge}
                 >
-                  <Ionicons name="sparkles" size={14} color="#6D28D9" />
+                  <Ionicons name="sparkles" size={13} color="#6D28D9" />
                   <Text style={styles.badgeText}>Tu espacio privado</Text>
                 </LinearGradient>
               </View>
 
               <TouchableOpacity
-                activeOpacity={0.85}
+                activeOpacity={0.88}
                 onPress={() => setModalFotoUsuario(true)}
                 style={styles.heroAvatarWrapper}
               >
+                <Animated.View
+                  style={[
+                    styles.heroAvatarAura,
+                    { transform: [{ scale: auraPulse }] },
+                  ]}
+                />
                 <LinearGradient
-                  colors={["#8B5CF6", "#3B82F6", "#14B8A6"]}
+                  colors={["#8B5CF6", "#6366F1", "#14B8A6"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.heroAvatarRing}
@@ -1451,20 +1492,20 @@ export default function ProfileScreen({ navigation }) {
                         style={styles.userAvatarImage}
                       />
                     ) : (
-                      <FontAwesome name="user" size={40} color="#7C3AED" />
+                      <FontAwesome name="user" size={38} color="#7C3AED" />
                     )}
                   </View>
                 </LinearGradient>
                 <View style={styles.userCameraBadge}>
-                  <Ionicons name="camera" size={14} color="#FFFFFF" />
+                  <Ionicons name="camera" size={13} color="#FFFFFF" />
                 </View>
               </TouchableOpacity>
             </LinearGradient>
 
-            {/* Tarjetas de Racha y Sesiones */}
+            {/* Tarjetas de Racha y Sesiones con Micro-Progreso */}
             <View style={styles.statsRow}>
               <LinearGradient
-                colors={["#FFFBEB", "#FEF3C7", "#FFE4E6"]}
+                colors={["#FFFDF5", "#FEF3C7", "#FFEDD5"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.statCard, { borderColor: "#FDE68A" }]}
@@ -1476,22 +1517,33 @@ export default function ProfileScreen({ navigation }) {
                   <View
                     style={[
                       styles.statIconBubble,
-                      { backgroundColor: "rgba(245, 158, 11, 0.16)" },
+                      { backgroundColor: "rgba(245, 158, 11, 0.18)" },
                     ]}
                   >
                     <Ionicons name="flame" size={16} color="#D97706" />
                   </View>
                 </View>
+
                 <Text style={[styles.statNumber, { color: "#78350F" }]}>
                   {calmStreak} {calmStreak === 1 ? "día" : "días"}
                 </Text>
+
+                <View style={styles.statMiniTrackWarm}>
+                  <View
+                    style={[
+                      styles.statMiniFillWarm,
+                      { width: `${streakProgressPct}%` },
+                    ]}
+                  />
+                </View>
+
                 <Text style={[styles.statHint, { color: "#B45309" }]}>
                   Sigue así, lo haces genial
                 </Text>
               </LinearGradient>
 
               <LinearGradient
-                colors={["#EFF6FF", "#EDE9FE", "#F5F3FF"]}
+                colors={["#F5F3FF", "#EDE9FE", "#E0E7FF"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.statCard, { borderColor: "#DDD6FE" }]}
@@ -1503,39 +1555,53 @@ export default function ProfileScreen({ navigation }) {
                   <View
                     style={[
                       styles.statIconBubble,
-                      { backgroundColor: "rgba(124, 58, 237, 0.14)" },
+                      { backgroundColor: "rgba(124, 58, 237, 0.16)" },
                     ]}
                   >
                     <Ionicons name="headset" size={16} color="#6D28D9" />
                   </View>
                 </View>
+
                 <Text style={[styles.statNumber, { color: "#312E81" }]}>
                   {sessionsCount}
                 </Text>
+
+                <View style={styles.statMiniTrackViolet}>
+                  <View
+                    style={[
+                      styles.statMiniFillViolet,
+                      { width: `${sessionsProgressPct}%` },
+                    ]}
+                  />
+                </View>
+
                 <Text style={[styles.statHint, { color: "#5B21B6" }]}>
                   Tu mente se está cuidando
                 </Text>
               </LinearGradient>
             </View>
 
-            {/* Botón Principal de Sesión con Degradado */}
+            {/* Botón Principal de Sesión con Degradado Luminoso */}
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={addSession}
               style={styles.sessionButtonShadow}
             >
               <LinearGradient
-                colors={["#7C3AED", "#5B21B6", "#4338CA"]}
+                colors={["#7C3AED", "#5B21B6", "#3730A3"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.sessionButton}
               >
                 <View style={styles.sessionBtnIconCircle}>
-                  <Ionicons name="headset-outline" size={18} color="#FFFFFF" />
+                  <Ionicons name="headset-outline" size={17} color="#FFFFFF" />
                 </View>
                 <Text style={styles.sessionButtonText}>
                   Registrar una sesión completada 🎧
                 </Text>
+                <View style={styles.sessionPlusPill}>
+                  <Text style={styles.sessionPlusText}>+1</Text>
+                </View>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -1543,18 +1609,16 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.card}>
               <View style={styles.cardTitleHeader}>
                 <View style={styles.cardTitleLeft}>
-                  <View
-                    style={[
-                      styles.sectionIconBadge,
-                      { backgroundColor: "#F3E8FF" },
-                    ]}
+                  <LinearGradient
+                    colors={["#F3E8FF", "#E9D5FF"]}
+                    style={styles.sectionIconBadge}
                   >
                     <Ionicons
                       name="diamond-outline"
                       size={16}
                       color="#7C3AED"
                     />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.sectionTitle}>Mi Plan Lami</Text>
                 </View>
 
@@ -1666,14 +1730,12 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.card}>
               <View style={styles.cardTitleHeader}>
                 <View style={styles.cardTitleLeft}>
-                  <View
-                    style={[
-                      styles.sectionIconBadge,
-                      { backgroundColor: "#E0F2FE" },
-                    ]}
+                  <LinearGradient
+                    colors={["#E0F2FE", "#DBEAFE"]}
+                    style={styles.sectionIconBadge}
                   >
                     <Ionicons name="medkit-outline" size={16} color="#0284C7" />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.sectionTitle}>Mi Especialista</Text>
                 </View>
 
@@ -1917,18 +1979,16 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.card}>
                 <View style={styles.cardTitleHeader}>
                   <View style={styles.cardTitleLeft}>
-                    <View
-                      style={[
-                        styles.sectionIconBadge,
-                        { backgroundColor: "#CCFBF1" },
-                      ]}
+                    <LinearGradient
+                      colors={["#CCFBF1", "#99F6E4"]}
+                      style={styles.sectionIconBadge}
                     >
                       <Ionicons
                         name="calendar-outline"
                         size={16}
                         color="#0F766E"
                       />
-                    </View>
+                    </LinearGradient>
                     <Text style={styles.sectionTitle}>
                       Mis solicitudes y citas
                     </Text>
@@ -2403,14 +2463,12 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.card}>
               <View style={styles.cardTitleHeader}>
                 <View style={styles.cardTitleLeft}>
-                  <View
-                    style={[
-                      styles.sectionIconBadge,
-                      { backgroundColor: "#EDE9FE" },
-                    ]}
+                  <LinearGradient
+                    colors={["#EDE9FE", "#DDD6FE"]}
+                    style={styles.sectionIconBadge}
                   >
                     <Ionicons name="person-outline" size={16} color="#6D28D9" />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.sectionTitle}>Datos personales</Text>
                 </View>
 
@@ -2519,18 +2577,16 @@ export default function ProfileScreen({ navigation }) {
             >
               <View style={styles.cardTitleHeader}>
                 <View style={styles.cardTitleLeft}>
-                  <View
-                    style={[
-                      styles.sectionIconBadge,
-                      { backgroundColor: "#FCE7F3" },
-                    ]}
+                  <LinearGradient
+                    colors={["#FCE7F3", "#FBCFE8"]}
+                    style={styles.sectionIconBadge}
                   >
                     <Ionicons
                       name="sparkles-outline"
                       size={16}
                       color="#DB2777"
                     />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.sectionTitle}>Preferencias & metas</Text>
                 </View>
               </View>
@@ -2637,14 +2693,12 @@ export default function ProfileScreen({ navigation }) {
             >
               <View style={styles.cardTitleHeader}>
                 <View style={styles.cardTitleLeft}>
-                  <View
-                    style={[
-                      styles.sectionIconBadge,
-                      { backgroundColor: "#E0E7FF" },
-                    ]}
+                  <LinearGradient
+                    colors={["#E0E7FF", "#C7D2FE"]}
+                    style={styles.sectionIconBadge}
                   >
                     <Ionicons name="apps-outline" size={16} color="#4338CA" />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.sectionTitle}>Más opciones</Text>
                 </View>
               </View>
@@ -4230,76 +4284,105 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 12,
   },
 
   navBar: {
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    paddingBottom: 10,
-    paddingHorizontal: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    paddingBottom: 11,
+    paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#EDE9FE",
     shadowColor: "#4C1D95",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
   navItem: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    paddingHorizontal: 13,
+    borderRadius: 18,
     minWidth: SCREEN_WIDTH * 0.2,
   },
   navItemActive: {
     backgroundColor: "#F3E8FF",
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
   },
   navLabelActive: {
     color: "#6D28D9",
-    fontSize: 11.5,
+    fontSize: 11,
     marginTop: 2,
     fontWeight: "800",
+    letterSpacing: 0.2,
   },
 
   headerCard: {
     flexDirection: "row",
-    borderRadius: 28,
-    padding: 20,
+    borderRadius: 30,
+    padding: 22,
     alignItems: "center",
-    marginBottom: 14,
-    marginTop: 6,
+    marginBottom: 15,
+    marginTop: 4,
     borderWidth: 1,
     borderColor: "#E9D5FF",
     overflow: "hidden",
     position: "relative",
-    shadowColor: "#6D28D9",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    shadowColor: "#5B21B6",
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+  },
+  heroTopShine: {
+    position: "absolute",
+    top: 0,
+    left: 24,
+    right: 24,
+    height: 1.5,
+    backgroundColor: "rgba(255,255,255,0.95)",
   },
   heroOrbTopRight: {
     position: "absolute",
-    top: -32,
-    right: -24,
-    width: 115,
-    height: 115,
-    borderRadius: 58,
-    backgroundColor: "rgba(196, 181, 253, 0.22)",
+    top: -36,
+    right: -28,
+    width: 135,
+    height: 135,
+    borderRadius: 68,
+    backgroundColor: "rgba(196, 181, 253, 0.26)",
   },
   heroOrbBottomLeft: {
     position: "absolute",
-    bottom: -40,
-    left: 20,
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: "rgba(186, 230, 253, 0.26)",
+    bottom: -44,
+    left: 16,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(186, 230, 253, 0.3)",
+  },
+  heroKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 4,
+  },
+  heroKickerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#8B5CF6",
+  },
+  heroKickerText: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    color: "#7C3AED",
+    letterSpacing: 1.1,
   },
   helloText: {
     fontSize: 13.5,
@@ -4307,49 +4390,58 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   nameBig: {
-    fontSize: 23,
-    fontWeight: "800",
+    fontSize: 25,
+    fontWeight: "900",
     color: "#1E1B4B",
-    letterSpacing: -0.4,
+    letterSpacing: -0.6,
     marginTop: 1,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   badge: {
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 11,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5.5,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#DDD6FE",
   },
   badgeText: {
     marginLeft: 5,
-    fontSize: 12,
+    fontSize: 11.5,
     color: "#4338CA",
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   heroAvatarWrapper: {
     position: "relative",
     marginLeft: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroAvatarAura: {
+    position: "absolute",
+    width: 98,
+    height: 98,
+    borderRadius: 49,
+    backgroundColor: "rgba(139, 92, 246, 0.14)",
   },
   heroAvatarRing: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     padding: 3,
     shadowColor: "#7C3AED",
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
   },
   avatarCircle: {
     width: "100%",
     height: "100%",
-    borderRadius: 40,
+    borderRadius: 41,
     backgroundColor: "#F5F3FF",
     justifyContent: "center",
     alignItems: "center",
@@ -4358,7 +4450,7 @@ const styles = StyleSheet.create({
   userAvatarImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 40,
+    borderRadius: 41,
   },
   userCameraBadge: {
     position: "absolute",
@@ -4367,31 +4459,31 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#7C3AED",
+    backgroundColor: "#6D28D9",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2.5,
     borderColor: "#FFFFFF",
     shadowColor: "#000",
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.18,
     shadowRadius: 4,
     elevation: 3,
   },
 
   statsRow: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
+    gap: 11,
+    marginBottom: 13,
   },
   statCard: {
     flex: 1,
-    borderRadius: 22,
-    padding: 15,
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
     shadowColor: "#1E1B4B",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
   statHeaderRow: {
@@ -4401,61 +4493,99 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   statIconBubble: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
   statLabel: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   statNumber: {
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+  },
+  statMiniTrackWarm: {
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: "rgba(217, 119, 6, 0.16)",
+    marginTop: 8,
+    marginBottom: 6,
+    overflow: "hidden",
+  },
+  statMiniFillWarm: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: "#F59E0B",
+  },
+  statMiniTrackViolet: {
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: "rgba(109, 40, 217, 0.14)",
+    marginTop: 8,
+    marginBottom: 6,
+    overflow: "hidden",
+  },
+  statMiniFillViolet: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: "#7C3AED",
   },
   statHint: {
     fontSize: 11,
     fontWeight: "600",
-    marginTop: 4,
   },
 
   sessionButtonShadow: {
-    marginBottom: 16,
-    borderRadius: 18,
-    shadowColor: "#6D28D9",
-    shadowOpacity: 0.24,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 4,
+    marginBottom: 17,
+    borderRadius: 20,
+    shadowColor: "#5B21B6",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
   },
   sessionButton: {
     flexDirection: "row",
-    paddingVertical: 13,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
   },
   sessionBtnIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
+  sessionPlusPill: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+  },
+  sessionPlusText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
   primaryIndigoBtn: {
     flexDirection: "row",
-    paddingVertical: 13,
+    paddingVertical: 13.5,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#4F46E5",
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
@@ -4463,49 +4593,49 @@ const styles = StyleSheet.create({
   sessionButtonText: {
     color: "#FFFFFF",
     fontWeight: "800",
-    fontSize: 14,
+    fontSize: 13.5,
   },
 
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 26,
-    padding: 18,
+    borderRadius: 28,
+    padding: 19,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#EDE9FE",
     shadowColor: "#312E81",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 3,
   },
   cardColored: {
-    borderRadius: 26,
-    padding: 18,
+    borderRadius: 28,
+    padding: 19,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E9D5FF",
     shadowColor: "#312E81",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 3,
   },
   cardTitleHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   cardTitleLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 10,
   },
   sectionIconBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 11,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4513,21 +4643,21 @@ const styles = StyleSheet.create({
     fontSize: 16.5,
     fontWeight: "800",
     color: "#1E1B4B",
-    letterSpacing: -0.2,
+    letterSpacing: -0.25,
   },
   sectionSubtitle: {
     fontSize: 12.5,
     color: "#64748B",
     lineHeight: 18,
-    marginBottom: 10,
+    marginBottom: 11,
   },
 
   planStatusPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 10.5,
+    paddingVertical: 4.5,
     borderRadius: 999,
   },
   planStatusPillFree: {
@@ -4541,7 +4671,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   planSummaryBoxFree: {
-    marginTop: 4,
+    marginTop: 2,
     backgroundColor: "#F8FAFC",
     borderRadius: 20,
     padding: 15,
@@ -4550,7 +4680,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   planSummaryBoxPremium: {
-    marginTop: 4,
+    marginTop: 2,
     borderRadius: 20,
     padding: 15,
     borderWidth: 1,
@@ -4615,7 +4745,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    paddingVertical: 12,
+    paddingVertical: 12.5,
     borderRadius: 15,
   },
   upgradePremiumBtnText: {
@@ -4647,7 +4777,7 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: "#ECFDF5",
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 4.5,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#A7F3D0",
@@ -4660,7 +4790,7 @@ const styles = StyleSheet.create({
   },
   activeLinkText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#065F46",
   },
   especialistaCard: {
@@ -4690,10 +4820,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   especialistaTag: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: "#1D4ED8",
     fontWeight: "800",
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
   },
   especialistaName: {
     fontSize: 16.5,
@@ -4971,7 +5101,7 @@ const styles = StyleSheet.create({
   },
 
   labelInline: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: "700",
     color: "#475569",
     marginTop: 10,
@@ -4981,20 +5111,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: "#F3E8FF",
-    paddingHorizontal: 10,
+    paddingHorizontal: 10.5,
     paddingVertical: 5,
     borderRadius: 999,
   },
   changePhotoLink: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "800",
     color: "#7C3AED",
   },
   inputContainer: {
     borderWidth: 1,
     borderColor: "#E2E8F0",
     backgroundColor: "#F8FAFC",
-    borderRadius: 15,
+    borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
@@ -5019,7 +5149,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     backgroundColor: "#F8FAFC",
-    borderRadius: 15,
+    borderRadius: 16,
     marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
@@ -5038,10 +5168,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 13.5,
-    borderRadius: 16,
+    paddingVertical: 14,
+    borderRadius: 17,
     shadowColor: "#4F46E5",
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.22,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
@@ -5056,11 +5186,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 4,
+    marginTop: 6,
   },
   chipSmall: {
     paddingHorizontal: 13,
-    paddingVertical: 8,
+    paddingVertical: 8.5,
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -5082,7 +5212,7 @@ const styles = StyleSheet.create({
 
   preferenceBox: {
     marginTop: 16,
-    backgroundColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "rgba(255,255,255,0.88)",
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
@@ -5133,7 +5263,7 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 11,
+    paddingVertical: 11.5,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(226, 232, 240, 0.7)",
   },
@@ -5144,8 +5274,8 @@ const styles = StyleSheet.create({
     color: "#1E293B",
   },
   iconBubble: {
-    width: 34,
-    height: 34,
+    width: 35,
+    height: 35,
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",

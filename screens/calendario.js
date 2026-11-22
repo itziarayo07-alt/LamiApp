@@ -36,7 +36,10 @@ import {
   where,
 } from "firebase/firestore";
 import { LineChart } from "react-native-chart-kit";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
 import { auth, db } from "../config/firebaseConfig";
 import { notificarAlertaAlEspecialista } from "../services/lamiSyncService";
@@ -59,6 +62,21 @@ const MESES_CORTOS = [
   "Dic",
 ];
 
+const MESES_LARGOS = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+
 function getTodayKey() {
   const now = new Date();
   const y = now.getFullYear();
@@ -76,6 +94,16 @@ function formatShortDate(isoDate, todayKey) {
   return `${day} ${MESES_CORTOS[monthIdx] || parts[1]}`;
 }
 
+function formatPrettyHeaderDate(isoDate, todayKey) {
+  if (!isoDate) return "";
+  if (isoDate === todayKey) return `Hoy • ${isoDate}`;
+  const parts = isoDate.split("-");
+  if (parts.length !== 3) return isoDate;
+  const day = parseInt(parts[2], 10);
+  const monthIdx = parseInt(parts[1], 10) - 1;
+  return `${day} de ${MESES_LARGOS[monthIdx] || parts[1]} ${parts[0]}`;
+}
+
 function getNormalizedEntries(rawNote) {
   if (!rawNote) return [];
   if (Array.isArray(rawNote)) return rawNote;
@@ -86,6 +114,7 @@ function getNormalizedEntries(rawNote) {
 }
 
 export default function CalendarioEmocional({ navigation }) {
+  const insets = useSafeAreaInsets();
   const todayKey = getTodayKey();
 
   const [selectedDay, setSelectedDay] = useState(todayKey);
@@ -118,16 +147,16 @@ export default function CalendarioEmocional({ navigation }) {
   const chartRef = useRef();
 
   const emotions = [
-    { label: "Éxtasis 🤩", color: "#FFB74D", value: 6 },
-    { label: "Muy Feliz 😀", color: "#FFD54F", value: 5 },
-    { label: "Feliz 🙂", color: "#AED581", value: 4 },
-    { label: "Neutral 😐", color: "#90A4AE", value: 3 },
-    { label: "Triste 🙁", color: "#64B5F6", value: 2 },
-    { label: "Muy Triste 😢", color: "#42A5F5", value: 1 },
-    { label: "Ansioso 😰", color: "#BA68C8", value: 2 },
-    { label: "Estresado 😓", color: "#E57373", value: 1 },
-    { label: "Emocionado 🤩", color: "#F06292", value: 5 },
-    { label: "Calmado 😌", color: "#81C784", value: 4 },
+    { label: "Éxtasis 🤩", color: "#FFB74D", softBg: "#FFF8EB", value: 6 },
+    { label: "Muy Feliz 😀", color: "#FBC02D", softBg: "#FEFCE8", value: 5 },
+    { label: "Feliz 🙂", color: "#8BC34A", softBg: "#F4FCEB", value: 4 },
+    { label: "Neutral 😐", color: "#78909C", softBg: "#F1F5F9", value: 3 },
+    { label: "Triste 🙁", color: "#42A5F5", softBg: "#EFF6FF", value: 2 },
+    { label: "Muy Triste 😢", color: "#1E88E5", softBg: "#E0F2FE", value: 1 },
+    { label: "Ansioso 😰", color: "#AB47BC", softBg: "#FAF5FF", value: 2 },
+    { label: "Estresado 😓", color: "#EF5350", softBg: "#FEF2F2", value: 1 },
+    { label: "Emocionado 🤩", color: "#EC407A", softBg: "#FDF2F8", value: 5 },
+    { label: "Calmado 😌", color: "#66BB6A", softBg: "#ECFDF5", value: 4 },
   ];
 
   // Sincronización en tiempo real de citas (Firestore + AsyncStorage)
@@ -161,7 +190,6 @@ export default function CalendarioEmocional({ navigation }) {
         unsubFirestore = onSnapshot(q, async (snap) => {
           const merged = {};
 
-          // Mantener solo citas locales que no provengan de Firestore borrado
           Object.keys(localBase).forEach((fecha) => {
             merged[fecha] = localBase[fecha].filter((c) => !c.fromFirestore);
             if (merged[fecha].length === 0) delete merged[fecha];
@@ -253,7 +281,6 @@ export default function CalendarioEmocional({ navigation }) {
       });
       setNotificacionesPaciente(lista);
 
-      // Mostrar modal elegante para la notificación no leída más reciente
       const nuevaNoLeida = lista.find(
         (n) => !n.leida && !shownPsiNotifIdsRef.current.has(n.id),
       );
@@ -464,7 +491,6 @@ export default function CalendarioEmocional({ navigation }) {
         user?.displayName ||
         (user?.email ? user.email.split("@")[0] : "Paciente Lami");
 
-      // 1. Notificar al psicólogo con el motivo de cancelación
       if (citaACancelar.psicologoId) {
         await addDoc(collection(db, "notificaciones_psicologo"), {
           psicologoId: citaACancelar.psicologoId,
@@ -481,7 +507,6 @@ export default function CalendarioEmocional({ navigation }) {
         });
       }
 
-      // 2. Eliminar la cita de la agenda del psicólogo (citas_psicologo)
       if (citaACancelar.citaPsicologoId) {
         await deleteDoc(
           doc(db, "citas_psicologo", citaACancelar.citaPsicologoId),
@@ -506,12 +531,10 @@ export default function CalendarioEmocional({ navigation }) {
         }
       }
 
-      // 3. Eliminar la cita de solicitudes_sesion en Firestore
       if (citaACancelar.id) {
         await deleteDoc(doc(db, "solicitudes_sesion", citaACancelar.id));
       }
 
-      // 4. Eliminar también del almacenamiento local AsyncStorage
       const citasRaw = await AsyncStorage.getItem(CITAS_STORAGE_KEY);
       if (citasRaw) {
         const parsed = JSON.parse(citasRaw);
@@ -625,7 +648,7 @@ export default function CalendarioEmocional({ navigation }) {
     backgroundGradientFrom: "#FFFFFF",
     backgroundGradientTo: "#FFFFFF",
     fillShadowGradientFrom: "#14B8A6",
-    fillShadowGradientFromOpacity: 0.22,
+    fillShadowGradientFromOpacity: 0.24,
     fillShadowGradientTo: "#FFFFFF",
     fillShadowGradientToOpacity: 0.0,
     decimalPlaces: 1,
@@ -798,123 +821,293 @@ export default function CalendarioEmocional({ navigation }) {
       ? dayAppointments[selectedDay]
       : [];
 
+  const mesActualPrefix = todayKey.slice(0, 7);
+  const diasRegistradosMes = sortedDates.filter((d) =>
+    d.startsWith(mesActualPrefix),
+  ).length;
+
+  const selectedDayEntriesCount = selectedDay
+    ? Array.isArray(dayFeelings[selectedDay])
+      ? dayFeelings[selectedDay].length
+      : dayFeelings[selectedDay]
+        ? 1
+        : 0
+    : 0;
+
   return (
-    <LinearGradient colors={["#f3e8ff", "#faf5ff"]} style={styles.screen}>
-      <StatusBar backgroundColor="#7C3AED" barStyle="light-content" />
+    <LinearGradient
+      colors={["#F8F5FF", "#F1ECFF", "#EBF5FF", "#FAF7FF"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.screen}
+    >
+      <StatusBar backgroundColor="#F8F5FF" barStyle="dark-content" />
       <SafeAreaView style={{ flex: 1 }}>
-        {/* BARRA SUPERIOR */}
-        <View style={styles.navBar}>
+        {/* BARRA SUPERIOR FLOTANTE CON PÍLDORA ACTIVA */}
+        <View
+          style={[
+            styles.navBar,
+            {
+              paddingTop: Math.max(insets.top * 0.25, 8),
+            },
+          ]}
+        >
           {[
-            ["leaf-outline", "Calma"],
-            ["calendar-outline", "Calendario"],
-            ["heart-outline", "Checking"],
-            ["person-circle-outline", "Perfil"],
-          ].map(([icon, label], i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.navItem}
-              onPress={() => {
-                setActiveNav(i);
-                if (i === 0) navigation.navigate("Anxiosimetro");
-                if (i === 1) navigation.navigate("Calendario");
-                if (i === 2) navigation.navigate("Checking");
-                if (i === 3) navigation.navigate("Perfil");
-              }}
-            >
-              <Ionicons
-                name={icon}
-                size={26}
-                color={activeNav === i ? "#7C3AED" : "#9CA3AF"}
-              />
-              <Text
-                style={[
-                  styles.navLabelActive,
-                  { opacity: activeNav === i ? 1 : 0 },
-                ]}
+            ["leaf-outline", "Calma", "Anxiosimetro"],
+            ["calendar", "Calendario", "Calendario"],
+            ["heart-outline", "Checking", "Checking"],
+            ["person-circle-outline", "Perfil", "Perfil"],
+          ].map(([icon, label, screen], i) => {
+            const isSelected = activeNav === i;
+            return (
+              <TouchableOpacity
+                key={i}
+                activeOpacity={0.85}
+                style={[styles.navItem, isSelected && styles.navItemActive]}
+                onPress={() => {
+                  setActiveNav(i);
+                  navigation.navigate(screen);
+                }}
               >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Ionicons
+                  name={icon}
+                  size={21}
+                  color={isSelected ? "#6D28D9" : "#94A3B8"}
+                />
+                {isSelected && (
+                  <Text style={styles.navLabelActive}>{label}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={styles.container}>
           <ScrollView
-            contentContainerStyle={{ paddingBottom: 50 }}
+            contentContainerStyle={{ paddingBottom: 46 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* ENCABEZADO CON CAMPANA DE NOTIFICACIONES */}
-            <View style={styles.titleHeaderRow}>
-              <View style={{ width: 40 }} />
-              <Text style={styles.title}>Calendario Emocional</Text>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.notifBellBtn}
-                onPress={() => {
-                  setNotifCentroVisible(true);
-                  marcarNotificacionesPacienteLeidas();
-                }}
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={22}
-                  color="#7C3AED"
-                />
-                {unreadNotifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>
-                      {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+            {/* HERO EDITORIAL DEL CALENDARIO */}
+            <LinearGradient
+              colors={["#FFFFFF", "#F8F3FF", "#EEF6FF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroHeaderCard}
+            >
+              <View style={styles.heroOrbTop} />
+              <View style={styles.heroOrbBottom} />
+
+              <View style={styles.heroTopRow}>
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <View style={styles.heroKickerRow}>
+                    <View style={styles.heroKickerDot} />
+                    <Text style={styles.heroKickerText}>
+                      MAPA DE BIENESTAR DIARIO
                     </Text>
                   </View>
-                )}
-              </TouchableOpacity>
-            </View>
+                  <Text style={styles.title}>Calendario Emocional</Text>
+                </View>
 
-            {/* CALENDARIO CON CÍRCULOS DE COLOR E INSIGNIA DESTACADA DE CITA */}
-            <Calendar
-              current={todayKey}
-              extraData={{
-                dayFeelings,
-                selectedDay,
-                dayNotes,
-                dayAppointments,
-              }}
-              dayComponent={({ date, state }) => {
-                const dateString = date.dateString;
-                const emotionsForDay = dayFeelings[dateString];
-                const isSelected = selectedDay === dateString;
-                const isToday = dateString === todayKey;
-                const hasNotes =
-                  getNormalizedEntries(dayNotes[dateString]).length > 0;
-                const citasDelDia = Array.isArray(dayAppointments[dateString])
-                  ? dayAppointments[dateString]
-                  : [];
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.notifBellBtn}
+                  onPress={() => {
+                    setNotifCentroVisible(true);
+                    marcarNotificacionesPacienteLeidas();
+                  }}
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={21}
+                    color="#6D28D9"
+                  />
+                  {unreadNotifCount > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>
+                        {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
 
-                return (
-                  <DayWithEmotions
-                    date={date}
-                    state={state}
-                    emotionsForDay={emotionsForDay}
-                    isSelected={isSelected}
-                    isToday={isToday}
-                    hasNotes={hasNotes}
-                    citasDelDia={citasDelDia}
+              <View style={styles.heroChipsRow}>
+                <View style={styles.heroStatPill}>
+                  <Ionicons name="color-palette" size={13} color="#7C3AED" />
+                  <Text style={styles.heroStatPillText}>
+                    {diasRegistradosMes}{" "}
+                    {diasRegistradosMes === 1 ? "día pintado" : "días pintados"}{" "}
+                    este mes
+                  </Text>
+                </View>
+
+                {!isTodaySelected && (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
                     onPress={() => {
-                      setSelectedDay(dateString);
+                      setSelectedDay(todayKey);
                       setNewNoteText("");
                     }}
-                  />
-                );
-              }}
-              theme={{
-                todayTextColor: "#7C3AED",
-                arrowColor: "#7C3AED",
-              }}
-            />
+                    style={styles.jumpTodayPill}
+                  >
+                    <Ionicons name="today-outline" size={13} color="#0F766E" />
+                    <Text style={styles.jumpTodayText}>Volver a Hoy</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </LinearGradient>
 
-            {/* NOTA DESTACADA DE CITA CON TERAPEUTA (PRESENCIAL / ONLINE + VIDEOLLAMADA / CANCELAR) */}
+            {/* CONTENEDOR PREMIUM DEL CALENDARIO (DISEÑO EXCLUSIVO INTERNO) */}
+            <View style={styles.calendarCardShell}>
+              <LinearGradient
+                colors={["#FAF5FF", "#F0F9FF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.calendarTopBanner}
+              >
+                <View style={styles.calendarBannerLeft}>
+                  <Ionicons name="sparkles" size={14} color="#7C3AED" />
+                  <Text style={styles.calendarBannerText}>
+                    {formatPrettyHeaderDate(selectedDay, todayKey)}
+                  </Text>
+                </View>
+                <View style={styles.calendarBannerBadge}>
+                  <Text style={styles.calendarBannerBadgeText}>
+                    {selectedDayEntriesCount}/2 emociones
+                  </Text>
+                </View>
+              </LinearGradient>
+
+              <Calendar
+                current={todayKey}
+                extraData={{
+                  dayFeelings,
+                  selectedDay,
+                  dayNotes,
+                  dayAppointments,
+                }}
+                renderHeader={(date) => {
+                  const dObj = new Date(date);
+                  const mIdx = dObj.getMonth();
+                  const yVal = dObj.getFullYear();
+                  return (
+                    <View style={styles.customCalHeader}>
+                      <Text style={styles.customCalMonth}>
+                        {MESES_LARGOS[mIdx]}
+                      </Text>
+                      <View style={styles.customCalYearPill}>
+                        <Text style={styles.customCalYear}>{yVal}</Text>
+                      </View>
+                    </View>
+                  );
+                }}
+                renderArrow={(direction) => (
+                  <View style={styles.customCalArrowBtn}>
+                    <Ionicons
+                      name={
+                        direction === "left"
+                          ? "chevron-back"
+                          : "chevron-forward"
+                      }
+                      size={16}
+                      color="#6D28D9"
+                    />
+                  </View>
+                )}
+                dayComponent={({ date, state }) => {
+                  const dateString = date.dateString;
+                  const emotionsForDay = dayFeelings[dateString];
+                  const isSelected = selectedDay === dateString;
+                  const isToday = dateString === todayKey;
+                  const hasNotes =
+                    getNormalizedEntries(dayNotes[dateString]).length > 0;
+                  const citasDelDia = Array.isArray(dayAppointments[dateString])
+                    ? dayAppointments[dateString]
+                    : [];
+
+                  return (
+                    <DayWithEmotions
+                      date={date}
+                      state={state}
+                      emotionsForDay={emotionsForDay}
+                      isSelected={isSelected}
+                      isToday={isToday}
+                      hasNotes={hasNotes}
+                      citasDelDia={citasDelDia}
+                      onPress={() => {
+                        setSelectedDay(dateString);
+                        setNewNoteText("");
+                      }}
+                    />
+                  );
+                }}
+                theme={{
+                  backgroundColor: "transparent",
+                  calendarBackground: "transparent",
+                  textSectionTitleColor: "#7C3AED",
+                  textDayHeaderFontWeight: "800",
+                  textDayHeaderFontSize: 11.5,
+                  "stylesheet.calendar.header": {
+                    week: {
+                      marginTop: 6,
+                      marginBottom: 8,
+                      paddingVertical: 7,
+                      paddingHorizontal: 4,
+                      flexDirection: "row",
+                      justifyContent: "space-around",
+                      backgroundColor: "#F5F3FF",
+                      borderRadius: 14,
+                    },
+                  },
+                }}
+              />
+
+              {/* LEYENDA VISUAL EXCLUSIVA DEL CALENDARIO */}
+              <View style={styles.calendarLegendFooter}>
+                <View style={styles.calLegendItem}>
+                  <View
+                    style={[
+                      styles.calLegendDot,
+                      {
+                        borderWidth: 2,
+                        borderColor: "#7C3AED",
+                        backgroundColor: "#F3E8FF",
+                      },
+                    ]}
+                  />
+                  <Text style={styles.calLegendLabel}>Seleccionado</Text>
+                </View>
+
+                <View style={styles.calLegendItem}>
+                  <View
+                    style={[
+                      styles.calLegendDot,
+                      { backgroundColor: "#0D9488" },
+                    ]}
+                  />
+                  <Text style={styles.calLegendLabel}>Cita clínica</Text>
+                </View>
+
+                <View style={styles.calLegendItem}>
+                  <View
+                    style={[
+                      styles.calLegendDot,
+                      { backgroundColor: "#8B5CF6" },
+                    ]}
+                  />
+                  <Text style={styles.calLegendLabel}>Con bitácora</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* NOTA DESTACADA DE CITA CON TERAPEUTA */}
             {citasDiaSeleccionado.length > 0 && (
-              <View style={styles.citaSectionCard}>
+              <LinearGradient
+                colors={["#F0FDFA", "#ECFEFF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.citaSectionCard}
+              >
                 <View style={styles.citaSectionHeader}>
                   <View style={styles.citaHeaderIconCircle}>
                     <Ionicons name="medkit" size={16} color="#FFFFFF" />
@@ -1044,14 +1237,28 @@ export default function CalendarioEmocional({ navigation }) {
                     );
                   })}
                 </View>
-              </View>
+              </LinearGradient>
             )}
 
-            {/* SELECCIÓN DE EMOCIONES */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                Selecciona una emoción {selectedDay ? `(${selectedDay})` : ""}
-              </Text>
+            {/* SELECCIÓN DE EMOCIONES CON CÁPSULAS TINTADAS */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionCardHeader}>
+                <LinearGradient
+                  colors={["#F3E8FF", "#E9D5FF"]}
+                  style={styles.sectionIconBadge}
+                >
+                  <Ionicons name="happy-outline" size={17} color="#7C3AED" />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>
+                    ¿Cómo te sientes{" "}
+                    {isTodaySelected ? "hoy" : `el ${selectedDay}`}?
+                  </Text>
+                  <Text style={styles.sectionSubHelper}>
+                    Toca hasta 2 emociones para pintar tu día
+                  </Text>
+                </View>
+              </View>
 
               <View style={styles.emotionsGrid}>
                 {emotions.map((e) => {
@@ -1067,43 +1274,67 @@ export default function CalendarioEmocional({ navigation }) {
                   return (
                     <TouchableOpacity
                       key={e.label}
+                      activeOpacity={0.82}
                       style={[
                         styles.emotionBtn,
-                        { borderColor: e.color },
-                        chosen && { backgroundColor: e.color },
+                        {
+                          borderColor: chosen ? e.color : `${e.color}88`,
+                          backgroundColor: chosen ? e.color : e.softBg,
+                        },
+                        chosen && styles.emotionBtnChosen,
                       ]}
                       onPress={() => saveFeeling(selectedDay, e)}
                     >
+                      <View
+                        style={[
+                          styles.emotionColorDot,
+                          {
+                            backgroundColor: chosen ? "#FFFFFF" : e.color,
+                          },
+                        ]}
+                      />
                       <Text
                         style={[
                           styles.emotionText,
-                          chosen && { color: "#fff", fontWeight: "700" },
+                          chosen && { color: "#FFFFFF", fontWeight: "800" },
                         ]}
                       >
                         {e.label}
                       </Text>
+                      {chosen && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={15}
+                          color="#FFFFFF"
+                          style={{ marginLeft: 2 }}
+                        />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
-              <Text style={{ marginTop: 6, fontSize: 12, color: "#6B7280" }}>
-                Puedes registrar hasta dos emociones por día. El círculo se
-                pintará con los colores elegidos.
-              </Text>
             </View>
 
             {/* BITÁCORA INMUTABLE DEL DÍA */}
             {selectedDay && (
-              <View style={styles.journalCard}>
+              <LinearGradient
+                colors={["#FFFFFF", "#FAF5FF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.journalCard}
+              >
                 <View style={styles.journalHeaderRow}>
                   <View style={styles.journalTitleRow}>
-                    <View style={styles.journalIconCircle}>
+                    <LinearGradient
+                      colors={["#EDE9FE", "#DDD6FE"]}
+                      style={styles.journalIconCircle}
+                    >
                       <Ionicons
                         name="journal-outline"
                         size={17}
-                        color="#7C3AED"
+                        color="#6D28D9"
                       />
-                    </View>
+                    </LinearGradient>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.journalTitle}>
                         Bitácora del{" "}
@@ -1160,7 +1391,7 @@ export default function CalendarioEmocional({ navigation }) {
                       style={styles.noteInput}
                       multiline
                       placeholder="Añade un pensamiento nuevo de hoy..."
-                      placeholderTextColor="#9CA3AF"
+                      placeholderTextColor="#94A3B8"
                       value={newNoteText}
                       onChangeText={setNewNoteText}
                     />
@@ -1170,7 +1401,7 @@ export default function CalendarioEmocional({ navigation }) {
                       style={{ alignSelf: "flex-end", marginTop: 10 }}
                     >
                       <LinearGradient
-                        colors={["#7C3AED", "#6366F1"]}
+                        colors={["#7C3AED", "#5B21B6"]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={styles.saveNoteBtn}
@@ -1189,17 +1420,31 @@ export default function CalendarioEmocional({ navigation }) {
                     </TouchableOpacity>
                   </View>
                 )}
-              </View>
+              </LinearGradient>
             )}
 
             {/* GRÁFICA CURVA DE EVOLUCIÓN */}
             <View style={styles.chartCard}>
               <View style={styles.chartHeaderRow}>
-                <View>
-                  <Text style={styles.chartMainTitle}>Curva de Evolución</Text>
-                  <Text style={styles.chartSubTitle}>
-                    Bienestar registrado (escala 1 a 6)
-                  </Text>
+                <View style={styles.chartTitleLeft}>
+                  <LinearGradient
+                    colors={["#CCFBF1", "#99F6E4"]}
+                    style={styles.sectionIconBadge}
+                  >
+                    <Ionicons
+                      name="analytics-outline"
+                      size={17}
+                      color="#0F766E"
+                    />
+                  </LinearGradient>
+                  <View>
+                    <Text style={styles.chartMainTitle}>
+                      Curva de Evolución
+                    </Text>
+                    <Text style={styles.chartSubTitle}>
+                      Bienestar registrado (escala 1 a 6)
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.legendPill}>
@@ -1225,7 +1470,7 @@ export default function CalendarioEmocional({ navigation }) {
                     <View style={{ backgroundColor: "#FFFFFF", paddingTop: 6 }}>
                       <LineChart
                         data={chartData}
-                        width={Math.max(screenWidth - 64, 260)}
+                        width={Math.max(screenWidth - 68, 260)}
                         height={210}
                         fromZero
                         segments={6}
@@ -1276,23 +1521,45 @@ export default function CalendarioEmocional({ navigation }) {
             {/* BOTÓN EXPORTAR PDF ACTIVO */}
             <View style={styles.actions}>
               <TouchableOpacity
-                style={[styles.pdfBtn, exportandoPDF && { opacity: 0.7 }]}
                 onPress={exportToPDF}
                 disabled={exportandoPDF}
-                activeOpacity={0.88}
+                activeOpacity={0.9}
+                style={[
+                  styles.pdfBtnShadow,
+                  exportandoPDF && { opacity: 0.7 },
+                ]}
               >
-                <Ionicons name="document-text-outline" size={19} color="#FFF" />
-                <Text style={styles.pdfBtnText}>
-                  {exportandoPDF
-                    ? "Generando reporte PDF..."
-                    : "Exportar reporte (PDF)"}
-                </Text>
+                <LinearGradient
+                  colors={["#7C3AED", "#5B21B6", "#3730A3"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.pdfBtn}
+                >
+                  <Ionicons
+                    name="document-text-outline"
+                    size={19}
+                    color="#FFF"
+                  />
+                  <Text style={styles.pdfBtnText}>
+                    {exportandoPDF
+                      ? "Generando reporte PDF..."
+                      : "Exportar reporte (PDF)"}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
 
             {/* TEST DE PERSONALIDAD */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tu test de personalidad</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionCardHeader}>
+                <LinearGradient
+                  colors={["#FCE7F3", "#F3E8FF"]}
+                  style={styles.sectionIconBadge}
+                >
+                  <Ionicons name="ribbon-outline" size={17} color="#9333EA" />
+                </LinearGradient>
+                <Text style={styles.sectionTitle}>Tu test de personalidad</Text>
+              </View>
 
               {!personalityDone ? (
                 <View style={styles.personalityReminderBox}>
@@ -1302,7 +1569,10 @@ export default function CalendarioEmocional({ navigation }) {
                   </Text>
                 </View>
               ) : (
-                <View style={styles.personalityResultBox}>
+                <LinearGradient
+                  colors={["#FDF4FF", "#F5F3FF"]}
+                  style={styles.personalityResultBox}
+                >
                   <View style={styles.personalityHeaderRow}>
                     <View style={styles.personalityIconCircle}>
                       <Ionicons
@@ -1351,7 +1621,7 @@ export default function CalendarioEmocional({ navigation }) {
                     Este test solo se responde una vez para cuidar tu proceso
                     emocional.
                   </Text>
-                </View>
+                </LinearGradient>
               )}
             </View>
           </ScrollView>
@@ -1426,7 +1696,7 @@ export default function CalendarioEmocional({ navigation }) {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* MODAL MEJORADO DE CONFIRMACIÓN DE CANCELACIÓN DEL PACIENTE */}
+        {/* MODAL DE CONFIRMACIÓN DE CANCELACIÓN DEL PACIENTE */}
         <Modal
           visible={!!cancelSuccessModal}
           transparent
@@ -1510,7 +1780,7 @@ export default function CalendarioEmocional({ navigation }) {
           </View>
         </Modal>
 
-        {/* MODAL MEJORADO CUANDO EL PSICÓLOGO CANCELA UNA CONSULTA */}
+        {/* MODAL CUANDO EL PSICÓLOGO CANCELA UNA CONSULTA */}
         <Modal
           visible={!!alertaCancelacionPsiModal}
           transparent
@@ -1604,7 +1874,7 @@ export default function CalendarioEmocional({ navigation }) {
           </View>
         </Modal>
 
-        {/* CENTRO DE NOTIFICACIONES DEL PACIENTE (CAMPANA SUPERIOR) */}
+        {/* CENTRO DE NOTIFICACIONES DEL PACIENTE */}
         <Modal
           visible={notifCentroVisible}
           transparent
@@ -1613,6 +1883,7 @@ export default function CalendarioEmocional({ navigation }) {
         >
           <View style={styles.notifDrawerOverlay}>
             <View style={styles.notifDrawerCard}>
+              <View style={styles.modalHandleBar} />
               <View style={styles.notifDrawerHeader}>
                 <View style={styles.notifDrawerTitleRow}>
                   <View style={styles.notifDrawerIcon}>
@@ -1732,7 +2003,7 @@ export default function CalendarioEmocional({ navigation }) {
   );
 }
 
-// Círculo de cada día + insignia sobresaliente si tiene cita con el terapeuta
+// Celda editorial del calendario con cápsula redondeada, brillo sutil e insignias clínicas
 function DayWithEmotions({
   date,
   state,
@@ -1769,24 +2040,32 @@ function DayWithEmotions({
     <TouchableOpacity
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.75}
+      activeOpacity={0.78}
       style={styles.dayTouchable}
     >
       <View
         style={[
           styles.dayOuter,
-          isSelected && styles.dayOuterSelected,
-          isToday && styles.dayOuterToday,
+          !isDisabled && !hasColor && styles.dayOuterIdle,
+          isToday && !isSelected && styles.dayOuterToday,
           tieneCita &&
             (tieneCitaConfirmada
               ? styles.dayOuterCitaConfirmada
               : styles.dayOuterCitaPendiente),
+          isSelected && styles.dayOuterSelected,
         ]}
       >
+        {isToday && !hasColor && (
+          <View style={styles.todayTinyTag}>
+            <Text style={styles.todayTinyTagText}>HOY</Text>
+          </View>
+        )}
+
         {firstColor && secondColor ? (
           <View style={styles.daySplitCircle}>
             <View style={{ flex: 1, backgroundColor: firstColor }} />
             <View style={{ flex: 1, backgroundColor: secondColor }} />
+            <View style={styles.dayGlossOverlay} />
             <View style={styles.dayNumberOverlay}>
               <Text style={[styles.dayText, styles.dayTextColored]}>
                 {dayNumber}
@@ -1800,16 +2079,17 @@ function DayWithEmotions({
               firstColor && { backgroundColor: firstColor },
             ]}
           >
+            {firstColor && <View style={styles.dayGlossOverlay} />}
             <Text
               style={[
                 styles.dayText,
-                isToday && !hasColor && { color: "#7C3AED", fontWeight: "800" },
+                isToday && !hasColor && { color: "#6D28D9", fontWeight: "900" },
                 tieneCita &&
                   !hasColor && {
                     color: tieneCitaConfirmada ? "#0F766E" : "#B45309",
                     fontWeight: "900",
                   },
-                isDisabled && { color: "#D1D5DB" },
+                isDisabled && { color: "#CBD5E1" },
                 hasColor && styles.dayTextColored,
               ]}
             >
@@ -1829,7 +2109,7 @@ function DayWithEmotions({
           >
             <Ionicons
               name={tieneCitaOnline ? "videocam" : "medkit"}
-              size={8}
+              size={8.5}
               color="#FFFFFF"
             />
           </View>
@@ -1839,7 +2119,11 @@ function DayWithEmotions({
           <View
             style={[
               styles.noteIndicatorDot,
-              hasColor && { backgroundColor: "#FFFFFF" },
+              hasColor && {
+                backgroundColor: "#FFFFFF",
+                borderColor: "rgba(0,0,0,0.15)",
+                borderWidth: 0.5,
+              },
             ]}
           />
         )}
@@ -1850,48 +2134,120 @@ function DayWithEmotions({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  container: { flex: 1, backgroundColor: "#FFF", padding: 16 },
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
+
   navBar: {
     flexDirection: "row",
     justifyContent: "space-around",
-    backgroundColor: "white",
-    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    paddingBottom: 11,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EDE9FE",
+    shadowColor: "#4C1D95",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 5,
   },
   navItem: {
     alignItems: "center",
-    width: screenWidth * 0.22,
-    height: 48,
     justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 13,
+    borderRadius: 18,
+    minWidth: screenWidth * 0.2,
+  },
+  navItemActive: {
+    backgroundColor: "#F3E8FF",
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
   },
   navLabelActive: {
-    color: "#7C3AED",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "700",
+    color: "#6D28D9",
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
-  titleHeaderRow: {
+
+  // Hero Header Editorial
+  heroHeaderCard: {
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#5B21B6",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  heroOrbTop: {
+    position: "absolute",
+    top: -34,
+    right: -20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(196, 181, 253, 0.25)",
+  },
+  heroOrbBottom: {
+    position: "absolute",
+    bottom: -40,
+    left: 20,
+    width: 105,
+    height: 105,
+    borderRadius: 52,
+    backgroundColor: "rgba(186, 230, 253, 0.28)",
+  },
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginVertical: 8,
+  },
+  heroKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 3,
+  },
+  heroKickerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#8B5CF6",
+  },
+  heroKickerText: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    color: "#7C3AED",
+    letterSpacing: 1.1,
   },
   title: {
-    fontSize: 21,
-    fontWeight: "700",
-    color: "#222",
-    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#1E1B4B",
+    letterSpacing: -0.4,
   },
   notifBellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#F5F3FF",
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E9D5FF",
+    borderColor: "#DDD6FE",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+    shadowColor: "#6D28D9",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   notifBadge: {
     position: "absolute",
@@ -1912,26 +2268,321 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
   },
-  section: { marginTop: 18 },
-  sectionTitle: {
-    fontSize: 16,
+  heroChipsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 11,
+  },
+  heroStatPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(255,255,255,0.88)",
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+  },
+  heroStatPillText: {
+    fontSize: 11.5,
     fontWeight: "700",
-    color: "#333",
-    marginBottom: 10,
+    color: "#4C1D95",
+  },
+  jumpTodayPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#CCFBF1",
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+  },
+  jumpTodayText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#0F766E",
   },
 
-  // Tarjeta destacada de sesión con terapeuta debajo del calendario
+  // Diseño Exclusivo del Calendario
+  calendarCardShell: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    shadowColor: "#4C1D95",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  calendarTopBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#EDE9FE",
+  },
+  calendarBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  calendarBannerText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#312E81",
+  },
+  calendarBannerBadge: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  calendarBannerBadgeText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#6D28D9",
+  },
+  customCalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  customCalMonth: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#1E1B4B",
+    letterSpacing: -0.3,
+  },
+  customCalYearPill: {
+    backgroundColor: "#F3E8FF",
+    paddingHorizontal: 9,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+  },
+  customCalYear: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#7C3AED",
+  },
+  customCalArrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarLegendFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3E8FF",
+  },
+  calLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  calLegendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
+  calLegendLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+
+  // Celdas de días dentro del calendario
+  dayTouchable: {
+    paddingVertical: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayOuter: {
+    width: 41,
+    height: 43,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  dayOuterIdle: {
+    backgroundColor: "#FAFAFF",
+    borderWidth: 1,
+    borderColor: "#F1EEFF",
+  },
+  dayOuterToday: {
+    backgroundColor: "#F3E8FF",
+    borderWidth: 1.5,
+    borderColor: "#A78BFA",
+  },
+  dayOuterCitaConfirmada: {
+    borderWidth: 2,
+    borderColor: "#0D9488",
+    backgroundColor: "rgba(13, 148, 136, 0.12)",
+  },
+  dayOuterCitaPendiente: {
+    borderWidth: 2,
+    borderColor: "#F59E0B",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+  },
+  dayOuterSelected: {
+    borderWidth: 2.2,
+    borderColor: "#6D28D9",
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    shadowColor: "#6D28D9",
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  todayTinyTag: {
+    position: "absolute",
+    top: 2,
+    paddingHorizontal: 3,
+  },
+  todayTinyTagText: {
+    fontSize: 7,
+    fontWeight: "900",
+    color: "#7C3AED",
+    letterSpacing: 0.4,
+  },
+  citaCornerBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+    elevation: 3,
+  },
+  daySolidCircle: {
+    width: 33,
+    height: 33,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    position: "relative",
+  },
+  daySplitCircle: {
+    width: 33,
+    height: 33,
+    borderRadius: 12,
+    flexDirection: "row",
+    overflow: "hidden",
+    position: "relative",
+  },
+  dayGlossOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "45%",
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+  },
+  dayNumberOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#1E1B4B",
+  },
+  dayTextColored: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    textShadowColor: "rgba(0,0,0,0.24)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  noteIndicatorDot: {
+    position: "absolute",
+    bottom: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#7C3AED",
+  },
+
+  // Secciones generales
+  sectionCard: {
+    marginTop: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#EDE9FE",
+    shadowColor: "#312E81",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  sectionCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+  sectionIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    letterSpacing: -0.2,
+  },
+  sectionSubHelper: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 1,
+  },
+
+  // Tarjeta destacada de sesión con terapeuta
   citaSectionCard: {
-    marginTop: 14,
-    backgroundColor: "#F0FDFA",
-    borderRadius: 22,
-    padding: 15,
+    marginTop: 15,
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1.5,
     borderColor: "#5EEAD4",
     shadowColor: "#0D9488",
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
   citaSectionHeader: {
@@ -1941,9 +2592,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   citaHeaderIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: "#0D9488",
     alignItems: "center",
     justifyContent: "center",
@@ -1959,8 +2610,8 @@ const styles = StyleSheet.create({
   },
   citaItemCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 13,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#CCFBF1",
     gap: 6,
@@ -2027,7 +2678,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 11,
+    paddingVertical: 11.5,
     borderRadius: 14,
   },
   joinCallBtnText: {
@@ -2053,26 +2704,55 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  emotionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  emotionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginRight: 8,
-    marginBottom: 8,
+  // Selector de Emociones
+  emotionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
   },
-  emotionText: { color: "#333", fontSize: 14 },
-  emptyText: { color: "#666", fontStyle: "italic" },
+  emotionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 9.5,
+    paddingHorizontal: 13,
+    borderRadius: 999,
+    borderWidth: 1.3,
+  },
+  emotionBtnChosen: {
+    shadowColor: "#1E1B4B",
+    shadowOpacity: 0.14,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  emotionColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  emotionText: {
+    color: "#1E293B",
+    fontSize: 13.5,
+    fontWeight: "600",
+  },
+  emptyText: {
+    color: "#64748B",
+    fontStyle: "italic",
+  },
 
-  // Bitácora creativa e inmutable
+  // Bitácora
   journalCard: {
-    marginTop: 18,
-    backgroundColor: "#FAF8FF",
-    borderRadius: 22,
-    padding: 16,
+    marginTop: 16,
+    borderRadius: 26,
+    padding: 18,
     borderWidth: 1,
     borderColor: "#E9D5FF",
+    shadowColor: "#4C1D95",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   journalHeaderRow: {
     flexDirection: "row",
@@ -2091,7 +2771,6 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: "#EDE9FE",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2102,7 +2781,7 @@ const styles = StyleSheet.create({
   },
   journalSubtitle: {
     fontSize: 11.5,
-    color: "#6B7280",
+    color: "#64748B",
     marginTop: 1,
   },
   lockBadge: {
@@ -2124,12 +2803,12 @@ const styles = StyleSheet.create({
   },
   savedEntryCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 16,
+    padding: 13,
     borderLeftWidth: 3.5,
     borderLeftColor: "#7C3AED",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#EDE9FE",
   },
   savedEntryHeader: {
     flexDirection: "row",
@@ -2155,55 +2834,55 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   emptyJournalBox: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: 15,
+    padding: 13,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#EDE9FE",
   },
   emptyJournalText: {
     fontSize: 12.5,
-    color: "#6B7280",
+    color: "#64748B",
     fontStyle: "italic",
   },
   noteInput: {
-    minHeight: 76,
-    borderRadius: 14,
+    minHeight: 78,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#DDD6FE",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     fontSize: 13.5,
     textAlignVertical: "top",
     backgroundColor: "#FFFFFF",
-    color: "#111827",
+    color: "#1E293B",
   },
   saveNoteBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    paddingHorizontal: 17,
+    paddingVertical: 10,
     borderRadius: 999,
   },
   saveNoteBtnText: {
-    color: "#fff",
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "800",
     fontSize: 13,
   },
 
-  // Gráfica curva de evolución
+  // Gráfica
   chartCard: {
-    marginTop: 18,
+    marginTop: 16,
     backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 16,
+    borderRadius: 26,
+    padding: 18,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   chartHeaderRow: {
@@ -2212,10 +2891,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+  chartTitleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   chartMainTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#0F172A",
+    color: "#1E1B4B",
   },
   chartSubTitle: {
     fontSize: 12,
@@ -2228,8 +2912,10 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#F0FDFA",
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 4.5,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#CCFBF1",
   },
   legendDot: {
     width: 8,
@@ -2248,7 +2934,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     padding: 12,
-    borderRadius: 14,
+    borderRadius: 15,
     borderWidth: 1,
   },
   insightBannerCalm: {
@@ -2265,107 +2951,35 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  actions: { marginTop: 22, alignItems: "center" },
+  actions: {
+    marginTop: 18,
+    alignItems: "center",
+  },
+  pdfBtnShadow: {
+    width: "100%",
+    borderRadius: 20,
+    shadowColor: "#5B21B6",
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
   pdfBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#7C3AED",
-    paddingVertical: 14,
-    paddingHorizontal: 26,
-    borderRadius: 14,
-    elevation: 4,
-  },
-  pdfBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-
-  // Círculos de días del calendario + insignia sobresaliente de cita
-  dayTouchable: {
-    paddingVertical: 2,
-    alignItems: "center",
     justifyContent: "center",
+    gap: 9,
+    paddingVertical: 15,
+    paddingHorizontal: 24,
+    borderRadius: 20,
   },
-  dayOuter: {
-    width: 39,
-    height: 39,
-    borderRadius: 19.5,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  dayOuterSelected: {
-    borderWidth: 2,
-    borderColor: "#7C3AED",
-    backgroundColor: "rgba(124, 58, 237, 0.08)",
-  },
-  dayOuterToday: {
-    borderWidth: 1.5,
-    borderColor: "#7C3AED",
-  },
-  dayOuterCitaConfirmada: {
-    borderWidth: 2,
-    borderColor: "#0D9488",
-    backgroundColor: "rgba(13, 148, 136, 0.12)",
-  },
-  dayOuterCitaPendiente: {
-    borderWidth: 2,
-    borderColor: "#F59E0B",
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-  },
-  citaCornerBadge: {
-    position: "absolute",
-    top: -1,
-    right: -1,
-    width: 15,
-    height: 15,
-    borderRadius: 7.5,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: "#FFFFFF",
-    elevation: 3,
-  },
-  daySolidCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  daySplitCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    flexDirection: "row",
-    overflow: "hidden",
-    position: "relative",
-  },
-  dayNumberOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dayText: {
-    fontSize: 13.5,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  dayTextColored: {
+  pdfBtnText: {
     color: "#FFFFFF",
     fontWeight: "800",
-    textShadowColor: "rgba(0,0,0,0.22)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  noteIndicatorDot: {
-    position: "absolute",
-    bottom: 4,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#7C3AED",
+    fontSize: 15,
   },
 
-  // Modales creativos
+  // Modales
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.55)",
@@ -2552,7 +3166,15 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  // Centro de notificaciones (campana superior)
+  modalHandleBar: {
+    width: 42,
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: "#CBD5E1",
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+
   notifDrawerOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.55)",
@@ -2561,8 +3183,8 @@ const styles = StyleSheet.create({
   notifDrawerCard: {
     maxHeight: "78%",
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     padding: 20,
   },
   notifDrawerHeader: {
@@ -2660,26 +3282,23 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Estilos test de personalidad
   personalityReminderBox: {
-    marginTop: 8,
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     backgroundColor: "#FFF5FB",
     borderWidth: 1,
     borderColor: "#F8B4D9",
   },
   personalityReminderText: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: "#8A4A63",
+    lineHeight: 19,
   },
   personalityResultBox: {
-    marginTop: 8,
     padding: 16,
-    borderRadius: 16,
-    backgroundColor: "#FDF2FF",
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E4B4F5",
+    borderColor: "#E9D5FF",
   },
   personalityHeaderRow: {
     flexDirection: "row",
@@ -2687,24 +3306,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   personalityIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#EDE9FE",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
   personalityResultLabel: {
-    fontSize: 12,
-    color: "#7E6A8C",
+    fontSize: 11.5,
+    color: "#7C3AED",
     marginBottom: 2,
     fontWeight: "700",
   },
   personalityResultTitle: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: "800",
-    color: "#4B275F",
+    color: "#3B0764",
   },
   personalityScorePill: {
     paddingHorizontal: 10,
@@ -2718,10 +3337,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   personalityResultDescription: {
-    marginTop: 8,
+    marginTop: 6,
     fontSize: 13,
-    color: "#4B5563",
-    lineHeight: 18,
+    color: "#475569",
+    lineHeight: 19,
   },
   personalityTraitsRow: {
     flexDirection: "row",
@@ -2739,8 +3358,8 @@ const styles = StyleSheet.create({
   },
   personalityTraitChipText: {
     fontSize: 11,
-    color: "#4B2771",
-    fontWeight: "600",
+    color: "#5B21B6",
+    fontWeight: "700",
   },
   personalityResultNote: {
     fontSize: 12,
