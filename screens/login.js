@@ -5,10 +5,10 @@ import { doc, getDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -31,9 +31,37 @@ export default function Login({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
 
+  const [modalAcceso, setModalAcceso] = useState({
+    visible: false,
+    tipo: "usuario", // "profesional" | "usuario" | "aviso"
+    badge: "",
+    titulo: "",
+    mensaje: "",
+    rutaDestino: null,
+  });
+
+  const cerrarModalAcceso = () => {
+    const destino = modalAcceso.rutaDestino;
+    setModalAcceso((prev) => ({
+      ...prev,
+      visible: false,
+      rutaDestino: null,
+    }));
+    if (destino) {
+      navigation.replace(destino);
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Ingresa correo y contraseña");
+      setModalAcceso({
+        visible: true,
+        tipo: "aviso",
+        badge: "DATOS INCOMPLETOS",
+        titulo: "Ingresa correo y contraseña",
+        mensaje: "Completa ambos campos para iniciar sesión de forma segura.",
+        rutaDestino: null,
+      });
       return;
     }
 
@@ -50,14 +78,35 @@ export default function Login({ navigation }) {
       const psicologoSnap = await getDoc(doc(db, "psicologos", uid));
 
       if (psicologoSnap.exists()) {
-        Alert.alert("Bienvenido/a", "Accediendo a tu panel profesional");
-        navigation.replace("PsicologoDashboard");
+        setModalAcceso({
+          visible: true,
+          tipo: "profesional",
+          badge: "PANEL PROFESIONAL • LAMI",
+          titulo: "Accediste a tu panel profesional",
+          mensaje:
+            "Bienvenido/a. Tu espacio clínico, pacientes y seguimiento están listos.",
+          rutaDestino: "PsicologoDashboard",
+        });
       } else {
-        Alert.alert("Éxito");
-        navigation.replace("Test");
+        setModalAcceso({
+          visible: true,
+          tipo: "usuario",
+          badge: "TU ESPACIO EN LAMI",
+          titulo: "¡Qué bueno verte de nuevo!",
+          mensaje:
+            "Accediste a tu perfil y espacio de seguimiento para continuar a tu ritmo.",
+          rutaDestino: "Test",
+        });
       }
     } catch (error) {
-      Alert.alert("Error", error.message);
+      setModalAcceso({
+        visible: true,
+        tipo: "aviso",
+        badge: "ERROR DE ACCESO",
+        titulo: "No se pudo iniciar sesión",
+        mensaje: error?.message || "Verifica tu correo y contraseña.",
+        rutaDestino: null,
+      });
     } finally {
       setLoading(false);
     }
@@ -262,6 +311,93 @@ export default function Login({ navigation }) {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* TARJETA MODAL DE ACCESO / AVISO */}
+        <Modal
+          visible={modalAcceso.visible}
+          transparent
+          animationType="fade"
+          onRequestClose={cerrarModalAcceso}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <LinearGradient
+                colors={["#6EE7B7", "#14B8A6", "#0284C7"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.cardTopAccent}
+              />
+
+              <View
+                style={[
+                  styles.modalBadge,
+                  modalAcceso.tipo === "profesional"
+                    ? { backgroundColor: "#E0F2FE", borderColor: "#BAE6FD" }
+                    : modalAcceso.tipo === "aviso"
+                      ? { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" }
+                      : { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    modalAcceso.tipo === "profesional"
+                      ? "medkit"
+                      : modalAcceso.tipo === "aviso"
+                        ? "alert-circle"
+                        : "sparkles"
+                  }
+                  size={15}
+                  color={
+                    modalAcceso.tipo === "profesional"
+                      ? "#0369A1"
+                      : modalAcceso.tipo === "aviso"
+                        ? "#B45309"
+                        : "#0F766E"
+                  }
+                />
+                <Text
+                  style={[
+                    styles.modalBadgeText,
+                    modalAcceso.tipo === "profesional"
+                      ? { color: "#0369A1" }
+                      : modalAcceso.tipo === "aviso"
+                        ? { color: "#B45309" }
+                        : { color: "#0F766E" },
+                  ]}
+                >
+                  {modalAcceso.badge}
+                </Text>
+              </View>
+
+              <Image
+                source={require("../assets/lami_1.png")}
+                style={styles.modalAvatar}
+                resizeMode="contain"
+              />
+
+              <Text style={styles.modalTitle}>{modalAcceso.titulo}</Text>
+              <Text style={styles.modalMessage}>{modalAcceso.mensaje}</Text>
+
+              <TouchableOpacity
+                onPress={cerrarModalAcceso}
+                activeOpacity={0.9}
+                style={styles.modalBtnWrap}
+              >
+                <LinearGradient
+                  colors={["#10B981", "#0D9488", "#0284C7"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalBtn}
+                >
+                  <Text style={styles.modalBtnText}>
+                    {modalAcceso.rutaDestino ? "Continuar" : "Entendido"}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -584,5 +720,80 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     textAlign: "center",
     lineHeight: 16,
+  },
+
+  // MODAL DE ACCESO CON DISEÑO
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 22,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 370,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 22,
+    alignItems: "center",
+    borderWidth: 1.2,
+    borderColor: "#CCFBF1",
+    overflow: "hidden",
+    elevation: 8,
+  },
+  modalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  modalBadgeText: {
+    fontSize: 10.5,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  modalAvatar: {
+    width: 82,
+    height: 82,
+    marginTop: 12,
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#0F172A",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  modalMessage: {
+    fontSize: 13,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  modalBtnWrap: {
+    width: "100%",
+    marginTop: 18,
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  modalBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  modalBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

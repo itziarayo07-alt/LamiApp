@@ -542,25 +542,32 @@ export default function Anxiosimetro({ navigation, route }) {
             ["calendar-outline", "Calendario", "Calendario"],
             ["heart-outline", "Checking", "Checking"],
             ["person-circle-outline", "Perfil", "Perfil"],
-          ].map(([icon, label, ruta], i) => (
-            <TouchableOpacity
-              key={i}
-              style={[styles.navItem, { width: NAV_ITEM_W }]}
-              onPress={() => {
-                setActiveNav(i);
-                navigation.navigate(ruta);
-              }}
-            >
-              <Ionicons
-                name={icon}
-                size={26}
-                color={activeNav === i ? "#7C3AED" : "#9CA3AF"}
-              />
-              {activeNav === i && (
-                <Text style={styles.navLabelActive}>{label}</Text>
-              )}
-            </TouchableOpacity>
-          ))}
+          ].map(([icon, label, ruta], i) => {
+            const esActivo = activeNav === i;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.navItem, { width: NAV_ITEM_W }]}
+                onPress={() => {
+                  setActiveNav(i);
+                  navigation.navigate(ruta);
+                }}
+              >
+                <View
+                  style={[styles.navPill, esActivo && styles.navPillActive]}
+                >
+                  <Ionicons
+                    name={icon}
+                    size={24}
+                    color={esActivo ? "#7C3AED" : "#9CA3AF"}
+                  />
+                  {esActivo && (
+                    <Text style={styles.navLabelActive}>{label}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <ScrollView
@@ -821,6 +828,18 @@ const styles = StyleSheet.create({
   monitorText: {
     color: "white",
     fontWeight: "600",
+  },
+
+  navPill: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
+
+  navPillActive: {
+    backgroundColor: "#EDE9FE",
   },
 
   fabButton: {
