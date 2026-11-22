@@ -84,11 +84,13 @@ function normalizarTexto(txt = "") {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-// Funciones auxiliares agregadas para solucionar el error de referencia
 function getTomorrowISO() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function parseHoraToPicker(horaStr = "10:00 AM") {
@@ -192,7 +194,6 @@ export default function ProfileScreen({ navigation }) {
   const [aceptandoCitaId, setAceptandoCitaId] = useState(null);
   const [solicitudReprogramando, setSolicitudReprogramando] = useState(null);
 
-  // Estados para el calendario y ruleta al reprogramar (Otro horario)
   const [calMesReprogramar, setCalMesReprogramar] = useState(() => {
     const hoy = new Date();
     return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
@@ -1351,14 +1352,20 @@ export default function ProfileScreen({ navigation }) {
   const esPremiumActivo = planUsuario === "premium";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f3e8ff" }}>
-      <LinearGradient colors={["#faf5ff", "#f3e8ff"]} style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F8F5FF" }}>
+      <LinearGradient
+        colors={["#FAF7FF", "#F3EEFF", "#EEF6FF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ flex: 1 }}
+      >
         <View style={styles.screen}>
+          {/* Barra superior moderna con cápsula activa */}
           <View
             style={[
               styles.navBar,
               {
-                paddingTop: insets.top + 10,
+                paddingTop: insets.top + 8,
               },
             ]}
           >
@@ -1366,50 +1373,60 @@ export default function ProfileScreen({ navigation }) {
               ["stats-chart-outline", "Anxiósometro", "Anxiosimetro"],
               ["calendar-outline", "Calendario", "Calendario"],
               ["heart-outline", "Checking", "Checking"],
-              ["person-circle-outline", "Perfil", "Perfil"],
-            ].map(([icon, label, screen], i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.navItem}
-                onPress={() => {
-                  setActiveNav(i);
-                  navigation.navigate(screen);
-                }}
-              >
-                <Ionicons
-                  name={icon}
-                  size={26}
-                  color={activeNav === i ? "#7C3AED" : "#9CA3AF"}
-                />
-                {activeNav === i && (
-                  <Text style={styles.navLabelActive}>{label}</Text>
-                )}
-              </TouchableOpacity>
-            ))}
+              ["person-circle", "Perfil", "Perfil"],
+            ].map(([icon, label, screen], i) => {
+              const isSelected = activeNav === i;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  activeOpacity={0.85}
+                  style={[styles.navItem, isSelected && styles.navItemActive]}
+                  onPress={() => {
+                    setActiveNav(i);
+                    navigation.navigate(screen);
+                  }}
+                >
+                  <Ionicons
+                    name={icon}
+                    size={22}
+                    color={isSelected ? "#7C3AED" : "#94A3B8"}
+                  />
+                  {isSelected && (
+                    <Text style={styles.navLabelActive}>{label}</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <ScrollView
             style={styles.container}
-            contentContainerStyle={{ paddingBottom: 18 }}
+            contentContainerStyle={{ paddingBottom: 32 }}
             showsVerticalScrollIndicator={false}
           >
+            {/* Hero Card de Bienvenida */}
             <LinearGradient
-              colors={["#ffffff", "#f5f3ff"]}
+              colors={["#FFFFFF", "#F6F1FF", "#EFF6FF"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.headerCard}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.helloText}>Hola,</Text>
-                <Text style={styles.nameBig}>{name}</Text>
+              <View style={styles.heroOrbTopRight} />
+              <View style={styles.heroOrbBottomLeft} />
+
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={styles.helloText}>Bienvenida de nuevo,</Text>
+                <Text style={styles.nameBig} numberOfLines={2}>
+                  {name || "Usuario Lami"}
+                </Text>
 
                 <LinearGradient
-                  colors={["#ede9fe", "#e0f2fe"]}
+                  colors={["#EDE9FE", "#E0F2FE"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.badge}
                 >
-                  <Ionicons name="sparkles-outline" size={16} color="#4F46E5" />
+                  <Ionicons name="sparkles" size={14} color="#6D28D9" />
                   <Text style={styles.badgeText}>Tu espacio privado 💜</Text>
                 </LinearGradient>
               </View>
@@ -1417,55 +1434,128 @@ export default function ProfileScreen({ navigation }) {
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => setModalFotoUsuario(true)}
-                style={styles.avatarCircle}
+                style={styles.heroAvatarWrapper}
               >
-                {fotoPerfil ? (
-                  <Image
-                    source={{ uri: fotoPerfil }}
-                    style={styles.userAvatarImage}
-                  />
-                ) : (
-                  <FontAwesome name="user" size={44} color="#6B7280" />
-                )}
+                <LinearGradient
+                  colors={["#8B5CF6", "#3B82F6", "#14B8A6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.heroAvatarRing}
+                >
+                  <View style={styles.avatarCircle}>
+                    {fotoPerfil ? (
+                      <Image
+                        source={{ uri: fotoPerfil }}
+                        style={styles.userAvatarImage}
+                      />
+                    ) : (
+                      <FontAwesome name="user" size={40} color="#7C3AED" />
+                    )}
+                  </View>
+                </LinearGradient>
                 <View style={styles.userCameraBadge}>
                   <Ionicons name="camera" size={14} color="#FFFFFF" />
                 </View>
               </TouchableOpacity>
             </LinearGradient>
 
+            {/* Tarjetas de Racha y Sesiones */}
             <View style={styles.statsRow}>
               <LinearGradient
-                colors={["#fef3c7", "#ffe4e6"]}
+                colors={["#FFFBEB", "#FEF3C7", "#FFE4E6"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.statCard}
+                style={[styles.statCard, { borderColor: "#FDE68A" }]}
               >
-                <Text style={styles.statLabel}>Racha de calma 🔥</Text>
-                <Text style={styles.statNumber}>{calmStreak} días</Text>
-                <Text style={styles.statHint}>Sigue así, lo haces genial</Text>
+                <View style={styles.statHeaderRow}>
+                  <Text style={[styles.statLabel, { color: "#92400E" }]}>
+                    Racha de calma
+                  </Text>
+                  <View
+                    style={[
+                      styles.statIconBubble,
+                      { backgroundColor: "rgba(245, 158, 11, 0.16)" },
+                    ]}
+                  >
+                    <Ionicons name="flame" size={16} color="#D97706" />
+                  </View>
+                </View>
+                <Text style={[styles.statNumber, { color: "#78350F" }]}>
+                  {calmStreak} {calmStreak === 1 ? "día" : "días"}
+                </Text>
+                <Text style={[styles.statHint, { color: "#B45309" }]}>
+                  Sigue así, lo haces genial ✨
+                </Text>
               </LinearGradient>
 
               <LinearGradient
-                colors={["#dbeafe", "#ede9fe"]}
+                colors={["#EFF6FF", "#EDE9FE", "#F5F3FF"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.statCard}
+                style={[styles.statCard, { borderColor: "#DDD6FE" }]}
               >
-                <Text style={styles.statLabel}>Sesiones 🎧</Text>
-                <Text style={styles.statNumber}>{sessionsCount}</Text>
-                <Text style={styles.statHint}>Tu mente se está cuidando</Text>
+                <View style={styles.statHeaderRow}>
+                  <Text style={[styles.statLabel, { color: "#4338CA" }]}>
+                    Sesiones
+                  </Text>
+                  <View
+                    style={[
+                      styles.statIconBubble,
+                      { backgroundColor: "rgba(124, 58, 237, 0.14)" },
+                    ]}
+                  >
+                    <Ionicons name="headset" size={16} color="#6D28D9" />
+                  </View>
+                </View>
+                <Text style={[styles.statNumber, { color: "#312E81" }]}>
+                  {sessionsCount}
+                </Text>
+                <Text style={[styles.statHint, { color: "#5B21B6" }]}>
+                  Tu mente se está cuidando 💜
+                </Text>
               </LinearGradient>
             </View>
 
-            <TouchableOpacity onPress={addSession} style={styles.sessionButton}>
-              <Text style={styles.sessionButtonText}>Hice una sesión 🎧</Text>
+            {/* Botón Principal de Sesión con Degradado */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={addSession}
+              style={styles.sessionButtonShadow}
+            >
+              <LinearGradient
+                colors={["#7C3AED", "#5B21B6", "#4338CA"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sessionButton}
+              >
+                <View style={styles.sessionBtnIconCircle}>
+                  <Ionicons name="headset-outline" size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.sessionButtonText}>
+                  Registrar una sesión completada 🎧
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
 
+            {/* Card Mi Plan Lami */}
             <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
-                  Mi Plan Lami 
-                </Text>
+              <View style={styles.cardTitleHeader}>
+                <View style={styles.cardTitleLeft}>
+                  <View
+                    style={[
+                      styles.sectionIconBadge,
+                      { backgroundColor: "#F3E8FF" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="diamond-outline"
+                      size={16}
+                      color="#7C3AED"
+                    />
+                  </View>
+                  <Text style={styles.sectionTitle}>Mi Plan Lami</Text>
+                </View>
+
                 <View
                   style={[
                     styles.planStatusPill,
@@ -1475,7 +1565,7 @@ export default function ProfileScreen({ navigation }) {
                   ]}
                 >
                   <Ionicons
-                    name={esPremiumActivo ? "diamond" : "leaf-outline"}
+                    name={esPremiumActivo ? "diamond" : "leaf"}
                     size={12}
                     color={esPremiumActivo ? "#6D28D9" : "#0F766E"}
                   />
@@ -1491,21 +1581,29 @@ export default function ProfileScreen({ navigation }) {
               </View>
 
               {esPremiumActivo ? (
-                <View style={styles.planSummaryBoxPremium}>
+                <LinearGradient
+                  colors={["#F5F3FF", "#EDE9FE"]}
+                  style={styles.planSummaryBoxPremium}
+                >
                   <View style={styles.planSummaryHeader}>
                     <Text style={styles.planSummaryName}>
                       Suscripción Lami Premium
                     </Text>
-                    <Text style={styles.planSummaryPrice}>$149 MXN/mes</Text>
+                    <View style={styles.priceTagPremium}>
+                      <Text style={styles.planSummaryPrice}>$149 MXN/mes</Text>
+                    </View>
                   </View>
                   <Text style={styles.planSummaryDesc}>
                     Tienes activos todos los reportes clínicos avanzados,
                     seguimiento prioritario y recursos exclusivos.
                   </Text>
                   {metodoPagoGuardado ? (
-                    <Text style={styles.planPaymentMethodText}>
-                      Método registrado: {metodoPagoGuardado}
-                    </Text>
+                    <View style={styles.paymentChip}>
+                      <Ionicons name="card-outline" size={14} color="#5B21B6" />
+                      <Text style={styles.planPaymentMethodText}>
+                        {metodoPagoGuardado}
+                      </Text>
+                    </View>
                   ) : null}
 
                   <TouchableOpacity
@@ -1525,14 +1623,16 @@ export default function ProfileScreen({ navigation }) {
                         : "Cancelar suscripción"}
                     </Text>
                   </TouchableOpacity>
-                </View>
+                </LinearGradient>
               ) : (
                 <View style={styles.planSummaryBoxFree}>
                   <View style={styles.planSummaryHeader}>
                     <Text style={styles.planSummaryName}>
                       Plan Esencial • Gratuito
                     </Text>
-                    <Text style={styles.planSummaryPriceFree}>$0 MXN</Text>
+                    <View style={styles.priceTagFree}>
+                      <Text style={styles.planSummaryPriceFree}>$0 MXN</Text>
+                    </View>
                   </View>
                   <Text style={styles.planSummaryDesc}>
                     Incluye Anxiósometro, calendario emocional, bitácora diaria,
@@ -1550,11 +1650,7 @@ export default function ProfileScreen({ navigation }) {
                       end={{ x: 1, y: 0 }}
                       style={styles.upgradePremiumBtn}
                     >
-                      <Ionicons
-                        name="diamond-outline"
-                        size={16}
-                        color="#FFFFFF"
-                      />
+                      <Ionicons name="sparkles" size={15} color="#FFFFFF" />
                       <Text style={styles.upgradePremiumBtnText}>
                         Cambiar a Lami Premium ($149/mes)
                       </Text>
@@ -1564,11 +1660,21 @@ export default function ProfileScreen({ navigation }) {
               )}
             </View>
 
+            {/* Card Mi Especialista */}
             <View style={styles.card}>
-              <View style={styles.especialistaHeaderRow}>
-                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
-                  Mi Especialista 🩺
-                </Text>
+              <View style={styles.cardTitleHeader}>
+                <View style={styles.cardTitleLeft}>
+                  <View
+                    style={[
+                      styles.sectionIconBadge,
+                      { backgroundColor: "#E0F2FE" },
+                    ]}
+                  >
+                    <Ionicons name="medkit-outline" size={16} color="#0284C7" />
+                  </View>
+                  <Text style={styles.sectionTitle}>Mi Especialista</Text>
+                </View>
+
                 {psicologoVinculado && (
                   <View style={styles.activeLinkPill}>
                     <View style={styles.activeLinkDot} />
@@ -1578,14 +1684,17 @@ export default function ProfileScreen({ navigation }) {
               </View>
 
               {psicologoVinculado ? (
-                <View style={{ marginTop: 10 }}>
+                <View style={{ marginTop: 4 }}>
                   <LinearGradient
-                    colors={["#F8FAFC", "#EFF6FF"]}
+                    colors={["#F8FAFC", "#EFF6FF", "#F0FDFA"]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.especialistaCard}
                   >
-                    <View style={styles.avatarRing}>
+                    <LinearGradient
+                      colors={["#60A5FA", "#34D399"]}
+                      style={styles.avatarRing}
+                    >
                       {fotoPsiVisible ? (
                         <Image
                           source={{ uri: fotoPsiVisible }}
@@ -1596,7 +1705,7 @@ export default function ProfileScreen({ navigation }) {
                           <Ionicons name="medkit" size={24} color="#4F46E5" />
                         </View>
                       )}
-                    </View>
+                    </LinearGradient>
 
                     <View style={{ flex: 1 }}>
                       <Text style={styles.especialistaTag}>
@@ -1622,7 +1731,7 @@ export default function ProfileScreen({ navigation }) {
                       {ubicacionVinculada?.ciudad ? (
                         <View style={styles.miniCityRow}>
                           <Ionicons
-                            name="location-outline"
+                            name="location"
                             size={12}
                             color="#0D9488"
                           />
@@ -1661,7 +1770,7 @@ export default function ProfileScreen({ navigation }) {
                       onPress={() => setModalResena(true)}
                       style={styles.calificarBtn}
                     >
-                      <Ionicons name="star-outline" size={15} color="#B45309" />
+                      <Ionicons name="star" size={14} color="#D97706" />
                       <Text style={styles.calificarBtnText}>Calificar</Text>
                     </TouchableOpacity>
 
@@ -1684,18 +1793,25 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               ) : (
                 <>
-                  <Text style={[styles.sectionSubtitle, { marginTop: 6 }]}>
+                  <Text style={styles.sectionSubtitle}>
                     Ingresa el código que te dio tu psicólogo en consulta (ej.
-                    PSI-492), escanea seu QR o busca especialistas cercanos.
+                    PSI-492), escanea su QR o busca especialistas cercanos.
                   </Text>
-                  <View style={styles.inputContainer}>
+                  <View style={styles.codeInputContainer}>
+                    <View style={styles.inputLeftIcon}>
+                      <Ionicons name="key-outline" size={18} color="#4F46E5" />
+                    </View>
                     <TextInput
                       style={[
                         styles.input,
-                        { fontWeight: "700", letterSpacing: 2 },
+                        {
+                          fontWeight: "800",
+                          letterSpacing: 2,
+                          color: "#1E1B4B",
+                        },
                       ]}
                       placeholder="PSI-492"
-                      placeholderTextColor="#9CA3AF"
+                      placeholderTextColor="#94A3B8"
                       autoCapitalize="characters"
                       value={codigoPsicologo}
                       onChangeText={setCodigoPsicologo}
@@ -1706,13 +1822,14 @@ export default function ProfileScreen({ navigation }) {
                     >
                       <Ionicons
                         name="qr-code-outline"
-                        size={22}
+                        size={20}
                         color="#4F46E5"
                       />
                     </TouchableOpacity>
                   </View>
 
                   <TouchableOpacity
+                    activeOpacity={0.9}
                     disabled={vinculando || !codigoPsicologo.trim()}
                     onPress={async () => {
                       try {
@@ -1738,20 +1855,35 @@ export default function ProfileScreen({ navigation }) {
                         setVinculando(false);
                       }
                     }}
-                    style={[
-                      styles.primaryIndigoBtn,
-                      { marginTop: 12, marginBottom: 8 },
-                    ]}
+                    style={{
+                      marginTop: 12,
+                      marginBottom: 10,
+                      opacity: !codigoPsicologo.trim() ? 0.65 : 1,
+                    }}
                   >
-                    <Text style={styles.sessionButtonText}>
-                      {vinculando
-                        ? "Vinculando..."
-                        : "Vincular con mi psicólogo"}
-                    </Text>
+                    <LinearGradient
+                      colors={["#4F46E5", "#3B82F6"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.primaryIndigoBtn}
+                    >
+                      <Ionicons
+                        name="link-outline"
+                        size={18}
+                        color="#FFFFFF"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.sessionButtonText}>
+                        {vinculando
+                          ? "Vinculando..."
+                          : "Vincular con mi psicólogo"}
+                      </Text>
+                    </LinearGradient>
                   </TouchableOpacity>
 
                   <View style={styles.secondaryLinkBtnsRow}>
                     <TouchableOpacity
+                      activeOpacity={0.85}
                       onPress={abrirEscanerQR}
                       style={[styles.qrScanButton, { flex: 1 }]}
                     >
@@ -1764,6 +1896,7 @@ export default function ProfileScreen({ navigation }) {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      activeOpacity={0.85}
                       onPress={abrirDirectorioEspecialistas}
                       style={[styles.nearbySearchButton, { flex: 1.25 }]}
                     >
@@ -1781,17 +1914,35 @@ export default function ProfileScreen({ navigation }) {
               )}
             </View>
 
+            {/* Card Mis Solicitudes y Citas */}
             {misSolicitudes.length > 0 && (
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>
-                  Mis solicitudes y citas 📅
-                </Text>
+                <View style={styles.cardTitleHeader}>
+                  <View style={styles.cardTitleLeft}>
+                    <View
+                      style={[
+                        styles.sectionIconBadge,
+                        { backgroundColor: "#CCFBF1" },
+                      ]}
+                    >
+                      <Ionicons
+                        name="calendar-outline"
+                        size={16}
+                        color="#0F766E"
+                      />
+                    </View>
+                    <Text style={styles.sectionTitle}>
+                      Mis solicitudes y citas
+                    </Text>
+                  </View>
+                </View>
+
                 <Text style={styles.sectionSubtitle}>
                   Revisa aquí cuando tu especialista responda o propón otro
                   horario.
                 </Text>
 
-                <View style={{ gap: 10 }}>
+                <View style={{ gap: 12 }}>
                   {misSolicitudes.map((sol) => {
                     const estado = sol.estado || "pendiente";
                     const sinCupo = estado === "sin_disponibilidad";
@@ -2254,34 +2405,49 @@ export default function ProfileScreen({ navigation }) {
               </View>
             )}
 
+            {/* Card Datos Personales */}
             <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
-                  Datos personales 👤
-                </Text>
-                <TouchableOpacity onPress={() => setModalFotoUsuario(true)}>
+              <View style={styles.cardTitleHeader}>
+                <View style={styles.cardTitleLeft}>
+                  <View
+                    style={[
+                      styles.sectionIconBadge,
+                      { backgroundColor: "#EDE9FE" },
+                    ]}
+                  >
+                    <Ionicons name="person-outline" size={16} color="#6D28D9" />
+                  </View>
+                  <Text style={styles.sectionTitle}>Datos personales</Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => setModalFotoUsuario(true)}
+                  style={styles.changePhotoPill}
+                >
+                  <Ionicons name="camera-outline" size={13} color="#7C3AED" />
                   <Text style={styles.changePhotoLink}>Cambiar foto</Text>
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.rowBetween}>
-                <Text style={styles.labelInline}>Nombre</Text>
-                <MaterialIcons name="edit" size={16} color="#7C3AED" />
-              </View>
+              <Text style={styles.labelInline}>Nombre completo</Text>
               <View style={styles.inputContainer}>
+                <View style={styles.inputLeftIcon}>
+                  <MaterialIcons name="person" size={18} color="#7C3AED" />
+                </View>
                 <TextInput
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
                   placeholder="Tu nombre"
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
 
-              <View style={styles.rowBetween}>
-                <Text style={styles.labelInline}>Correo</Text>
-                <MaterialIcons name="email" size={16} color="#7C3AED" />
-              </View>
+              <Text style={styles.labelInline}>Correo electrónico</Text>
               <View style={styles.inputContainer}>
+                <View style={styles.inputLeftIcon}>
+                  <MaterialIcons name="email" size={18} color="#7C3AED" />
+                </View>
                 <TextInput
                   style={styles.input}
                   value={email}
@@ -2289,158 +2455,219 @@ export default function ProfileScreen({ navigation }) {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   placeholder="correo@ejemplo.com"
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
 
-              <View style={styles.rowBetween}>
-                <Text style={styles.labelInline}>Número celular</Text>
-                <MaterialIcons name="phone-android" size={16} color="#7C3AED" />
-              </View>
+              <Text style={styles.labelInline}>Número celular</Text>
               <View style={styles.inputContainer}>
+                <View style={styles.inputLeftIcon}>
+                  <MaterialIcons
+                    name="phone-android"
+                    size={18}
+                    color="#7C3AED"
+                  />
+                </View>
                 <TextInput
                   style={styles.input}
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
                   placeholder="Tu número celular"
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
 
-              <Text style={styles.labelInline}>Idioma 🌐</Text>
+              <Text style={styles.labelInline}>Idioma de la aplicación</Text>
               <View style={styles.dropdown}>
-                <Picker selectedValue={language} onValueChange={setLanguage}>
-                  <Picker.Item label="Español" value="es" />
-                  <Picker.Item label="Inglés" value="en" />
-                </Picker>
+                <View style={styles.dropdownIcon}>
+                  <Ionicons name="globe-outline" size={18} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Picker selectedValue={language} onValueChange={setLanguage}>
+                    <Picker.Item label="Español" value="es" />
+                    <Picker.Item label="Inglés" value="en" />
+                  </Picker>
+                </View>
               </View>
 
               <TouchableOpacity
-                activeOpacity={0.88}
+                activeOpacity={0.9}
                 disabled={guardandoPerfil}
                 onPress={handleGuardarDatosPersonales}
-                style={[
-                  styles.saveProfileBtn,
-                  guardandoPerfil && { opacity: 0.7 },
-                ]}
+                style={{
+                  marginTop: 18,
+                  opacity: guardandoPerfil ? 0.7 : 1,
+                }}
               >
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={18}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.saveProfileBtnText}>
-                  {guardandoPerfil
-                    ? "Guardando cambios..."
-                    : "Guardar datos personales"}
-                </Text>
+                <LinearGradient
+                  colors={["#4F46E5", "#7C3AED"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.saveProfileBtn}
+                >
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.saveProfileBtnText}>
+                    {guardandoPerfil
+                      ? "Guardando cambios..."
+                      : "Guardar datos personales"}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
 
+            {/* Card Preferencias & Metas */}
             <LinearGradient
-              colors={["#fdf2ff", "#e0f2fe"]}
+              colors={["#FFFFFF", "#FAF5FF", "#EFF6FF"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.cardColored}
             >
-              <Text style={styles.sectionTitle}>Preferencias & metas 🎯</Text>
+              <View style={styles.cardTitleHeader}>
+                <View style={styles.cardTitleLeft}>
+                  <View
+                    style={[
+                      styles.sectionIconBadge,
+                      { backgroundColor: "#FCE7F3" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="sparkles-outline"
+                      size={16}
+                      color="#DB2777"
+                    />
+                  </View>
+                  <Text style={styles.sectionTitle}>Preferencias & metas</Text>
+                </View>
+              </View>
 
-              <Text style={styles.labelInline}>Meta diaria</Text>
+              <Text style={styles.labelInline}>Meta diaria de chequeos</Text>
               <View style={styles.chipsRow}>
                 {[
                   "3 chequeos al día",
                   "5 chequeos al día",
                   "Solo cuando lo necesite",
-                ].map((item) => (
-                  <TouchableOpacity
-                    key={item}
-                    style={[
-                      styles.chipSmall,
-                      goal === item && styles.chipActiveColored,
-                    ]}
-                    onPress={async () => {
-                      setGoal(item);
-                      await savePreferences(item, notificationsOn);
+                ].map((item) => {
+                  const selected = goal === item;
+                  return (
+                    <TouchableOpacity
+                      key={item}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.chipSmall,
+                        selected && styles.chipActiveColored,
+                      ]}
+                      onPress={async () => {
+                        setGoal(item);
+                        await savePreferences(item, notificationsOn);
 
-                      if (notificationsOn) {
+                        if (notificationsOn) {
+                          const ok = await ensureNotifPermission();
+                          if (!ok) {
+                            Alert.alert(
+                              "Permiso requerido",
+                              "Activa permisos de notificaciones para que te recordemos realizar los ejercicios."
+                            );
+                            return;
+                          }
+                          await scheduleForGoal(item);
+                        }
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.chipTextSmall,
+                          selected && styles.chipTextActive,
+                        ]}
+                      >
+                        {item}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.preferenceBox}>
+                <View style={styles.preferenceRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.preferenceTitle}>
+                      Notificaciones suaves 📲
+                    </Text>
+                    <Text style={styles.preferenceSubtitle}>
+                      Recordatorios amables para cuidar tu bienestar.
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={[styles.toggle, notificationsOn && styles.toggleOn]}
+                    onPress={async () => {
+                      const next = !notificationsOn;
+                      setNotificationsOn(next);
+                      await savePreferences(goal, next);
+
+                      if (next) {
                         const ok = await ensureNotifPermission();
                         if (!ok) {
+                          setNotificationsOn(false);
+                          await savePreferences(goal, false);
                           Alert.alert(
                             "Permiso requerido",
-                            "Activa permisos de notificaciones para que te recordemos realizar los ejercicios."
+                            "No se pudo activar notificaciones porque no diste permisos."
                           );
                           return;
                         }
-                        await scheduleForGoal(item);
+                        await scheduleForGoal(goal);
+                      } else {
+                        await cancelScheduled();
                       }
                     }}
                   >
-                    <Text
+                    <View
                       style={[
-                        styles.chipTextSmall,
-                        goal === item && styles.chipTextActive,
+                        styles.toggleCircle,
+                        notificationsOn && styles.toggleCircleOn,
                       ]}
-                    >
-                      {item}
-                    </Text>
+                    />
                   </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={[styles.preferenceRow, { marginTop: 20 }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.preferenceTitle}>Notificaciones 📲</Text>
-                  <Text style={styles.preferenceSubtitle}>
-                    Recordatorios suaves para cuidar tu ansiedad.
-                  </Text>
                 </View>
-
-                <TouchableOpacity
-                  style={[styles.toggle, notificationsOn && styles.toggleOn]}
-                  onPress={async () => {
-                    const next = !notificationsOn;
-                    setNotificationsOn(next);
-                    await savePreferences(goal, next);
-
-                    if (next) {
-                      const ok = await ensureNotifPermission();
-                      if (!ok) {
-                        setNotificationsOn(false);
-                        await savePreferences(goal, false);
-                        Alert.alert(
-                          "Permiso requerido",
-                          "No se pudo activar notificaciones porque no diste permisos."
-                        );
-                        return;
-                      }
-                      await scheduleForGoal(goal);
-                    } else {
-                      await cancelScheduled();
-                    }
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.toggleCircle,
-                      notificationsOn && styles.toggleCircleOn,
-                    ]}
-                  />
-                </TouchableOpacity>
               </View>
             </LinearGradient>
 
+            {/* Card Más Opciones */}
             <LinearGradient
-              colors={["#eef2ff", "#fef9c3"]}
+              colors={["#FFFFFF", "#F5F3FF", "#FEFCE8"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.cardColored}
             >
-              <Text style={styles.sectionTitle}>Más opciones ⚙️</Text>
+              <View style={styles.cardTitleHeader}>
+                <View style={styles.cardTitleLeft}>
+                  <View
+                    style={[
+                      styles.sectionIconBadge,
+                      { backgroundColor: "#E0E7FF" },
+                    ]}
+                  >
+                    <Ionicons name="apps-outline" size={16} color="#4338CA" />
+                  </View>
+                  <Text style={styles.sectionTitle}>Más opciones</Text>
+                </View>
+              </View>
 
-              <TouchableOpacity style={styles.menuItem} onPress={toggleConfig}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.menuItem}
+                onPress={toggleConfig}
+              >
                 <View
-                  style={[styles.iconBubble, { backgroundColor: "#e0f2fe" }]}
+                  style={[styles.iconBubble, { backgroundColor: "#E0F2FE" }]}
                 >
-                  <Ionicons name="settings-sharp" size={18} color="#1D4ED8" />
+                  <Ionicons name="settings-sharp" size={18} color="#0284C7" />
                 </View>
 
                 <Text style={styles.menuText}>Configuración</Text>
@@ -2451,7 +2678,7 @@ export default function ProfileScreen({ navigation }) {
                     transform: [{ rotate: rotateConfigChevron }],
                   }}
                 >
-                  <Entypo name="chevron-down" size={22} color="#6B7280" />
+                  <Entypo name="chevron-down" size={20} color="#64748B" />
                 </Animated.View>
               </TouchableOpacity>
 
@@ -2460,25 +2687,20 @@ export default function ProfileScreen({ navigation }) {
                   <Text style={styles.helpQuestion}>Privacidad</Text>
 
                   <Text style={styles.helpAnswer}>
-                    🔒Tus datos se guardan solo en tu dispositivo.
+                    🔒 Tus datos se guardan solo en tu dispositivo.
                   </Text>
-                  <Text style={styles.helpAnswer}></Text>
-
-                  <Text style={styles.helpAnswer}>
-                    🔒No compartimos información con terceros.
+                  <Text style={[styles.helpAnswer, { marginTop: 4 }]}>
+                    🔒 No compartimos información con terceros.
                   </Text>
-                  <Text style={styles.helpAnswer}></Text>
-
-                  <Text style={styles.helpAnswer}>
-                    🔒Puedes borrar toda tu información cuando desees.
+                  <Text style={[styles.helpAnswer, { marginTop: 4 }]}>
+                    🔒 Puedes borrar toda tu información cuando desees.
                   </Text>
 
                   <View style={{ marginTop: 12 }}>
                     <Text style={styles.helpQuestion}>Información</Text>
                     <Text style={styles.helpAnswer}>Anxiously</Text>
                     <Text style={styles.helpAnswer}>Versión 2.0.0</Text>
-                    <Text style={styles.helpAnswer}> </Text>
-                    <Text style={styles.helpAnswer}>
+                    <Text style={[styles.helpAnswer, { marginTop: 6 }]}>
                       Esta app fue creada con cariño para acompañarte, no para
                       exigirte.
                     </Text>
@@ -2498,13 +2720,13 @@ export default function ProfileScreen({ navigation }) {
                         }
                         style={{
                           backgroundColor: "#7C3AED",
-                          paddingVertical: 6,
-                          paddingHorizontal: 14,
+                          paddingVertical: 7,
+                          paddingHorizontal: 16,
                           borderRadius: 20,
                           marginRight: 10,
                         }}
                       >
-                        <Text style={{ color: "#fff", fontWeight: "600" }}>
+                        <Text style={{ color: "#fff", fontWeight: "700" }}>
                           Sí 💜
                         </Text>
                       </TouchableOpacity>
@@ -2516,13 +2738,13 @@ export default function ProfileScreen({ navigation }) {
                           )
                         }
                         style={{
-                          backgroundColor: "#E5E7EB",
-                          paddingVertical: 6,
-                          paddingHorizontal: 14,
+                          backgroundColor: "#E2E8F0",
+                          paddingVertical: 7,
+                          paddingHorizontal: 16,
                           borderRadius: 20,
                         }}
                       >
-                        <Text style={{ color: "#374151", fontWeight: "600" }}>
+                        <Text style={{ color: "#334155", fontWeight: "700" }}>
                           No 🤍
                         </Text>
                       </TouchableOpacity>
@@ -2533,8 +2755,10 @@ export default function ProfileScreen({ navigation }) {
                         style={{
                           marginTop: 12,
                           backgroundColor: "#F5F3FF",
-                          padding: 10,
-                          borderRadius: 12,
+                          padding: 12,
+                          borderRadius: 14,
+                          borderWidth: 1,
+                          borderColor: "#DDD6FE",
                         }}
                       >
                         <Text style={{ color: "#4C1D95", fontSize: 13 }}>
@@ -2546,14 +2770,18 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               )}
 
-              <TouchableOpacity style={styles.menuItem} onPress={toggleHelp}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.menuItem}
+                onPress={toggleHelp}
+              >
                 <View
-                  style={[styles.iconBubble, { backgroundColor: "#fef3c7" }]}
+                  style={[styles.iconBubble, { backgroundColor: "#FEF3C7" }]}
                 >
                   <Ionicons
                     name="help-circle-outline"
-                    size={18}
-                    color="#B45309"
+                    size={19}
+                    color="#D97706"
                   />
                 </View>
 
@@ -2565,7 +2793,7 @@ export default function ProfileScreen({ navigation }) {
                     transform: [{ rotate: rotateChevron }],
                   }}
                 >
-                  <Entypo name="chevron-down" size={22} color="#6B7280" />
+                  <Entypo name="chevron-down" size={20} color="#64748B" />
                 </Animated.View>
               </TouchableOpacity>
 
@@ -2656,11 +2884,12 @@ export default function ProfileScreen({ navigation }) {
               )}
 
               <TouchableOpacity
+                activeOpacity={0.8}
                 style={styles.menuItem}
                 onPress={handleDeleteAccount}
               >
                 <View
-                  style={[styles.iconBubble, { backgroundColor: "#fee2e2" }]}
+                  style={[styles.iconBubble, { backgroundColor: "#FEE2E2" }]}
                 >
                   <Ionicons name="warning-outline" size={18} color="#DC2626" />
                 </View>
@@ -2670,15 +2899,16 @@ export default function ProfileScreen({ navigation }) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.menuItem, { marginTop: 6 }]}
+                activeOpacity={0.8}
+                style={[styles.menuItem, { borderBottomWidth: 0 }]}
                 onPress={handleLogout}
               >
                 <View
-                  style={[styles.iconBubble, { backgroundColor: "#e5e7eb" }]}
+                  style={[styles.iconBubble, { backgroundColor: "#F1F5F9" }]}
                 >
-                  <Ionicons name="log-out-outline" size={18} color="#111827" />
+                  <Ionicons name="log-out-outline" size={18} color="#334155" />
                 </View>
-                <Text style={[styles.menuText, { color: "#111827" }]}>
+                <Text style={[styles.menuText, { color: "#1E293B" }]}>
                   Cerrar sesión
                 </Text>
               </TouchableOpacity>
@@ -2687,6 +2917,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </LinearGradient>
 
+      {/* Modal Pago Lami Premium */}
       <Modal
         visible={modalPagoPremium}
         transparent
@@ -2695,6 +2926,7 @@ export default function ProfileScreen({ navigation }) {
       >
         <View style={styles.dirModalOverlay}>
           <View style={styles.payModalCard}>
+            <View style={styles.modalHandleBar} />
             <View style={styles.dirModalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dirModalTitle}>Lami Premium ✨</Text>
@@ -2892,6 +3124,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Modal Foto de Perfil */}
       <Modal
         visible={modalFotoUsuario}
         transparent
@@ -2937,6 +3170,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Modal Perfil del Psicólogo */}
       <Modal
         visible={modalInfoPsicologo}
         transparent
@@ -3173,6 +3407,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Modal Directorio Especialistas Cercanos */}
       <Modal
         visible={modalDirectorio}
         transparent
@@ -3181,6 +3416,7 @@ export default function ProfileScreen({ navigation }) {
       >
         <View style={styles.dirModalOverlay}>
           <View style={styles.dirModalCard}>
+            <View style={styles.modalHandleBar} />
             <View style={styles.dirModalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dirModalTitle}>
@@ -3700,6 +3936,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Modal Calificar / Reseña */}
       <Modal
         visible={modalResena}
         transparent
@@ -3822,6 +4059,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Modal Confirmar Desvincular */}
       <Modal
         visible={modalConfirmDesvincular}
         transparent
@@ -3893,6 +4131,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Escáner QR */}
       {modalEscanerQR && (
         <View
           style={{
@@ -4005,77 +4244,131 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingHorizontal: 18,
+    paddingTop: 10,
   },
 
   navBar: {
     flexDirection: "row",
     justifyContent: "space-around",
-    backgroundColor: "white",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     paddingBottom: 10,
-    elevation: 5,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EDE9FE",
+    shadowColor: "#4C1D95",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   navItem: {
     alignItems: "center",
-    width: SCREEN_WIDTH * 0.22,
+    justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    minWidth: SCREEN_WIDTH * 0.2,
+  },
+  navItemActive: {
+    backgroundColor: "#F3E8FF",
   },
   navLabelActive: {
-    color: "#7C3AED",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "700",
+    color: "#6D28D9",
+    fontSize: 11.5,
+    marginTop: 2,
+    fontWeight: "800",
   },
 
   headerCard: {
     flexDirection: "row",
-    borderRadius: 24,
-    padding: 18,
+    borderRadius: 28,
+    padding: 20,
     alignItems: "center",
-    marginBottom: 16,
-    marginTop: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    marginBottom: 14,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#6D28D9",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  heroOrbTopRight: {
+    position: "absolute",
+    top: -32,
+    right: -24,
+    width: 115,
+    height: 115,
+    borderRadius: 58,
+    backgroundColor: "rgba(196, 181, 253, 0.22)",
+  },
+  heroOrbBottomLeft: {
+    position: "absolute",
+    bottom: -40,
+    left: 20,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(186, 230, 253, 0.26)",
+  },
+  helloText: {
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  nameBig: {
+    fontSize: 23,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    letterSpacing: -0.4,
+    marginTop: 1,
+    marginBottom: 8,
+  },
+  badge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  badgeText: {
+    marginLeft: 5,
+    fontSize: 12,
+    color: "#4338CA",
+    fontWeight: "700",
+  },
+
+  heroAvatarWrapper: {
+    position: "relative",
+    marginLeft: 10,
+  },
+  heroAvatarRing: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    padding: 3,
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  helloText: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
-  nameBig: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 6,
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginBottom: 2,
-  },
-  badgeText: {
-    marginLeft: 4,
-    fontSize: 12,
-    color: "#4B5563",
-    fontWeight: "500",
-  },
-
   avatarCircle: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: "#E5E7EB",
+    width: "100%",
+    height: "100%",
+    borderRadius: 40,
+    backgroundColor: "#F5F3FF",
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 12,
-    position: "relative",
-    borderWidth: 2,
-    borderColor: "#DDD6FE",
+    overflow: "hidden",
   },
   userAvatarImage: {
     width: "100%",
@@ -4086,14 +4379,162 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     right: 0,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#7C3AED",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  statsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 22,
+    padding: 15,
+    borderWidth: 1,
+    shadowColor: "#1E1B4B",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  statHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  statIconBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statNumber: {
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
+  statHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+
+  sessionButtonShadow: {
+    marginBottom: 16,
+    borderRadius: 18,
+    shadowColor: "#6D28D9",
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
+  },
+  sessionButton: {
+    flexDirection: "row",
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  sessionBtnIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryIndigoBtn: {
+    flexDirection: "row",
+    paddingVertical: 13,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#4F46E5",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  sessionButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 26,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#EDE9FE",
+    shadowColor: "#312E81",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  cardColored: {
+    borderRadius: 26,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+    shadowColor: "#312E81",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  cardTitleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  cardTitleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  sectionIconBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionTitle: {
+    fontSize: 16.5,
+    fontWeight: "800",
+    color: "#1E1B4B",
+    letterSpacing: -0.2,
+  },
+  sectionSubtitle: {
+    fontSize: 12.5,
+    color: "#64748B",
+    lineHeight: 18,
+    marginBottom: 10,
   },
 
   planStatusPill: {
@@ -4115,22 +4556,21 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   planSummaryBoxFree: {
-    marginTop: 10,
+    marginTop: 4,
     backgroundColor: "#F8FAFC",
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 20,
+    padding: 15,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    gap: 6,
+    gap: 7,
   },
   planSummaryBoxPremium: {
-    marginTop: 10,
-    backgroundColor: "#F5F3FF",
-    borderRadius: 18,
-    padding: 14,
+    marginTop: 4,
+    borderRadius: 20,
+    padding: 15,
     borderWidth: 1,
     borderColor: "#DDD6FE",
-    gap: 6,
+    gap: 7,
   },
   planSummaryHeader: {
     flexDirection: "row",
@@ -4142,34 +4582,56 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#1E293B",
   },
+  priceTagPremium: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  priceTagFree: {
+    backgroundColor: "#E6FFFA",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
   planSummaryPrice: {
-    fontSize: 13.5,
+    fontSize: 12.5,
     fontWeight: "800",
     color: "#6D28D9",
   },
   planSummaryPriceFree: {
-    fontSize: 13.5,
+    fontSize: 12.5,
     fontWeight: "800",
     color: "#0F766E",
   },
   planSummaryDesc: {
-    fontSize: 12,
+    fontSize: 12.5,
     color: "#475569",
-    lineHeight: 17,
+    lineHeight: 18,
+  },
+  paymentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    marginTop: 2,
   },
   planPaymentMethodText: {
     fontSize: 11.5,
     fontWeight: "700",
     color: "#5B21B6",
-    marginTop: 2,
   },
   upgradePremiumBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    paddingVertical: 11,
-    borderRadius: 14,
+    paddingVertical: 12,
+    borderRadius: 15,
   },
   upgradePremiumBtnText: {
     color: "#FFFFFF",
@@ -4183,7 +4645,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 13,
     backgroundColor: "#FFF1F2",
     borderWidth: 1,
     borderColor: "#FECDD3",
@@ -4194,208 +4656,6 @@ const styles = StyleSheet.create({
     color: "#E11D48",
   },
 
-  payModalCard: {
-    maxHeight: "88%",
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 20,
-  },
-  payBenefitsBox: {
-    backgroundColor: "#F5F3FF",
-    borderRadius: 16,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: "#DDD6FE",
-    gap: 4,
-  },
-  payBenefitsTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#5B21B6",
-    marginBottom: 2,
-  },
-  payBenefitItem: {
-    fontSize: 12,
-    color: "#4C1D95",
-    lineHeight: 17,
-  },
-  payMethodRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  payMethodBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 11,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    backgroundColor: "#EEF2FF",
-    borderWidth: 1,
-    borderColor: "#C7D2FE",
-  },
-  payMethodBtnActive: {
-    backgroundColor: "#4F46E5",
-    borderColor: "#4F46E5",
-  },
-  payMethodBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#4338CA",
-    textAlign: "center",
-  },
-  payFormBox: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    gap: 8,
-  },
-  payFieldLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#334155",
-  },
-  payInput: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-    fontSize: 13.5,
-    color: "#1E293B",
-  },
-  payPaypalHint: {
-    fontSize: 11.5,
-    color: "#64748B",
-    lineHeight: 16,
-  },
-
-  photoModalCard: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 22,
-  },
-  photoModalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1E293B",
-    textAlign: "center",
-  },
-  photoModalSubtitle: {
-    fontSize: 13,
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  photoModalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginBottom: 10,
-  },
-  photoOptionIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  photoModalOptionText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1E293B",
-  },
-  photoModalCancel: {
-    marginTop: 6,
-    paddingVertical: 11,
-    alignItems: "center",
-  },
-  photoModalCancelText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#64748B",
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 20,
-    padding: 14,
-    marginHorizontal: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  statHint: {
-    fontSize: 11,
-    color: "#4B5563",
-    marginTop: 4,
-  },
-
-  sessionButton: {
-    backgroundColor: "#7C3AED",
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  primaryIndigoBtn: {
-    backgroundColor: "#4F46E5",
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  sessionButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-
-  especialistaHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   activeLinkPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -4421,26 +4681,25 @@ const styles = StyleSheet.create({
   especialistaCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 20,
+    padding: 15,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
   avatarRing: {
     padding: 2.5,
     borderRadius: 32,
-    backgroundColor: "#BFDBFE",
-    marginRight: 12,
+    marginRight: 13,
   },
   especialistaAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   especialistaAvatarPlaceholder: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#EFF6FF",
     justifyContent: "center",
     alignItems: "center",
@@ -4496,7 +4755,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    paddingVertical: 10,
+    paddingVertical: 10.5,
     borderRadius: 14,
     backgroundColor: "#EFF6FF",
     borderWidth: 1,
@@ -4513,7 +4772,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    paddingVertical: 10,
+    paddingVertical: 10.5,
     borderRadius: 14,
     backgroundColor: "#FFFBEB",
     borderWidth: 1,
@@ -4530,7 +4789,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    paddingVertical: 10,
+    paddingVertical: 10.5,
     borderRadius: 14,
     backgroundColor: "#FFF1F2",
     borderWidth: 1,
@@ -4542,20 +4801,31 @@ const styles = StyleSheet.create({
     color: "#E11D48",
   },
 
+  codeInputContainer: {
+    borderWidth: 1.5,
+    borderColor: "#C7D2FE",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
   secondaryLinkBtnsRow: {
     flexDirection: "row",
     gap: 8,
   },
   qrScanInlineBtn: {
-    padding: 6,
+    padding: 7,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 10,
   },
   qrScanButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 11,
-    borderRadius: 16,
+    paddingVertical: 11.5,
+    borderRadius: 15,
     backgroundColor: "#EEF2FF",
     borderWidth: 1,
     borderColor: "#C7D2FE",
@@ -4570,8 +4840,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 11,
-    borderRadius: 16,
+    paddingVertical: 11.5,
+    borderRadius: 15,
     backgroundColor: "#F0FDFA",
     borderWidth: 1,
     borderColor: "#99F6E4",
@@ -4584,11 +4854,11 @@ const styles = StyleSheet.create({
 
   solicitudCard: {
     backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-    padding: 13,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    gap: 6,
+    gap: 7,
   },
   solicitudCardOk: {
     backgroundColor: "#F0FDFA",
@@ -4612,7 +4882,7 @@ const styles = StyleSheet.create({
   },
   solicitudBadge: {
     paddingHorizontal: 9,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: 999,
   },
   solicitudBadgeText: {
@@ -4642,8 +4912,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#0D9488",
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 10.5,
+    borderRadius: 13,
   },
   aceptarCitaBtnText: {
     color: "#FFFFFF",
@@ -4659,8 +4929,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
     borderWidth: 1,
     borderColor: "#C7D2FE",
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 10.5,
+    borderRadius: 13,
   },
   otroHorarioBtnText: {
     fontSize: 12,
@@ -4669,8 +4939,8 @@ const styles = StyleSheet.create({
   },
   reprogramBox: {
     backgroundColor: "#FFFFFF",
-    padding: 10,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#CBD5E1",
     gap: 8,
@@ -4683,8 +4953,8 @@ const styles = StyleSheet.create({
   reprogramInput: {
     borderWidth: 1,
     borderColor: "#CBD5E1",
-    borderRadius: 10,
-    padding: 8,
+    borderRadius: 11,
+    padding: 9,
     fontSize: 12.5,
     minHeight: 60,
     textAlignVertical: "top",
@@ -4692,8 +4962,8 @@ const styles = StyleSheet.create({
   },
   reprogramCancelBtn: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 9.5,
+    borderRadius: 11,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
   },
@@ -4704,8 +4974,8 @@ const styles = StyleSheet.create({
   },
   reprogramSendBtn: {
     flex: 1.4,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 9.5,
+    borderRadius: 11,
     backgroundColor: "#4F46E5",
     alignItems: "center",
   },
@@ -4713,6 +4983,379 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+
+  labelInline: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#475569",
+    marginTop: 10,
+  },
+  changePhotoPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F3E8FF",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  changePhotoLink: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7C3AED",
+  },
+  inputContainer: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
+  inputLeftIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    height: 46,
+    fontSize: 14,
+    color: "#1E293B",
+  },
+  dropdown: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 15,
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 10,
+  },
+  dropdownIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveProfileBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13.5,
+    borderRadius: 16,
+    shadowColor: "#4F46E5",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  saveProfileBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  chipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  chipSmall: {
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  chipTextSmall: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  chipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  chipActiveColored: {
+    backgroundColor: "#7C3AED",
+    borderColor: "#7C3AED",
+  },
+
+  preferenceBox: {
+    marginTop: 16,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+  },
+  preferenceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  preferenceTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E1B4B",
+  },
+  preferenceSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+
+  toggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "#CBD5E1",
+    padding: 3,
+    justifyContent: "center",
+    marginLeft: "auto",
+  },
+  toggleOn: {
+    backgroundColor: "#7C3AED",
+  },
+  toggleCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+    alignSelf: "flex-start",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  toggleCircleOn: {
+    alignSelf: "flex-end",
+  },
+
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(226, 232, 240, 0.7)",
+  },
+  menuText: {
+    marginLeft: 12,
+    fontSize: 14.5,
+    fontWeight: "600",
+    color: "#1E293B",
+  },
+  iconBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  helpContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 15,
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  helpQuestion: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#6D28D9",
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  helpAnswer: {
+    fontSize: 12.5,
+    color: "#475569",
+    lineHeight: 18,
+  },
+  crisisBox: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingTop: 12,
+  },
+  crisisTitle: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#991B1B",
+    marginBottom: 6,
+  },
+  crisisPhone: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#7F1D1D",
+    marginTop: 6,
+  },
+  crisisNumber: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1E293B",
+    textDecorationLine: "underline",
+    marginTop: 2,
+  },
+
+  modalHandleBar: {
+    width: 42,
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: "#CBD5E1",
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+
+  payModalCard: {
+    maxHeight: "88%",
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 20,
+  },
+  payBenefitsBox: {
+    backgroundColor: "#F5F3FF",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    gap: 4,
+  },
+  payBenefitsTitle: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#5B21B6",
+    marginBottom: 2,
+  },
+  payBenefitItem: {
+    fontSize: 12.5,
+    color: "#4C1D95",
+    lineHeight: 18,
+  },
+  payMethodRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  payMethodBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  payMethodBtnActive: {
+    backgroundColor: "#4F46E5",
+    borderColor: "#4F46E5",
+  },
+  payMethodBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4338CA",
+    textAlign: "center",
+  },
+  payFormBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 8,
+  },
+  payFieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  payInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    height: 45,
+    fontSize: 13.5,
+    color: "#1E293B",
+  },
+  payPaypalHint: {
+    fontSize: 11.5,
+    color: "#64748B",
+    lineHeight: 16,
+  },
+
+  photoModalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 22,
+  },
+  photoModalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
+  },
+  photoModalSubtitle: {
+    fontSize: 13,
+    color: "#64748B",
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  photoModalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 10,
+  },
+  photoOptionIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  photoModalOptionText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  photoModalCancel: {
+    marginTop: 6,
+    paddingVertical: 11,
+    alignItems: "center",
+  },
+  photoModalCancelText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748B",
   },
 
   infoModalOverlay: {
@@ -4744,7 +5387,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.75)",
+    backgroundColor: "rgba(255,255,255,0.8)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4914,8 +5557,8 @@ const styles = StyleSheet.create({
   dirModalCard: {
     height: "88%",
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     padding: 20,
   },
   dirModalHeader: {
@@ -5457,224 +6100,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
-  },
-
-  section: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 6,
-  },
-  sectionSubtitle: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 8,
-  },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-
-  cardColored: {
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-
-  chipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chipSmall: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#E5E7EB",
-    marginRight: 6,
-    marginTop: 4,
-  },
-  chipTextSmall: {
-    fontSize: 12,
-    color: "#111827",
-  },
-  chipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  chipActiveColored: {
-    backgroundColor: "#7C3AED",
-  },
-
-  rowBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  labelInline: {
-    fontSize: 13,
-    color: "#4B5563",
-    marginTop: 10,
-  },
-  changePhotoLink: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: "#7C3AED",
-  },
-  inputContainer: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    marginTop: 6,
-  },
-  input: {
-    flex: 1,
-    height: 45,
-  },
-  dropdown: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    marginTop: 6,
-  },
-  saveProfileBtn: {
-    marginTop: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    backgroundColor: "#4F46E5",
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-  saveProfileBtnText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-
-  preferenceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  preferenceTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  preferenceSubtitle: {
-    fontSize: 12,
-    color: "#4B5563",
-    marginTop: 2,
-    width: SCREEN_WIDTH * 0.5,
-  },
-
-  toggle: {
-    width: 46,
-    height: 26,
-    borderRadius: 999,
-    backgroundColor: "#E5E7EB",
-    padding: 3,
-    justifyContent: "center",
-    marginLeft: "auto",
-  },
-  toggleOn: {
-    backgroundColor: "#7C3AED",
-  },
-  toggleCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    alignSelf: "flex-start",
-  },
-  toggleCircleOn: {
-    alignSelf: "flex-end",
-  },
-
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  menuText: {
-    marginLeft: 10,
-    fontSize: 15,
-    color: "#374151",
-  },
-  iconBubble: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  helpContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 14,
-    marginTop: 8,
-  },
-
-  helpQuestion: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6540a1ff",
-    marginTop: 10,
-  },
-
-  helpAnswer: {
-    fontSize: 13,
-    color: "#434d5cff",
-    lineHeight: 18,
-  },
-
-  crisisBox: {
-    marginTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-    paddingTop: 10,
-  },
-
-  crisisTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#991B1B",
-    marginBottom: 6,
-  },
-
-  crisisPhone: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#7F1D1D",
-    marginTop: 6,
-  },
-
-  crisisNumber: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-    textDecorationLine: "underline",
   },
 });

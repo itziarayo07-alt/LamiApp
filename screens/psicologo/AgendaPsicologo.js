@@ -17,6 +17,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Image,
   Modal,
   ScrollView,
@@ -143,6 +145,219 @@ const formatearEtiquetaFecha = (isoStr, hoyISO) => {
   const base = `${diaLargo} ${numDia} ${mesCorto}`;
   return isoStr === hoyISO ? `${base} • Hoy` : base;
 };
+
+// COMPONENTE ANIMADO DE ANIMALITOS Y NUBECITAS EN LA PARTE SUPERIOR DEL CALENDARIO
+function EscenarioAnimalitosCalendario() {
+  const [anchoPista, setAnchoPista] = useState(280);
+
+  const progresoCaminata = useRef(new Animated.Value(0)).current;
+  const saltitoAnimal = useRef(new Animated.Value(0)).current;
+  const vueloMariposaX = useRef(new Animated.Value(0)).current;
+  const vueloMariposaY = useRef(new Animated.Value(0)).current;
+  const nubeFlotante = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animCaminata = Animated.loop(
+      Animated.sequence([
+        Animated.timing(progresoCaminata, {
+          toValue: 1,
+          duration: 7500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(progresoCaminata, {
+          toValue: 0,
+          duration: 7500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const animSaltito = Animated.loop(
+      Animated.sequence([
+        Animated.timing(saltitoAnimal, {
+          toValue: -4,
+          duration: 380,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(saltitoAnimal, {
+          toValue: 0,
+          duration: 380,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const animMariposaX = Animated.loop(
+      Animated.sequence([
+        Animated.timing(vueloMariposaX, {
+          toValue: 1,
+          duration: 5200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(vueloMariposaX, {
+          toValue: 0,
+          duration: 5200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const animMariposaY = Animated.loop(
+      Animated.sequence([
+        Animated.timing(vueloMariposaY, {
+          toValue: -6,
+          duration: 950,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(vueloMariposaY, {
+          toValue: 2,
+          duration: 950,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const animNube = Animated.loop(
+      Animated.sequence([
+        Animated.timing(nubeFlotante, {
+          toValue: 8,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(nubeFlotante, {
+          toValue: -8,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animCaminata.start();
+    animSaltito.start();
+    animMariposaX.start();
+    animMariposaY.start();
+    animNube.start();
+
+    return () => {
+      animCaminata.stop();
+      animSaltito.stop();
+      animMariposaX.stop();
+      animMariposaY.stop();
+      animNube.stop();
+    };
+  }, [
+    progresoCaminata,
+    saltitoAnimal,
+    vueloMariposaX,
+    vueloMariposaY,
+    nubeFlotante,
+  ]);
+
+  const recorridoMax = Math.max(anchoPista - 44, 140);
+
+  const animalTranslateX = progresoCaminata.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8, recorridoMax],
+  });
+
+  const mariposaTranslateX = vueloMariposaX.interpolate({
+    inputRange: [0, 1],
+    outputRange: [recorridoMax, 12],
+  });
+
+  return (
+    <LinearGradient
+      colors={["#E9D5FF", "#DFF3F8", "#F3E8FF"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.animalStageBanner}
+      onLayout={(e) => setAnchoPista(e.nativeEvent.layout.width)}
+    >
+      {/* Nubecitas decorativas flotando */}
+      <Animated.View
+        style={[
+          styles.stageCloudLeft,
+          { transform: [{ translateX: nubeFlotante }] },
+        ]}
+      >
+        <Ionicons name="cloud" size={20} color="rgba(255,255,255,0.85)" />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.stageCloudRight,
+          {
+            transform: [
+              {
+                translateX: Animated.multiply(nubeFlotante, -1),
+              },
+            ],
+          },
+        ]}
+      >
+        <Ionicons name="cloud" size={16} color="rgba(255,255,255,0.75)" />
+      </Animated.View>
+
+      {/* Destellos suaves */}
+      <Ionicons
+        name="sparkles"
+        size={12}
+        color={PALETTE.purpleVibrant}
+        style={styles.stageSparkleCenter}
+      />
+
+      {/* Mariposa volando en ondas */}
+      <Animated.View
+        style={[
+          styles.stageCreature,
+          {
+            top: 5,
+            transform: [
+              { translateX: mariposaTranslateX },
+              { translateY: vueloMariposaY },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.creatureEmoji}>🦋</Text>
+      </Animated.View>
+
+      {/* Conejito / gatito dando saltitos */}
+      <Animated.View
+        style={[
+          styles.stageCreature,
+          {
+            bottom: 3,
+            transform: [
+              { translateX: animalTranslateX },
+              { translateY: saltitoAnimal },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.creatureEmoji}>🐇</Text>
+      </Animated.View>
+
+      {/* Franja de pastito pastel inferior */}
+      <LinearGradient
+        colors={["#B3D3DA", "#CEC7FD"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.stageGroundStrip}
+      />
+    </LinearGradient>
+  );
+}
 
 export default function AgendaPsicologo({ navigation }) {
   const hoyReal = useMemo(() => new Date(), []);
@@ -354,13 +569,15 @@ export default function AgendaPsicologo({ navigation }) {
     for (let d = 1; d <= totalDiasMes; d++) {
       const dateObj = new Date(year, month, d);
       const iso = formatISO(dateObj);
+      const dayOfWeek = dateObj.getDay();
       celdas.push({
         empty: false,
         key: iso,
         iso,
         num: String(d).padStart(2, "0"),
-        diaNombre: DIAS_SEMANA_CORTOS[dateObj.getDay()],
-        diaKeyCompat: KEYS_DIA_COMPAT[dateObj.getDay()],
+        esFinde: dayOfWeek === 0 || dayOfWeek === 6,
+        diaNombre: DIAS_SEMANA_CORTOS[dayOfWeek],
+        diaKeyCompat: KEYS_DIA_COMPAT[dayOfWeek],
       });
     }
     while (celdas.length % 7 !== 0) {
@@ -409,7 +626,7 @@ export default function AgendaPsicologo({ navigation }) {
     return KEYS_DIA_COMPAT[fechaObj.getDay()];
   }, [fechaSeleccionadaISO]);
 
-  // NAVEGACIÓN ROBUSTA ENTRE PANTALLAS (detecta automáticamente el nombre exacto de la ruta)
+  // NAVEGACIÓN ROBUSTA ENTRE PANTALLAS
   const irAPantalla = (routeName, params = {}) => {
     const rutasDisponibles = navigation?.getState?.()?.routeNames || [];
 
@@ -1044,10 +1261,18 @@ export default function AgendaPsicologo({ navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* CALENDARIO MENSUAL REDONDEADO CON DESPLEGABLE DE MES Y AÑO */}
-        <View style={styles.monthCalendarCard}>
+        {/* CALENDARIO MENSUAL CON COLORCITO Y ANIMALITOS ANIMADOS */}
+        <LinearGradient
+          colors={["#FFFFFF", "#FAF7FF", "#F3FAFC"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.monthCalendarCard}
+        >
+          {/* ESCENARIO ANIMADO SUPERIOR CON MARIPOSA Y CONEJITO */}
+          <EscenarioAnimalitosCalendario />
+
           <LinearGradient
-            colors={["#F6F3FF", "#EAF5F8"]}
+            colors={["#EDE9FE", "#E0F2F1"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.monthHeaderBanner}
@@ -1060,7 +1285,7 @@ export default function AgendaPsicologo({ navigation }) {
               <Ionicons
                 name="chevron-back"
                 size={18}
-                color={PALETTE.indigoMuted}
+                color={PALETTE.purpleVibrant}
               />
             </TouchableOpacity>
 
@@ -1105,7 +1330,7 @@ export default function AgendaPsicologo({ navigation }) {
                 <Ionicons
                   name="chevron-forward"
                   size={18}
-                  color={PALETTE.indigoMuted}
+                  color={PALETTE.purpleVibrant}
                 />
               </TouchableOpacity>
             </View>
@@ -1170,23 +1395,28 @@ export default function AgendaPsicologo({ navigation }) {
             </View>
           )}
 
-          {/* BARRA DE DÍAS DE LA SEMANA */}
-          <View style={styles.weekDaysHeaderBar}>
+          {/* BARRA DE DÍAS DE LA SEMANA CON COLOR */}
+          <LinearGradient
+            colors={["#F3E8FF", "#E0F2FE"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.weekDaysHeaderBar}
+          >
             {ENCABEZADOS_CALENDARIO.map((nombreDia, i) => (
               <View key={nombreDia} style={styles.weekDayHeaderCell}>
                 <Text
                   style={[
                     styles.weekDayHeaderText,
-                    i >= 5 && { color: PALETTE.indigoMuted },
+                    i >= 5 && { color: PALETTE.purpleVibrant },
                   ]}
                 >
                   {nombreDia}
                 </Text>
               </View>
             ))}
-          </View>
+          </LinearGradient>
 
-          {/* CUADRÍCULA DE DÍAS DEL MES */}
+          {/* CUADRÍCULA DE DÍAS DEL MES CON PASTELES SUAVES */}
           <View style={styles.monthGridWrap}>
             {celdasCalendarioMes.map((celda) => {
               if (celda.empty) {
@@ -1209,7 +1439,7 @@ export default function AgendaPsicologo({ navigation }) {
                 >
                   {seleccionado ? (
                     <LinearGradient
-                      colors={[PALETTE.tealDeep, PALETTE.tealMid]}
+                      colors={[PALETTE.tealDeep, PALETTE.purpleVibrant]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.monthDayPillActive}
@@ -1221,6 +1451,7 @@ export default function AgendaPsicologo({ navigation }) {
                     <View
                       style={[
                         styles.monthDayPillInactive,
+                        celda.esFinde && styles.monthDayPillWeekend,
                         esHoy && styles.monthDayPillToday,
                         tieneCitas && !esHoy && styles.monthDayPillWithCita,
                       ]}
@@ -1228,7 +1459,13 @@ export default function AgendaPsicologo({ navigation }) {
                       <Text
                         style={[
                           styles.monthDayNumInactive,
+                          celda.esFinde && { color: PALETTE.indigoMuted },
                           esHoy && styles.monthDayNumToday,
+                          tieneCitas &&
+                            !esHoy && {
+                              color: PALETTE.purpleVibrant,
+                              fontWeight: "800",
+                            },
                         ]}
                       >
                         {celda.num}
@@ -1270,12 +1507,16 @@ export default function AgendaPsicologo({ navigation }) {
               </View>
             </View>
 
-            <Text style={styles.monthSummaryText}>
-              {totalCitasEnMesVisible}{" "}
-              {totalCitasEnMesVisible === 1 ? "cita en el mes" : "citas en el mes"}
-            </Text>
+            <View style={styles.monthCountBadge}>
+              <Text style={styles.monthSummaryText}>
+                {totalCitasEnMesVisible}{" "}
+                {totalCitasEnMesVisible === 1
+                  ? "cita en el mes"
+                  : "citas en el mes"}
+              </Text>
+            </View>
           </View>
-        </View>
+        </LinearGradient>
 
         <View style={styles.modalityCompactCard}>
           <View style={styles.modalityToggleRow}>
@@ -2760,18 +3001,59 @@ const styles = StyleSheet.create({
     gap: 13,
   },
 
-  // CALENDARIO MENSUAL REDISEÑADO
+  // ESCENARIO DE ANIMALITOS ANIMADOS ARRIBA DEL CALENDARIO
+  animalStageBanner: {
+    height: 44,
+    borderRadius: 18,
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E9D5FF",
+  },
+  stageCloudLeft: {
+    position: "absolute",
+    top: 4,
+    left: 26,
+  },
+  stageCloudRight: {
+    position: "absolute",
+    top: 6,
+    right: 34,
+  },
+  stageSparkleCenter: {
+    position: "absolute",
+    top: 8,
+    alignSelf: "center",
+  },
+  stageCreature: {
+    position: "absolute",
+    left: 0,
+    zIndex: 3,
+  },
+  creatureEmoji: {
+    fontSize: 18,
+  },
+  stageGroundStrip: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 5,
+    opacity: 0.7,
+  },
+
+  // CALENDARIO MENSUAL CON COLORCITO
   monthCalendarCard: {
-    backgroundColor: PALETTE.cardWhite,
     borderRadius: 26,
     padding: 14,
-    borderWidth: 1,
-    borderColor: "#E8E4F8",
+    borderWidth: 1.5,
+    borderColor: "#DDD6FE",
     gap: 10,
     elevation: 3,
-    shadowColor: "#1E1B4B",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowColor: "#6D28D9",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
   monthHeaderBanner: {
@@ -2796,11 +3078,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 13,
+    paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#E9D5FF",
+    borderColor: "#D8B4FE",
     elevation: 1,
   },
   monthTitleText: {
@@ -2820,7 +3102,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   monthPickerDropdownPanel: {
-    backgroundColor: "#FAF8FF",
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     padding: 12,
     borderWidth: 1,
@@ -2841,7 +3123,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 7,
     borderRadius: 11,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     alignItems: "center",
@@ -2868,7 +3150,7 @@ const styles = StyleSheet.create({
     width: "23.2%",
     paddingVertical: 8,
     borderRadius: 11,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     alignItems: "center",
@@ -2888,9 +3170,8 @@ const styles = StyleSheet.create({
   },
   weekDaysHeaderBar: {
     flexDirection: "row",
-    backgroundColor: "#F8FAFC",
-    paddingVertical: 6,
-    borderRadius: 11,
+    paddingVertical: 7,
+    borderRadius: 12,
   },
   weekDayHeaderCell: {
     width: "14.285%",
@@ -2899,7 +3180,7 @@ const styles = StyleSheet.create({
   weekDayHeaderText: {
     fontSize: 11,
     fontWeight: "800",
-    color: PALETTE.textMuted,
+    color: PALETTE.indigoMuted,
   },
   monthGridWrap: {
     flexDirection: "row",
@@ -2926,14 +3207,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+  },
+  monthDayPillWeekend: {
+    backgroundColor: "rgba(237, 233, 254, 0.55)",
   },
   monthDayPillToday: {
-    backgroundColor: "#EDF6F8",
+    backgroundColor: "#DFF3F8",
     borderWidth: 1.5,
     borderColor: PALETTE.tealDeep,
   },
   monthDayPillWithCita: {
-    backgroundColor: "#FAF5FF",
+    backgroundColor: "#F3E8FF",
+    borderWidth: 1,
+    borderColor: "#D8B4FE",
   },
   monthDayNumActive: {
     fontSize: 13.5,
@@ -2956,9 +3243,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   monthDotCita: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 5.5,
+    height: 5.5,
+    borderRadius: 3,
     backgroundColor: PALETTE.purpleVibrant,
   },
   monthDotHoy: {
@@ -2978,7 +3265,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingHorizontal: 4,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: "#EDE9FE",
   },
   legendGroup: {
     flexDirection: "row",
@@ -2991,19 +3278,25 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   legendDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 7.5,
+    height: 7.5,
+    borderRadius: 4,
   },
   legendText: {
     fontSize: 11,
     fontWeight: "700",
     color: PALETTE.textMuted,
   },
+  monthCountBadge: {
+    backgroundColor: "#EDE9FE",
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 999,
+  },
   monthSummaryText: {
     fontSize: 11,
     fontWeight: "800",
-    color: PALETTE.indigoMuted,
+    color: PALETTE.purpleVibrant,
   },
 
   modalityCompactCard: {

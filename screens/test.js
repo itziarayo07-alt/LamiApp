@@ -5,11 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
-  FlatList,
+  Easing,
   Modal,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,101 +17,243 @@ import {
 } from 'react-native';
 import ConfettiCannon from 'react-native-confetti-cannon';
 
-// Animación de caritas neutrales para resultado MODERADO
-function NeutralFaces() {
-  const caras = Array.from({ length: 20 }, (_, i) => i);
+const ES_EXPO_GO =
+  Constants.executionEnvironment === 'storeClient' ||
+  Constants.appOwnership === 'expo';
+
+// Configurar notificaciones solo fuera de Expo Go para evitar Uncaught Promise Error
+if (!ES_EXPO_GO) {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (_) {}
+}
+
+// Preguntas oficiales cortas de la escala clínica GAD-7 (Spitzer et al. / OMS / APA)
+const PREGUNTAS_GAD7 = [
+  {
+    id: 1,
+    texto: 'Sentirte nervioso/a, ansioso/a o con los nervios de punta.',
+    tag: 'Inquietud',
+    icono: 'pulse-outline',
+  },
+  {
+    id: 2,
+    texto: 'No poder dejar de preocuparte o controlar la preocupación.',
+    tag: 'Control mental',
+    icono: 'cloud-outline',
+  },
+  {
+    id: 3,
+    texto: 'Preocuparte demasiado por diferentes cosas.',
+    tag: 'Sobrepensar',
+    icono: 'sync-outline',
+  },
+  {
+    id: 4,
+    texto: 'Tener dificultad para relajarte.',
+    tag: 'Tensión',
+    icono: 'body-outline',
+  },
+  {
+    id: 5,
+    texto: 'Estar tan inquieto/a que te cuesta quedarte quieto/a.',
+    tag: 'Agitación',
+    icono: 'walk-outline',
+  },
+  {
+    id: 6,
+    texto: 'Molestarte o irritarte con facilidad.',
+    tag: 'Irritabilidad',
+    icono: 'flash-outline',
+  },
+  {
+    id: 7,
+    texto: 'Sentir miedo, como si algo terrible pudiera pasar.',
+    tag: 'Alerta',
+    icono: 'shield-outline',
+  },
+];
+
+const OPCIONES_GAD7 = [
+  {
+    label: 'Nunca',
+    sublabel: 'Ningún día',
+    valor: 0,
+    emoji: '🌿',
+    bg: '#ECFDF5',
+    border: '#6EE7B7',
+    text: '#065F46',
+    activeBg: '#10B981',
+  },
+  {
+    label: 'Varios días',
+    sublabel: 'Menos de la mitad',
+    valor: 1,
+    emoji: '🌤️',
+    bg: '#F3E8FF',
+    border: '#D8B4FE',
+    text: '#5B21B6',
+    activeBg: '#8B5CF6',
+  },
+  {
+    label: 'Más de la mitad de los días',
+    sublabel: 'Con frecuencia',
+    valor: 2,
+    emoji: '🌥️',
+    bg: '#FEF3C7',
+    border: '#FCD34D',
+    text: '#92400E',
+    activeBg: '#F59E0B',
+  },
+  {
+    label: 'Casi todos los días',
+    sublabel: 'De forma constante',
+    valor: 3,
+    emoji: '🌧️',
+    bg: '#FFE4E6',
+    border: '#FDA4AF',
+    text: '#9F1239',
+    activeBg: '#F43F5E',
+  },
+];
+
+// Orbe animado que respira suavemente en la cabecera de la tarjeta
+function BreathingOrb({ valorActual }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(scaleAnim, {
+            toValue: 1.12,
+            duration: 2400,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 0.96,
+            duration: 2400,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 0.7,
+            duration: 2400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.3,
+            duration: 2400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [scaleAnim, glowAnim]);
+
+  const orbColors =
+    valorActual === 3
+      ? ['#FB7185', '#A855F7']
+      : valorActual === 2
+      ? ['#FBBF24', '#A855F7']
+      : valorActual === 1
+      ? ['#A78BFA', '#60A5FA']
+      : ['#6EE7B7', '#818CF8'];
+
+  const orbEmoji =
+    valorActual === 3
+      ? '🫂'
+      : valorActual === 2
+      ? '🫧'
+      : valorActual === 1
+      ? '✨'
+      : '🪷';
+
   return (
-    <>
-      {caras.map((c) => (
-        <AnimatedNeutralFace key={c} />
-      ))}
-    </>
+    <View style={styles.orbWrapper}>
+      <Animated.View
+        style={[
+          styles.orbHalo,
+          {
+            opacity: glowAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      />
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <LinearGradient colors={orbColors} style={styles.orbCore}>
+          <Text style={styles.orbEmoji}>{orbEmoji}</Text>
+        </LinearGradient>
+      </Animated.View>
+    </View>
   );
 }
 
-function AnimatedNeutralFace() {
-  const animY = useRef(new Animated.Value(-50)).current;
-  const animX = useRef(new Animated.Value(Math.random() * 300 - 150)).current;
+// Partículas flotantes suaves para resultado MODERADO
+function FloatingParticles({ emoji = '🫧' }) {
+  const items = Array.from({ length: 14 }, (_, i) => i);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {items.map((idx) => (
+        <SingleParticle key={idx} emoji={emoji} index={idx} />
+      ))}
+    </View>
+  );
+}
+
+function SingleParticle({ emoji, index }) {
+  const animY = useRef(new Animated.Value(-40)).current;
+  const startX = useRef(((index * 53) % 320) - 160).current;
 
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
+        Animated.delay(index * 220),
         Animated.timing(animY, {
-          toValue: 700,
-          duration: 4000 + Math.random() * 2000,
+          toValue: 740,
+          duration: 4200 + (index % 4) * 600,
+          easing: Easing.linear,
           useNativeDriver: true,
         }),
         Animated.timing(animY, {
-          toValue: -50,
+          toValue: -40,
           duration: 0,
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, []);
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animY, index]);
 
   return (
     <Animated.Text
       style={{
         position: 'absolute',
-        fontSize: 26,
-        transform: [{ translateX: animX }, { translateY: animY }],
-        zIndex: 20,
+        left: '50%',
+        fontSize: 24,
+        opacity: 0.85,
+        transform: [{ translateX: startX }, { translateY: animY }],
       }}
     >
-      😐
+      {emoji}
     </Animated.Text>
   );
 }
 
-// Animación de caritas llorando para resultado ALTO 
-function CryingFaces() {
-  const caras = Array.from({ length: 20 }, (_, i) => i);
-  return (
-    <>
-      {caras.map((c) => (
-        <AnimatedCryingFace key={c} />
-      ))}
-    </>
-  );
-}
-
-function AnimatedCryingFace() {
-  const animY = useRef(new Animated.Value(-50)).current;
-  const animX = useRef(new Animated.Value(Math.random() * 300 - 150)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(animY, {
-          toValue: 700,
-          duration: 4000 + Math.random() * 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animY, {
-          toValue: -50,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  return (
-    <Animated.Text
-      style={{
-        position: 'absolute',
-        fontSize: 26,
-        transform: [{ translateX: animX }, { translateY: animY }],
-        zIndex: 20,
-      }}
-    >
-      😢
-    </Animated.Text>
-  );
-}
-
-//Loader de 3 puntitos animado
+// Loader de 3 puntitos animado
 function DotLoader() {
   const a1 = useRef(new Animated.Value(0.25)).current;
   const a2 = useRef(new Animated.Value(0.25)).current;
@@ -122,8 +264,16 @@ function DotLoader() {
       Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 280, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.25, duration: 280, useNativeDriver: true }),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 280,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0.25,
+            duration: 280,
+            useNativeDriver: true,
+          }),
         ])
       );
 
@@ -140,7 +290,7 @@ function DotLoader() {
       l2.stop();
       l3.stop();
     };
-  }, []);
+  }, [a1, a2, a3]);
 
   return (
     <View style={styles.dotsRow}>
@@ -151,66 +301,35 @@ function DotLoader() {
   );
 }
 
-// Configurar comportamiento de notificacionws fuera de expo go
-if (Constants.executionEnvironment !== 'storeClient') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-}
-
 export default function Test({ navigation }) {
-  const preguntas = [
-    'Me siento nervioso/a o inquieto/a sin razón aparente.',
-    'Me cuesta relajarme o mantenerme tranquilo/a.',
-    'Tengo dificultad para concentrarme por preocupación.',
-    'Me siento tenso/a o con rigidez muscular (cuello, espalda, hombros).',
-    'Me preocupo constantemente por el futuro.',
-    'Siento miedo de que algo malo pueda pasar.',
-    'Me cuesta dormir o tengo un sueño interrumpido.',
-    'Me sobresalto con facilidad ante ruidos o imprevistos.',
-    'Siento palpitaciones, sudoración o temblores sin causa médica.',
-    'Evito situaciones sociales o actividades por ansiedad.',
-  ];
-
-  const opciones = [
-    { label: 'Nunca', valor: 0 },
-    { label: 'A veces', valor: 1 },
-    { label: 'Frecuentemente', valor: 2 },
-    { label: 'Casi siempre', valor: 3 },
-  ];
-
-  const [respuestas, setRespuestas] = useState(Array(10).fill(null));
+  const [respuestas, setRespuestas] = useState(
+    Array(PREGUNTAS_GAD7.length).fill(null)
+  );
   const [indice, setIndice] = useState(0);
+  const [opcionTocada, setOpcionTocada] = useState(null);
   const [resultado, setResultado] = useState(null);
+
   const progresoAnim = useRef(new Animated.Value(0)).current;
+  const cardSlideAnim = useRef(new Animated.Value(0)).current;
+  const cardFadeAnim = useRef(new Animated.Value(1)).current;
 
-  //Modal flotante
   const [showConfigModal, setShowConfigModal] = useState(false);
-
-  //Para evitar doble toque
   const [isConfiguring, setIsConfiguring] = useState(false);
 
-  //Configurar notificaciones solo fuera de Expo Go
+  // Configurar notificaciones solo fuera de Expo Go con try/catch seguro
   useEffect(() => {
-    if (Constants.executionEnvironment === 'storeClient') return;
+    if (ES_EXPO_GO) return;
 
     const configurarNotificaciones = async () => {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permiso necesario',
-          'Por favor permite las notificaciones para recibir recordatorios 💚'
-        );
-      }
-
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-      });
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status === 'granted') {
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+          });
+        }
+      } catch (_) {}
     };
 
     configurarNotificaciones();
@@ -218,55 +337,121 @@ export default function Test({ navigation }) {
 
   // Animar barra de progreso
   useEffect(() => {
-    const progreso = respuestas.filter((r) => r !== null).length / preguntas.length;
+    const respondidas = respuestas.filter((r) => r !== null).length;
+    const progreso = respondidas / PREGUNTAS_GAD7.length;
     Animated.timing(progresoAnim, {
       toValue: progreso,
-      duration: 500,
+      duration: 380,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [respuestas]);
+  }, [respuestas, progresoAnim]);
+
+  const animarCambioPregunta = (nuevoIndice, direccion = 1) => {
+    Animated.parallel([
+      Animated.timing(cardFadeAnim, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardSlideAnim, {
+        toValue: -18 * direccion,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIndice(nuevoIndice);
+      setOpcionTocada(null);
+      cardSlideAnim.setValue(18 * direccion);
+      Animated.parallel([
+        Animated.timing(cardFadeAnim, {
+          toValue: 1,
+          duration: 210,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardSlideAnim, {
+          toValue: 0,
+          friction: 7,
+          tension: 65,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  };
 
   const seleccionarOpcion = (valor) => {
+    if (opcionTocada !== null) return; // Evita doble toque rápido
+    setOpcionTocada(valor);
+
     const nuevas = [...respuestas];
     nuevas[indice] = valor;
     setRespuestas(nuevas);
 
-    if (indice < preguntas.length - 1) {
-      setIndice(indice + 1);
-    } else {
-      calcularResultado(nuevas);
-    }
+    setTimeout(() => {
+      if (indice < PREGUNTAS_GAD7.length - 1) {
+        animarCambioPregunta(indice + 1, 1);
+      } else {
+        setOpcionTocada(null);
+        calcularResultado(nuevas);
+      }
+    }, 220);
   };
 
-  const calcularResultado = (respuestas) => {
-    const total = respuestas.reduce((acc, cur) => acc + (cur || 0), 0);
+  // Puntos de corte clínicos oficiales GAD-7 (0 a 21 pts)
+  const calcularResultado = (respuestasFinales) => {
+    const total = respuestasFinales.reduce((acc, cur) => acc + (cur || 0), 0);
     let nivel = '';
+    let subnivel = '';
     let color = '';
     let fondo = [];
     let consejo = '';
+    let emojiResultado = '🌿';
 
-    if (total <= 10) {
-      nivel = 'LEVE';
-      color = '#34D399';
-      fondo = ['#FDE68A', '#C4B5FD'];
+    if (total <= 4) {
+      nivel = 'MÍNIMA / LEVE';
+      subnivel = 'Equilibrio emocional estable';
+      color = '#059669';
+      fondo = ['#D1FAE5', '#DDD6FE'];
+      emojiResultado = '🌿';
       consejo =
-        'Tu ansiedad está bajo control. Mantén hábitos saludables y cuida tu bienestar emocional.';
-    } else if (total <= 20) {
+        'Tu nivel de ansiedad se encuentra en rango mínimo. Sigue cultivando tus espacios de calma y autocuidado.';
+    } else if (total <= 9) {
+      nivel = 'LEVE';
+      subnivel = 'Inquietud cotidiana manejable';
+      color = '#0D9488';
+      fondo = ['#CCFBF1', '#E9D5FF'];
+      emojiResultado = '🌤️';
+      consejo =
+        'Presentas señales leves de tensión. Ejercicios breves de respiración y pausas activas te ayudarán mucho.';
+    } else if (total <= 14) {
       nivel = 'MODERADO';
+      subnivel = 'Sobrecarga emocional presente';
       color = '#7C3AED';
-      fondo = ['#c2c8f8', '#c6b5fa'];
-      consejo = 'Sentir ansiedad no te hace débil, te hace humana.';
+      fondo = ['#C7D2FE', '#E9D5FF'];
+      emojiResultado = '💜';
+      consejo =
+        'Sentir ansiedad no te hace débil, te hace humana. Vamos a acompañarte paso a paso para bajar esa carga.';
     } else {
       nivel = 'ALTO';
-      color = '#F87171';
-      fondo = ['#F87171', '#9333EA'];
-      consejo = 'Tu mente se puede cansar, pero también puede sanar.';
+      subnivel = 'Alta activación y alerta';
+      color = '#E11D48';
+      fondo = ['#FECDD3', '#DDD6FE'];
+      emojiResultado = '🫂';
+      consejo =
+        'Tu mente se puede cansar, pero también puede sanar. Tu psicólogo y las herramientas de calma están contigo.';
     }
 
-    setResultado({ total, nivel, color, fondo, consejo });
+    setResultado({
+      total,
+      nivel,
+      subnivel,
+      color,
+      fondo,
+      consejo,
+      emojiResultado,
+    });
   };
 
-  //MODIFICADO: modal + loader + 7s + evita doble toque
   const iniciarMonitoreo = async () => {
     if (isConfiguring) return;
 
@@ -277,25 +462,36 @@ export default function Test({ navigation }) {
       const hoy = new Date().toISOString();
       await AsyncStorage.setItem('startDate', hoy);
 
-      if (Constants.executionEnvironment !== 'storeClient') {
-        const trigger = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: '🌱 ¡Primer día completado!',
-            body: 'Felicidades, llevas 1 día cuidando tu bienestar mental 💚',
-          },
-          trigger: { type: 'date', date: trigger },
-        });
+      if (resultado) {
+        await AsyncStorage.setItem(
+          'ultimoResultadoGAD7',
+          JSON.stringify({
+            total: resultado.total,
+            nivel: resultado.nivel,
+            fecha: hoy,
+          })
+        );
       }
 
-      // Espera 7s (7000 ms)
+      if (!ES_EXPO_GO) {
+        try {
+          const trigger = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '🌱 ¡Primer día completado!',
+              body: 'Felicidades, llevas 1 día cuidando tu bienestar mental 💚',
+            },
+            trigger: { type: 'date', date: trigger },
+          });
+        } catch (_) {}
+      }
+
       setTimeout(() => {
         setShowConfigModal(false);
         setIsConfiguring(false);
         navigation.navigate('Anxiosimetro');
-      }, 7000);
-    } catch (error) {
-      console.log('Error al iniciar monitoreo:', error);
+      }, 4500);
+    } catch (_) {
       setShowConfigModal(false);
       setIsConfiguring(false);
     }
@@ -306,114 +502,269 @@ export default function Test({ navigation }) {
     outputRange: ['0%', '100%'],
   });
 
-  //  Pantalla de Resultado 
+  // ================== PANTALLA DE RESULTADO ==================
   if (resultado) {
     return (
       <LinearGradient colors={resultado.fondo} style={styles.resultContainer}>
-        <SafeAreaView style={{ alignItems: 'center' }}>
-       
+        <SafeAreaView style={styles.resultSafeArea}>
           <Modal transparent visible={showConfigModal} animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={styles.modalCard}>
-                <Text style={styles.modalTitle}>Configurando…</Text>
-
+                <LinearGradient
+                  colors={['#EDE9FE', '#E0F2FE']}
+                  style={styles.modalIconCircle}
+                >
+                  <Ionicons name="sparkles" size={28} color="#7C3AED" />
+                </LinearGradient>
+                <Text style={styles.modalTitle}>Personalizando Lami…</Text>
                 <Text style={styles.modalText}>
-                  Estamos configurando la app de acuerdo a tus necesidades.
+                  Adaptando tus ejercicios de respiración y monitoreo según tu
+                  nivel actual.
                 </Text>
-
-                <Text style={[styles.modalText, { marginTop: 6 }]}>
-                  Espera un momento 💜
-                </Text>
-
                 <DotLoader />
-
-                <Text style={styles.modalHint}>
-                  Esto puede tardar unos segundos…
-                </Text>
+                <Text style={styles.modalHint}>Un momento por favor 💜</Text>
               </View>
             </View>
           </Modal>
 
           <View style={styles.resultBox}>
-            <Text style={styles.resultTitle}>Resultado</Text>
+            <View style={styles.clinicalSealPill}>
+              <Ionicons name="shield-checkmark" size={13} color="#6D28D9" />
+              <Text style={styles.clinicalSealText}>
+                ESCALA CLÍNICA GAD-7 • OMS / APA
+              </Text>
+            </View>
+
+            <Text style={styles.resultEmojiBig}>{resultado.emojiResultado}</Text>
+
+            <Text style={styles.resultTitle}>Nivel de Ansiedad</Text>
             <Text style={[styles.levelHighlight, { color: resultado.color }]}>
               {resultado.nivel}
             </Text>
-            <Text style={[styles.scoreText, { color: resultado.color }]}>
-              {resultado.total} / 30
-            </Text>
-            {resultado.consejo ? (
-              <Text style={styles.consejo}>{resultado.consejo}</Text>
-            ) : null}
+            <Text style={styles.subnivelText}>{resultado.subnivel}</Text>
+
+            <View style={styles.scoreBadge}>
+              <Text style={[styles.scoreText, { color: resultado.color }]}>
+                {resultado.total}
+              </Text>
+              <Text style={styles.scoreMaxText}> / 21 pts</Text>
+            </View>
+
+            <Text style={styles.consejo}>{resultado.consejo}</Text>
 
             <TouchableOpacity
-              style={styles.monitorButton}
+              style={styles.monitorButtonWrapper}
               onPress={iniciarMonitoreo}
-              activeOpacity={0.85}
+              activeOpacity={0.88}
               disabled={isConfiguring}
             >
-              <Text style={styles.monitorText}>Iniciar Monitoreo</Text>
+              <LinearGradient
+                colors={['#7C3AED', '#6192A4']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.monitorButton}
+              >
+                <Ionicons name="heart" size={18} color="#FFFFFF" />
+                <Text style={styles.monitorText}>Iniciar Monitoreo</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
 
-          {resultado.nivel === 'LEVE' && (
+          {(resultado.nivel === 'MÍNIMA / LEVE' ||
+            resultado.nivel === 'LEVE') && (
             <ConfettiCannon
-              count={150}
-              origin={{ x: 200, y: 0 }}
+              count={130}
+              origin={{ x: 190, y: 0 }}
               fadeOut={true}
               autoStart={true}
             />
           )}
 
-          {resultado.nivel === 'MODERADO' && <NeutralFaces />}
+          {resultado.nivel === 'MODERADO' && <FloatingParticles emoji="💜" />}
 
-          {resultado.nivel === 'ALTO' && <CryingFaces />}
-
-          {resultado.nivel === 'LEVE' && (
-            <ConfettiCannon
-              count={150}
-              origin={{ x: 200, y: 0 }}
-              fadeOut={true}
-              autoStart={true}
-            />
-          )}
+          {resultado.nivel === 'ALTO' && <FloatingParticles emoji="🫂" />}
         </SafeAreaView>
       </LinearGradient>
     );
   }
 
-  // Pantalla de Preguntas 
+  // ================== PANTALLA DE PREGUNTAS DINÁMICA ==================
+  const preguntaActual = PREGUNTAS_GAD7[indice];
+  const respuestaPrevia = respuestas[indice];
+
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#a6c1ee', '#fbc2eb']} style={styles.background}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={26} color="#4C1D95" />
-        </TouchableOpacity>
+      <LinearGradient
+        colors={['#B8C6F8', '#D8B4FE', '#F5D0FE']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.background}
+      >
+        {/* Cabecera superior con botón regresar y sello clínico */}
+        <View style={styles.topHeaderBar}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              if (indice > 0) {
+                animarCambioPregunta(indice - 1, -1);
+              } else {
+                navigation.goBack();
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-back" size={22} color="#4C1D95" />
+          </TouchableOpacity>
 
-        <View style={styles.card}>
-          <Text style={styles.subtitle}>
-            Pregunta {indice + 1} de {preguntas.length}
-          </Text>
-
-          <View style={styles.progressBarBackground}>
-            <Animated.View style={[styles.progressBarFill, { width: widthInterpolada }]} />
+          <View style={styles.clinicalHeaderBadge}>
+            <Ionicons name="medkit-outline" size={13} color="#4C1D95" />
+            <Text style={styles.clinicalHeaderText}>
+              GAD-7 • Avalado OMS & APA
+            </Text>
           </View>
 
-          <Text style={styles.question}>{preguntas[indice]}</Text>
-
-          <FlatList
-            data={opciones}
-            keyExtractor={(item) => item.label}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.optionButton}
-                onPress={() => seleccionarOpcion(item.valor)}
-              >
-                <Text style={styles.optionText}>{item.label}</Text>
-              </TouchableOpacity>
-            )}
-          />
+          <View style={styles.counterPill}>
+            <Text style={styles.counterPillText}>
+              {indice + 1}/{PREGUNTAS_GAD7.length}
+            </Text>
+          </View>
         </View>
+
+        <ScrollView
+          contentContainerStyle={styles.scrollCenter}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View
+            style={[
+              styles.card,
+              {
+                opacity: cardFadeAnim,
+                transform: [{ translateX: cardSlideAnim }],
+              },
+            ]}
+          >
+            {/* Orbe animado que respira */}
+            <BreathingOrb
+              valorActual={
+                opcionTocada !== null ? opcionTocada : respuestaPrevia ?? 0
+              }
+            />
+
+            {/* Indicador por pasos (7 cápsulas interactivas) */}
+            <View style={styles.stepDotsContainer}>
+              {PREGUNTAS_GAD7.map((p, idx) => {
+                const completada = respuestas[idx] !== null;
+                const actual = idx === indice;
+                return (
+                  <View
+                    key={p.id}
+                    style={[
+                      styles.stepCapsule,
+                      completada && styles.stepCapsuleDone,
+                      actual && styles.stepCapsuleActive,
+                    ]}
+                  />
+                );
+              })}
+            </View>
+
+            {/* Barra fluida de progreso */}
+            <View style={styles.progressBarBackground}>
+              <Animated.View
+                style={[styles.progressBarFill, { width: widthInterpolada }]}
+              />
+            </View>
+
+            {/* Contexto temporal oficial GAD-7 */}
+            <View style={styles.contextTagRow}>
+              <Ionicons
+                name={preguntaActual.icono}
+                size={14}
+                color="#7C3AED"
+              />
+              <Text style={styles.contextTagText}>
+                En las últimas 2 semanas • {preguntaActual.tag}
+              </Text>
+            </View>
+
+            <Text style={styles.question}>{preguntaActual.texto}</Text>
+
+            {/* Botones de respuesta dinámicos con intensidad de color */}
+            <View style={styles.optionsList}>
+              {OPCIONES_GAD7.map((item) => {
+                const seleccionada =
+                  opcionTocada === item.valor ||
+                  (opcionTocada === null && respuestaPrevia === item.valor);
+
+                return (
+                  <TouchableOpacity
+                    key={item.valor}
+                    activeOpacity={0.86}
+                    onPress={() => seleccionarOpcion(item.valor)}
+                    style={[
+                      styles.optionCard,
+                      {
+                        backgroundColor: seleccionada
+                          ? item.activeBg
+                          : item.bg,
+                        borderColor: seleccionada
+                          ? item.activeBg
+                          : item.border,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.optionEmoji}>{item.emoji}</Text>
+
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.optionTitle,
+                          { color: seleccionada ? '#FFFFFF' : item.text },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.optionSublabel,
+                          {
+                            color: seleccionada
+                              ? 'rgba(255,255,255,0.9)'
+                              : '#64748B',
+                          },
+                        ]}
+                      >
+                        {item.sublabel}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.optionRadio,
+                        {
+                          borderColor: seleccionada ? '#FFFFFF' : item.border,
+                          backgroundColor: seleccionada
+                            ? 'rgba(255,255,255,0.25)'
+                            : '#FFFFFF',
+                        },
+                      ]}
+                    >
+                      {seleccionada && (
+                        <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Nota de fuente científica al pie de la tarjeta */}
+            <Text style={styles.sourceFooterText}>
+              Basado en Generalized Anxiety Disorder-7 (Spitzer et al.) •
+              Referencia clínica OMS / APA / NICE
+            </Text>
+          </Animated.View>
+        </ScrollView>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -421,143 +772,342 @@ export default function Test({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  background: { flex: 1, justifyContent: 'center', padding: 20 },
+  background: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+  topHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 8,
+  },
   backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 25,
-    zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    padding: 8,
+    width: 40,
+    height: 40,
     borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+  },
+  clinicalHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  clinicalHeaderText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#4C1D95',
+  },
+  counterPill: {
+    backgroundColor: '#4C1D95',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  counterPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  scrollCenter: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingBottom: 24,
   },
   card: {
-    backgroundColor: 'white',
-    borderRadius: 25,
-    padding: 30,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 30,
+    padding: 22,
     elevation: 8,
+    shadowColor: '#4C1D95',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
   },
-  subtitle: {
-    textAlign: 'center',
-    color: '#555',
-    marginBottom: 15,
-    fontWeight: '500',
+  orbWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    height: 62,
+  },
+  orbHalo: {
+    position: 'absolute',
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#DDD6FE',
+  },
+  orbCore: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  orbEmoji: {
+    fontSize: 22,
+  },
+  stepDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  stepCapsule: {
+    height: 5,
+    width: 22,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+  },
+  stepCapsuleDone: {
+    backgroundColor: '#A78BFA',
+  },
+  stepCapsuleActive: {
+    width: 34,
+    backgroundColor: '#7C3AED',
   },
   progressBarBackground: {
-    height: 10,
-    backgroundColor: '#E5E7EB',
+    height: 7,
+    backgroundColor: '#F1F5F9',
     borderRadius: 6,
-    marginBottom: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#7C3AED',
     borderRadius: 6,
   },
+  contextTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F5F3FF',
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  contextTagText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#6D28D9',
+  },
   question: {
-    fontSize: 18,
-    color: '#333',
+    fontSize: 18.5,
+    fontWeight: '800',
+    color: '#1E293B',
     textAlign: 'center',
-    marginBottom: 25,
+    lineHeight: 25,
+    marginBottom: 18,
   },
-  optionButton: {
-    backgroundColor: '#DDD6FE',
-    paddingVertical: 14,
-    borderRadius: 25,
-    marginVertical: 8,
+  optionsList: {
+    gap: 10,
+  },
+  optionCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12.5,
+    paddingHorizontal: 15,
+    borderRadius: 18,
+    borderWidth: 1.5,
   },
-  optionText: { fontSize: 16, color: '#4C1D95', fontWeight: '600' },
+  optionEmoji: {
+    fontSize: 21,
+  },
+  optionTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+  },
+  optionSublabel: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  optionRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceFooterText: {
+    fontSize: 10.5,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 14,
+  },
 
-  resultContainer: { flex: 1, justifyContent: 'center' },
-  resultBox: {
-    backgroundColor: '#EDE9FE',
-    padding: 40,
-    borderRadius: 25,
-    width: '85%',
+  // Resultado
+  resultContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  resultSafeArea: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
+  },
+  resultBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    padding: 28,
+    borderRadius: 30,
+    width: '100%',
+    alignItems: 'center',
+    elevation: 10,
+  },
+  clinicalSealPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  clinicalSealText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#6D28D9',
+    letterSpacing: 0.4,
+  },
+  resultEmojiBig: {
+    fontSize: 44,
+    marginBottom: 6,
   },
   resultTitle: {
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#111',
-    marginBottom: 10,
+    color: '#475569',
+    marginBottom: 4,
   },
   levelHighlight: {
     fontSize: 26,
     fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  subnivelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  scoreBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   scoreText: {
-    fontSize: 32,
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  scoreMaxText: {
+    fontSize: 15,
     fontWeight: '700',
-    marginVertical: 10,
+    color: '#64748B',
   },
   consejo: {
-    fontSize: 16,
+    fontSize: 14.5,
     textAlign: 'center',
-    color: '#4C1D95',
-    marginVertical: 20,
+    color: '#334155',
+    lineHeight: 21,
+    marginBottom: 22,
+  },
+  monitorButtonWrapper: {
+    width: '100%',
   },
   monitorButton: {
-    backgroundColor: '#7C3AED',
-    padding: 15,
-    borderRadius: 30,
-    width: '80%',
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  monitorText: { color: 'white', fontWeight: '600', fontSize: 16 },
+  monitorText: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 16,
+  },
 
-  //MODAL MÁS GRANDE
+  // Modal de configuración
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.40)',
+    backgroundColor: 'rgba(15, 23, 42, 0.48)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalCard: {
     backgroundColor: 'white',
-    borderRadius: 22,
+    borderRadius: 26,
     paddingVertical: 28,
     paddingHorizontal: 22,
-    width: '95%',          // más grande
-    maxWidth: 520,         // más grande
-    minHeight: 220,        // más alto
+    width: '92%',
+    maxWidth: 420,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 10,
   },
+  modalIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: '#4C1D95',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   modalText: {
-    fontSize: 15,
-    color: '#374151',
+    fontSize: 14,
+    color: '#475569',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   modalHint: {
     fontSize: 12,
     color: '#6B7280',
-    marginTop: 10,
+    marginTop: 8,
     textAlign: 'center',
   },
-
-  // cargando...
   dotsRow: {
     flexDirection: 'row',
-    marginTop: 16,
+    marginTop: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dot: {
-    fontSize: 42,
-    marginHorizontal: 6,
+    fontSize: 38,
+    marginHorizontal: 5,
     color: '#7C3AED',
     fontWeight: '900',
   },
