@@ -1,9 +1,9 @@
-import 'react-native-gesture-handler';
-import 'react-native-reanimated';
+import "react-native-gesture-handler";
+import "react-native-reanimated";
 
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Provider as PaperProvider } from 'react-native-paper';
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Provider as PaperProvider } from "react-native-paper";
 
 import EjercicioDinamico from "./screens/EjercicioDinamico";
 import AgendaPsicologo from "./screens/psicologo/AgendaPsicologo";
@@ -15,26 +15,27 @@ import PsicologoDashboard from "./screens/psicologo/PsicologoDashboard";
 import RegistroPsicologo from "./screens/psicologo/RegistroPsicologo";
 import SalaTeleconsulta from "./screens/psicologo/SalaTeleconsulta";
 
-import Anxiosimetro from './screens/anxiosimetro';
+import Anxiosimetro from "./screens/anxiosimetro";
 import Autoabrazo from "./screens/Autoabrazo";
-import Calendario from './screens/calendario';
-import CheckingScreen from './screens/CheckingScreen';
-import Escaneo from './screens/Escaneo';
+import Calendario from "./screens/calendario";
+import CheckingScreen from "./screens/CheckingScreen";
+import Escaneo from "./screens/Escaneo";
 import InfoAnsiedad from "./screens/InfoAnsiedad";
-import Inicio from './screens/inicio';
-import Login from './screens/login';
-import PantallaEjercicios from './screens/PantallaEjercicios';
+import Inicio from "./screens/inicio";
+import Login from "./screens/login";
+import MapaDetonantes from "./screens/MapaDetonantes";
+import PantallaEjercicios from "./screens/PantallaEjercicios";
 import PantallaRapida from "./screens/PantallaRapida";
 import PantallaTest from "./screens/PantallaTest";
-import Perfil from './screens/perfil';
-import Registro from './screens/registro';
+import Perfil from "./screens/perfil";
+import PlanCalmaCrisis from "./screens/PlanCalmaCrisis";
+import Registro from "./screens/registro";
 import Respiracion from "./screens/Respiracion";
 import Sentidos from "./screens/Sentidos";
 import TecnicaABCDE from "./screens/TecnicaABCDE";
-import Test from './screens/test';
-import TestDiario from './screens/TestDiario';
+import Test from "./screens/test";
+import TestDiario from "./screens/TestDiario";
 import TestPersonalidad from "./screens/TestPersonalidad";
-
 
 const Stack = createNativeStackNavigator();
 
@@ -42,7 +43,7 @@ export default function App() {
   return (
     <PaperProvider>
       <NavigationContainer>
-        <Stack.Navigator 
+        <Stack.Navigator
           initialRouteName="Inicio"
           screenOptions={{ headerShown: false }}
         >
@@ -52,14 +53,22 @@ export default function App() {
           <Stack.Screen name="Test" component={Test} />
           <Stack.Screen name="Anxiosimetro" component={Anxiosimetro} />
           <Stack.Screen name="Calendario" component={Calendario} />
-          <Stack.Screen name="PantallaEjercicios" component={PantallaEjercicios} />
+          <Stack.Screen
+            name="PantallaEjercicios"
+            component={PantallaEjercicios}
+          />
           <Stack.Screen name="Perfil" component={Perfil} />
-          <Stack.Screen name="Checking" component={CheckingScreen}/>
-          <Stack.Screen name="TestDiario" component={TestDiario}/>
+          <Stack.Screen name="Checking" component={CheckingScreen} />
+          <Stack.Screen name="TestDiario" component={TestDiario} />
           <Stack.Screen name="TestPersonalidad" component={TestPersonalidad} />
           <Stack.Screen name="PantallaRapida" component={PantallaRapida} />
           <Stack.Screen name="InfoAnsiedad" component={InfoAnsiedad} />
-          <Stack.Screen name="ExpedientesPsicologo" component={ExpedientesPsicologo} /> 
+          <Stack.Screen name="MapaDetonantes" component={MapaDetonantes} />
+          <Stack.Screen name="PlanCalmaCrisis" component={PlanCalmaCrisis} />
+          <Stack.Screen
+            name="ExpedientesPsicologo"
+            component={ExpedientesPsicologo}
+          />
 
           <Stack.Screen name="PantallaTest" component={PantallaTest} />
           <Stack.Screen name="Respiracion" component={Respiracion} />
@@ -67,18 +76,32 @@ export default function App() {
           <Stack.Screen name="TecnicaABCDE" component={TecnicaABCDE} />
           <Stack.Screen name="Autoabrazo" component={Autoabrazo} />
           <Stack.Screen name="Escaneo" component={Escaneo} />
-          <Stack.Screen name="EjercicioDinamico" component={EjercicioDinamico} />
-          <Stack.Screen name="PsicologoDashboard" component={PsicologoDashboard} />
-          <Stack.Screen name="EjerciciosPsicologo" component={EjerciciosPsicologo} />
-          <Stack.Screen name="RegistroPsicologo" component={RegistroPsicologo} />
-          <Stack.Screen name="SalaTeleconsulta" component={SalaTeleconsulta} /> 
-          <Stack.Screen name="FlywheelQR" component={FlywheelQR} />  
-          <Stack.Screen name="AgendaPsicologo" component={AgendaPsicologo} options={{ headerShown: false }} />
-          <Stack.Screen name="PerfilPsicologo" component={PerfilPsicologo} /> 
-
+          <Stack.Screen
+            name="EjercicioDinamico"
+            component={EjercicioDinamico}
+          />
+          <Stack.Screen
+            name="PsicologoDashboard"
+            component={PsicologoDashboard}
+          />
+          <Stack.Screen
+            name="EjerciciosPsicologo"
+            component={EjerciciosPsicologo}
+          />
+          <Stack.Screen
+            name="RegistroPsicologo"
+            component={RegistroPsicologo}
+          />
+          <Stack.Screen name="SalaTeleconsulta" component={SalaTeleconsulta} />
+          <Stack.Screen name="FlywheelQR" component={FlywheelQR} />
+          <Stack.Screen
+            name="AgendaPsicologo"
+            component={AgendaPsicologo}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="PerfilPsicologo" component={PerfilPsicologo} />
         </Stack.Navigator>
       </NavigationContainer>
     </PaperProvider>
   );
 }
-

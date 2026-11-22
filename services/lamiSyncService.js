@@ -10,6 +10,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -49,14 +50,37 @@ export async function vincularConPsicologo(patientUid, codigoInput) {
   };
 }
 
-// 1.1 ELIMINAR EJERCICIO ASIGNADO (Desde el panel del psicólogo)
+// 1.1 ELIMINAR EJERCICIO ASIGNADO (Desde el panel del especialista)
 export async function eliminarEjercicioAsignado(patientUid, tareaId) {
   return await deleteDoc(
     doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId),
   );
 }
 
-// 2. ENVIAR EJERCICIO O TAREA PERSONALIZADA (Desde la App del Psicólogo hacia el Paciente)
+// 1.2 ACTUALIZAR FRECUENCIA O INSTRUCCIONES DE UN ENVÍO YA ASIGNADO
+export async function actualizarEjercicioAsignado(
+  patientUid,
+  tareaId,
+  cambios = {},
+) {
+  if (!patientUid || !tareaId) {
+    throw new Error("Faltan datos del paciente o de la actividad.");
+  }
+
+  const tareaRef = doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId);
+  const payload = {
+    ...cambios,
+    actualizadoEn: serverTimestamp(),
+  };
+
+  if (cambios.frecuenciaTipo === "unica") {
+    payload.proximoDisponibleISO = null;
+  }
+
+  return await setDoc(tareaRef, payload, { merge: true });
+}
+
+// 2. ENVIAR EJERCICIO O PREGUNTA PERSONALIZADA (Desde el Panel hacia el Paciente)
 export async function enviarEjercicioAPaciente(
   patientUid,
   psicologoId,
@@ -79,7 +103,7 @@ export async function enviarEjercicioAPaciente(
   );
 }
 
-// 3. ESCUCHAR EN TIEMPO REAL LO QUE MANDA EL PSICÓLOGO (En CheckingScreen.js y PsicologoDashboard)
+// 3. ESCUCHAR EN TIEMPO REAL LO QUE MANDA EL ESPECIALISTA (En CheckingScreen.js y Panel)
 export function escucharTareasDelPsicologo(patientUid, callback) {
   const q = query(
     collection(db, "usuarios", patientUid, "tareas_asignadas"),
@@ -96,13 +120,17 @@ export function escucharTareasDelPsicologo(patientUid, callback) {
   });
 }
 
-// 4. MARCAR EJERCICIO COMPLETADO + GUARDAR RESPUESTAS Y GESTIONAR RECURRENCIA
+// 4. MARCAR EJERCICIO/PREGUNTA COMPLETADO + GUARDAR RESPUESTAS Y GESTIONAR RECURRENCIA
 export async function completarEjercicioAsignado(
   patientUid,
   tareaId,
   respuestasMap = {},
   tareaData = {},
 ) {
+  if (!patientUid || !tareaId) {
+    throw new Error("Faltan datos del paciente o de la actividad.");
+  }
+
   const tareaRef = doc(db, "usuarios", patientUid, "tareas_asignadas", tareaId);
   const snap = await getDoc(tareaRef);
   const actual = snap.exists() ? snap.data() : tareaData;
@@ -113,7 +141,9 @@ export async function completarEjercicioAsignado(
       : [
           {
             tipo: "pregunta",
-            label: "¿Cómo te sentiste al realizar esta indicación?",
+            label:
+              actual.descripcion ||
+              "¿Cómo te sentiste al realizar esta indicación?",
           },
         ];
 
@@ -130,7 +160,7 @@ export async function completarEjercicioAsignado(
 
   const ahora = new Date();
   const nuevoRegistro = {
-    id: Date.now().toString(),
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     fechaISO: ahora.toISOString(),
     respuestas: detalleRespuestas,
   };
@@ -145,14 +175,18 @@ export async function completarEjercicioAsignado(
     ? new Date(ahora.getTime() + horas * 60 * 60 * 1000).toISOString()
     : null;
 
-  await updateDoc(tareaRef, {
-    completado: esRecurrente ? false : true,
-    ultimaVezCompletadoISO: ahora.toISOString(),
-    proximoDisponibleISO: proximoISO,
-    vecesCompletado: Number(actual.vecesCompletado || 0) + 1,
-    registrosRespuestas: [nuevoRegistro, ...historialPrevio],
-    completadoEn: serverTimestamp(),
-  });
+  await setDoc(
+    tareaRef,
+    {
+      completado: esRecurrente ? false : true,
+      ultimaVezCompletadoISO: ahora.toISOString(),
+      proximoDisponibleISO: proximoISO,
+      vecesCompletado: Number(actual.vecesCompletado || 0) + 1,
+      registrosRespuestas: [nuevoRegistro, ...historialPrevio],
+      completadoEn: serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   const mesActual = ahora.toISOString().slice(0, 7);
   const hoyISO = ahora.toISOString().slice(0, 10);
@@ -161,16 +195,20 @@ export async function completarEjercicioAsignado(
     minute: "2-digit",
   });
 
-  await updateDoc(doc(db, "usuarios", patientUid), {
-    activoEnMes: mesActual,
-    ultimaActividad: serverTimestamp(),
-    ultimoCheckinFecha: hoyISO,
-    horaUltimoCheckin: horaFormateada,
-    ultimoCheckinNota: `Completó ejercicio: ${actual.titulo || "Personalizado"}`,
-  });
+  await setDoc(
+    doc(db, "usuarios", patientUid),
+    {
+      activoEnMes: mesActual,
+      ultimaActividad: serverTimestamp(),
+      ultimoCheckinFecha: hoyISO,
+      horaUltimoCheckin: horaFormateada,
+      ultimoCheckinNota: `Completó: ${actual.titulo || "Actividad asignada"}`,
+    },
+    { merge: true },
+  );
 }
 
-// 5. ESCUCHAR PACIENTES VINCULADOS AL PSICÓLOGO EN TIEMPO REAL
+// 5. ESCUCHAR PACIENTES VINCULADOS AL ESPECIALISTA EN TIEMPO REAL
 export function escucharMisPacientes(psicologoId, callback) {
   const q = query(
     collection(db, "usuarios"),
@@ -186,7 +224,7 @@ export function escucharMisPacientes(psicologoId, callback) {
   });
 }
 
-// 6. GUARDAR NOTA CLÍNICA PRIVADA (Solo visible para el psicólogo)
+// 6. GUARDAR NOTA CLÍNICA PRIVADA (Solo visible para el especialista)
 export async function guardarNotaClinica(patientUid, psicologoId, textoNota) {
   return await addDoc(
     collection(db, "usuarios", patientUid, "notas_clinicas"),

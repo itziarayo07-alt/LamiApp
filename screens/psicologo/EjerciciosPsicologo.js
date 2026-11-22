@@ -20,7 +20,15 @@ import {
   escucharTareasDelPsicologo,
 } from "../../services/lamiSyncService";
 
+const LAMI_AVATAR = require("../../assets/lami_1.png");
+
 const ENFOQUES = ["Terapia", "Regulación", "Activación"];
+
+const ENFOQUE_ESTILOS = {
+  Terapia: { bg: "#E0F2FE", text: "#0369A1", icon: "compass-outline" },
+  Regulación: { bg: "#CCFBF1", text: "#0F766E", icon: "water-outline" },
+  Activación: { bg: "#FEF3C7", text: "#B45309", icon: "sunny-outline" },
+};
 
 const FRECUENCIAS = [
   { tipo: "unica", horas: null, label: "Única vez (1 sesión)" },
@@ -32,15 +40,20 @@ const FRECUENCIAS = [
 ];
 
 const TIPOS_PASO = [
-  { key: "pregunta", label: "Pregunta abierta" },
-  { key: "escala", label: "Escala (1-10)" },
-  { key: "instruccion", label: "Indicación / Acción" },
+  { key: "pregunta", label: "Pregunta abierta", icon: "chatbubble-outline" },
+  { key: "escala", label: "Escala (1-10)", icon: "stats-chart-outline" },
+  {
+    key: "instruccion",
+    label: "Indicación / Acción",
+    icon: "checkmark-circle-outline",
+  },
 ];
 
 const EJERCICIOS_PREESCRITOS = [
   {
     id: "abcde",
     habilitadoEnvio: true,
+    categoriaEnvio: "ejercicio",
     imagen: require("../../assets/autoabrazo.jpg"),
     caso: "Pensamientos automáticos y catastrofismo",
     estadoModulo: "Listo para enviar",
@@ -48,7 +61,7 @@ const EJERCICIOS_PREESCRITOS = [
     enfoque: "Terapia",
     frecuenciaLabel: "Diario (Cada 24h)",
     queHace:
-      "Guía al paciente a detectar la situación (A), su pensamiento automático (B) y reacción (C), cuestionarlo con evidencia (D) y formular una alternativa equilibrada (E).",
+      "Guía a detectar la situación (A), el pensamiento automático (B) y la reacción (C), cuestionarlo con evidencia (D) y formular una alternativa equilibrada (E).",
     descripcion:
       "Identifica la situación (A), el pensamiento automático (B) y la emoción (C), debátelo con evidencia (D) y construye una nueva perspectiva (E).",
     pasos: [
@@ -71,6 +84,7 @@ const EJERCICIOS_PREESCRITOS = [
   {
     id: "respiracion-478",
     habilitadoEnvio: true,
+    categoriaEnvio: "ejercicio",
     imagen: require("../../assets/respracion.gif"),
     caso: "Ansiedad aguda y aceleración",
     estadoModulo: "Listo para enviar",
@@ -97,6 +111,7 @@ const EJERCICIOS_PREESCRITOS = [
   {
     id: "escaneo-corporal",
     habilitadoEnvio: true,
+    categoriaEnvio: "ejercicio",
     imagen: require("../../assets/corporal.png"),
     caso: "Tensión física y desconexión del cuerpo",
     estadoModulo: "Listo para enviar",
@@ -123,6 +138,7 @@ const EJERCICIOS_PREESCRITOS = [
   {
     id: "anclaje-sentidos",
     habilitadoEnvio: true,
+    categoriaEnvio: "ejercicio",
     imagen: require("../../assets/sentidos.jpg"),
     caso: "Sobrecarga mental o sensación de irrealidad",
     estadoModulo: "Listo para enviar",
@@ -148,10 +164,11 @@ const EJERCICIOS_PREESCRITOS = [
   },
   {
     id: "registro-disparadores",
-    habilitadoEnvio: false,
+    habilitadoEnvio: true,
+    categoriaEnvio: "ejercicio",
     imagen: require("../../assets/ansiedad.jpg"),
     caso: "Seguimiento de detonantes cotidianos",
-    estadoModulo: "Aún no disponible (módulo pendiente)",
+    estadoModulo: "Listo para enviar",
     titulo: "Mapa de detonantes y señales",
     enfoque: "Terapia",
     frecuenciaLabel: "Diario (Cada 24h)",
@@ -162,21 +179,25 @@ const EJERCICIOS_PREESCRITOS = [
     pasos: [
       {
         tipo: "pregunta",
-        label:
-          "¿Qué detonante o contexto apareció hoy y qué señal temprana notaste?",
+        label: "¿Qué detonante o situación activó el malestar?",
+      },
+      {
+        tipo: "pregunta",
+        label: "¿Qué señales tempranas (cuerpo o mente) notaste?",
       },
       {
         tipo: "escala",
-        label: "Del 1 al 10, ¿qué tan intenso fue el detonante?",
+        label: "Del 1 al 10, ¿qué tan intensa fue la activación?",
       },
     ],
   },
   {
     id: "plan-calma-crisis",
-    habilitadoEnvio: false,
+    habilitadoEnvio: true,
+    categoriaEnvio: "ejercicio",
     imagen: require("../../assets/escaneo.jpg"),
     caso: "Prevención y manejo de momentos difíciles",
-    estadoModulo: "Aún no disponible (módulo pendiente)",
+    estadoModulo: "Listo para enviar",
     titulo: "Plan de calma para momentos difíciles",
     enfoque: "Activación",
     frecuenciaLabel: "Semanal (Cada 7 días)",
@@ -187,13 +208,15 @@ const EJERCICIOS_PREESCRITOS = [
     pasos: [
       {
         tipo: "instruccion",
-        label:
-          "Elige 2 acciones breves de cuidado que puedas hacer en menos de 5 minutos.",
+        label: "Acciones breves de cuidado elegidas (menos de 5 min)",
       },
       {
         tipo: "pregunta",
-        label:
-          "¿A quién o qué recurso acudirás primero si sientes que el malestar sube?",
+        label: "¿A quién o qué recurso acudirás primero si sube el malestar?",
+      },
+      {
+        tipo: "pregunta",
+        label: "Frase breve de calma y enfoque",
       },
     ],
   },
@@ -214,7 +237,27 @@ function formatearFechaHora(iso) {
   }
 }
 
-function AvatarPaciente({ paciente, size = 34 }) {
+function muestraDetalleEnEnviados(tarea) {
+  if (tarea?.categoriaEnvio === "pregunta") return true;
+  const tituloNorm = String(tarea?.titulo || "")
+    .trim()
+    .toLowerCase();
+  const plantillaNorm = String(tarea?.plantillaId || "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    plantillaNorm === "registro-disparadores" ||
+    plantillaNorm === "plan-calma-crisis" ||
+    tituloNorm.includes("detonantes") ||
+    tituloNorm.includes("disparadores") ||
+    tituloNorm.includes("plan de calma") ||
+    tituloNorm.includes("momentos difíciles") ||
+    tituloNorm.includes("momentos dificiles")
+  );
+}
+
+function AvatarPaciente({ paciente, size = 36 }) {
   if (paciente?.fotoPerfil) {
     return (
       <Image
@@ -223,7 +266,7 @@ function AvatarPaciente({ paciente, size = 34 }) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: "#EDE9FE",
+          backgroundColor: "#E0F2FE",
         }}
       />
     );
@@ -235,12 +278,12 @@ function AvatarPaciente({ paciente, size = 34 }) {
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: "#EDE9FE",
+        backgroundColor: "#E0F2FE",
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Ionicons name="person" size={Math.round(size * 0.56)} color="#5B21B6" />
+      <Ionicons name="person" size={Math.round(size * 0.54)} color="#0369A1" />
     </View>
   );
 }
@@ -283,10 +326,9 @@ export default function EjerciciosPsicologo({ route, navigation }) {
   const [ejerciciosPaciente, setEjerciciosPaciente] = useState([]);
   const [expandedTareaId, setExpandedTareaId] = useState(null);
 
-  // Modal con diseño para confirmaciones y avisos
   const [modalAviso, setModalAviso] = useState({
     visible: false,
-    tipo: "exito", // "exito" | "aviso" | "confirmar_cancelar"
+    tipo: "exito",
     badge: "ENVÍO CONFIRMADO",
     titulo: "",
     mensaje: "",
@@ -313,15 +355,14 @@ export default function EjerciciosPsicologo({ route, navigation }) {
     });
   };
 
-  const cerrarModalAviso = () => {
-    const debeIr = modalAviso.irAEnviados;
+  const cerrarModalAviso = ({ navegarAEnviados = false } = {}) => {
     setModalAviso((prev) => ({
       ...prev,
       visible: false,
       irAEnviados: false,
       tareaPendienteCancelar: null,
     }));
-    if (debeIr) {
+    if (navegarAEnviados) {
       setTabActiva("enviados");
     }
   };
@@ -442,7 +483,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
       await enviarEjercicioAPaciente(pacienteSeleccionado.uid, psicologoId, {
         titulo: preset.titulo,
         enfoque: preset.enfoque,
-        categoriaEnvio: "ejercicio",
+        categoriaEnvio: preset.categoriaEnvio || "ejercicio",
         descripcion: preset.descripcion,
         frecuenciaTipo: freqEncontrada.tipo,
         intervaloHoras: freqEncontrada.horas,
@@ -533,7 +574,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
       await enviarEjercicioAPaciente(pacienteSeleccionado.uid, psicologoId, {
         titulo: tituloEjercicio.trim(),
         enfoque: enfoqueEjercicio,
-        categoriaEnvio: "ejercicio",
+        categoriaEnvio: presetBase?.categoriaEnvio || "ejercicio",
         descripcion: descripcionEjercicio.trim(),
         frecuenciaTipo: frecuenciaEjercicio.tipo,
         intervaloHoras: frecuenciaEjercicio.horas,
@@ -640,9 +681,10 @@ export default function EjerciciosPsicologo({ route, navigation }) {
           ? "Indicación de seguimiento"
           : "Pregunta de seguimiento clínico");
 
-    const descripcionFinal = pasosLimpios
-      .map((p, idx) => `${idx + 1}. ${p.label.trim()}`)
-      .join(" | ");
+    const descripcionCorta =
+      pasosLimpios.length === 1
+        ? "Actividad de seguimiento enviada por tu especialista."
+        : `${pasosLimpios.length} elementos de seguimiento enviados por tu especialista.`;
 
     try {
       setGuardando(true);
@@ -650,7 +692,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
         titulo: tituloFinal,
         enfoque: "Terapia",
         categoriaEnvio: "pregunta",
-        descripcion: descripcionFinal,
+        descripcion: descripcionCorta,
         frecuenciaTipo: frecuenciaPregunta.tipo,
         intervaloHoras: frecuenciaPregunta.horas,
         frecuenciaLabel: frecuenciaPregunta.label,
@@ -761,7 +803,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
       if (editandoTareaId === tarea.id) {
         setEditandoTareaId(null);
       }
-      cerrarModalAviso();
+      cerrarModalAviso({ navegarAEnviados: false });
     } catch (e) {
       abrirModalAviso({
         tipo: "aviso",
@@ -773,45 +815,85 @@ export default function EjerciciosPsicologo({ route, navigation }) {
   };
 
   return (
-    <LinearGradient colors={["#F0F9FF", "#F5F3FF"]} style={{ flex: 1 }}>
+    <LinearGradient
+      colors={["#F0F9FF", "#EEF2FF", "#F0FDF4"]}
+      style={{ flex: 1 }}
+    >
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backBtn}
+            activeOpacity={0.8}
           >
-            <Ionicons name="arrow-back" size={22} color="#1E293B" />
+            <Ionicons name="chevron-back" size={22} color="#1E293B" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerBadge}>
-              PANEL CLÍNICO DEL ESPECIALISTA
-            </Text>
+            <Text style={styles.headerBadge}>LAMI • ACOMPAÑAMIENTO</Text>
             <Text style={styles.headerTitle}>Asignación de Ejercicios</Text>
           </View>
+          <Image
+            source={LAMI_AVATAR}
+            style={styles.headerAvatar}
+            resizeMode="contain"
+          />
         </View>
 
         <ScrollView
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* 1. BUSCADOR CON LUPA Y PACIENTES CON FOTO */}
+          <LinearGradient
+            colors={["#E0F2FE", "#EEF2FF"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.welcomeStrip}
+          >
+            <View style={styles.welcomeIconBubble}>
+              <Ionicons name="heart-half-outline" size={20} color="#1D4ED8" />
+            </View>
+            <Text style={styles.welcomeStripText}>
+              Elige a quién acompañar hoy, selecciona un ejercicio o pregunta y
+              ajusta cada cuánto tiempo le aparecerá.
+            </Text>
+          </LinearGradient>
+
           <View style={styles.card}>
-            <View style={styles.patientHeaderRow}>
-              <Text style={styles.sectionTitle}>
-                1. Paciente vinculado ({pacientes.length})
-              </Text>
-              {pacienteSeleccionado && (
-                <View style={styles.selectedPatientBadge}>
-                  <AvatarPaciente paciente={pacienteSeleccionado} size={22} />
-                  <Text style={styles.selectedPatientBadgeText}>
-                    {pacienteSeleccionado.nombre || "Paciente"}
-                  </Text>
-                </View>
-              )}
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.stepPillTitle}>
+                <Text style={styles.stepPillNum}>1</Text>
+                <Text style={styles.sectionTitle}>Paciente vinculado</Text>
+              </View>
+              <View style={styles.countBadge}>
+                <Text style={styles.sectionMeta}>
+                  {pacientes.length}{" "}
+                  {pacientes.length === 1 ? "vinculado" : "vinculados"}
+                </Text>
+              </View>
             </View>
 
+            {pacienteSeleccionado && (
+              <View style={styles.activePatientBanner}>
+                <AvatarPaciente paciente={pacienteSeleccionado} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.activePatientCaption}>
+                    Acompañando actualmente a
+                  </Text>
+                  <Text style={styles.activePatientName}>
+                    {pacienteSeleccionado.nombre ||
+                      pacienteSeleccionado.correo ||
+                      "Paciente"}
+                  </Text>
+                </View>
+                <View style={styles.activePill}>
+                  <Ionicons name="checkmark-circle" size={14} color="#0F766E" />
+                  <Text style={styles.activePillText}>Activo</Text>
+                </View>
+              </View>
+            )}
+
             <View style={styles.searchBox}>
-              <Ionicons name="search" size={18} color="#6D28D9" />
+              <Ionicons name="search" size={18} color="#2563EB" />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar paciente por nombre o correo..."
@@ -839,7 +921,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8, marginTop: 10 }}
+                contentContainerStyle={{ gap: 8, marginTop: 12 }}
               >
                 {pacientesFiltrados.map((p) => {
                   const activo = pacienteSeleccionado?.uid === p.uid;
@@ -850,6 +932,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                         styles.patientChip,
                         activo && styles.patientChipActive,
                       ]}
+                      activeOpacity={0.85}
                       onPress={() => {
                         setPacienteSeleccionado(p);
                         setEditandoTareaId(null);
@@ -871,70 +954,64 @@ export default function EjerciciosPsicologo({ route, navigation }) {
             )}
           </View>
 
-          {/* 3 SECCIONES SEPARADAS: EJERCICIOS | PREGUNTAS | ENVIADOS */}
           <View style={styles.tabsRow}>
-            <TouchableOpacity
-              style={[
-                styles.tabBtn,
-                tabActiva === "ejercicios" && styles.tabBtnActive,
-              ]}
-              onPress={() => setTabActiva("ejercicios")}
-            >
-              <Text
-                style={[
-                  styles.tabBtnText,
-                  tabActiva === "ejercicios" && { color: "#FFF" },
-                ]}
-              >
-                Ejercicios
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.tabBtn,
-                tabActiva === "preguntas" && styles.tabBtnActive,
-              ]}
-              onPress={() => setTabActiva("preguntas")}
-            >
-              <Text
-                style={[
-                  styles.tabBtnText,
-                  tabActiva === "preguntas" && { color: "#FFF" },
-                ]}
-              >
-                Preguntas
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.tabBtn,
-                tabActiva === "enviados" && styles.tabBtnActive,
-              ]}
-              onPress={() => setTabActiva("enviados")}
-            >
-              <Text
-                style={[
-                  styles.tabBtnText,
-                  tabActiva === "enviados" && { color: "#FFF" },
-                ]}
-              >
-                Enviados ({ejerciciosPaciente.length})
-              </Text>
-            </TouchableOpacity>
+            {[
+              {
+                key: "ejercicios",
+                label: "Ejercicios",
+                icon: "sparkles-outline",
+              },
+              {
+                key: "preguntas",
+                label: "Preguntas",
+                icon: "chatbubbles-outline",
+              },
+              {
+                key: "enviados",
+                label: `Enviados (${ejerciciosPaciente.length})`,
+                icon: "paper-plane-outline",
+              },
+            ].map((tab) => {
+              const activa = tabActiva === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.tabBtn, activa && styles.tabBtnActive]}
+                  activeOpacity={0.85}
+                  onPress={() => setTabActiva(tab.key)}
+                >
+                  <Ionicons
+                    name={tab.icon}
+                    size={16}
+                    color={activa ? "#FFFFFF" : "#334155"}
+                  />
+                  <Text
+                    style={[
+                      styles.tabBtnText,
+                      activa && styles.tabBtnTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          {/* ================= SECCIÓN 1: EJERCICIOS ================= */}
           {tabActiva === "ejercicios" && (
             <>
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>
-                  2. Ejercicios preescritos por caso
-                </Text>
+                <View style={styles.stepPillTitle}>
+                  <Text style={styles.stepPillNum}>2</Text>
+                  <Text style={styles.sectionTitle}>
+                    Ejercicios preescritos por caso
+                  </Text>
+                </View>
                 <Text style={styles.subHint}>
-                  Revisa qué hace cada ejercicio y envíalo a{" "}
-                  <Text style={{ fontWeight: "700", color: "#4C1D95" }}>
+                  Explora qué trabaja cada ejercicio y envíalo directo o
+                  personalízalo para{" "}
+                  <Text style={{ fontWeight: "700", color: "#0F172A" }}>
                     {pacienteSeleccionado?.nombre || "tu paciente"}
                   </Text>
                   .
@@ -947,6 +1024,9 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                       buscarTareaAsignadaDePlantilla(preset),
                     );
                     const bloqueadoPorModulo = !preset.habilitadoEnvio;
+                    const estiloEnfoque =
+                      ENFOQUE_ESTILOS[preset.enfoque] ||
+                      ENFOQUE_ESTILOS.Terapia;
 
                     return (
                       <View
@@ -961,23 +1041,52 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                             styles.presetCardActive,
                         ]}
                       >
-                        <Image
-                          source={preset.imagen}
-                          style={styles.presetImage}
-                          resizeMode="cover"
-                        />
+                        <View style={styles.presetImgWrapper}>
+                          <Image
+                            source={preset.imagen}
+                            style={styles.presetImage}
+                            resizeMode="cover"
+                          />
+                          <View
+                            style={[
+                              styles.presetEnfoqueFloating,
+                              { backgroundColor: estiloEnfoque.bg },
+                            ]}
+                          >
+                            <Ionicons
+                              name={estiloEnfoque.icon}
+                              size={12}
+                              color={estiloEnfoque.text}
+                            />
+                            <Text
+                              style={[
+                                styles.presetEnfoqueTag,
+                                { color: estiloEnfoque.text },
+                              ]}
+                            >
+                              {preset.enfoque.toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
 
                         <View style={styles.presetTopRow}>
-                          <Text style={styles.presetEnfoqueTag}>
-                            {preset.enfoque.toUpperCase()} •{" "}
-                            {preset.frecuenciaLabel}
-                          </Text>
+                          <View style={styles.freqTagSoft}>
+                            <Ionicons
+                              name="time-outline"
+                              size={12}
+                              color="#1D4ED8"
+                            />
+                            <Text style={styles.presetFreqMini}>
+                              {preset.frecuenciaLabel}
+                            </Text>
+                          </View>
+
                           {yaEnviado ? (
                             <View style={styles.alreadySentBadge}>
                               <Ionicons
                                 name="checkmark-done"
                                 size={13}
-                                color="#047857"
+                                color="#0F766E"
                               />
                               <Text style={styles.alreadySentBadgeText}>
                                 Ya enviado
@@ -991,19 +1100,23 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                           Caso: {preset.caso}
                         </Text>
 
-                        <Text style={styles.presetWhatLabel}>
-                          ¿Qué hace este ejercicio?
-                        </Text>
-                        <Text style={styles.presetDesc}>{preset.queHace}</Text>
+                        <View style={styles.presetWhatBox}>
+                          <Text style={styles.presetWhatLabel}>
+                            ¿Qué hace este ejercicio?
+                          </Text>
+                          <Text style={styles.presetDesc}>
+                            {preset.queHace}
+                          </Text>
+                        </View>
 
                         <Text
                           style={[
                             styles.presetStatus,
-                            bloqueadoPorModulo && { color: "#92400E" },
+                            bloqueadoPorModulo && { color: "#B45309" },
                           ]}
                         >
                           {yaEnviado
-                            ? "Ya enviado a este paciente • Edítalo o cancélalo en Enviados"
+                            ? "Asignado • Puedes ajustarlo o cancelarlo en Enviados"
                             : preset.estadoModulo}
                         </Text>
 
@@ -1017,7 +1130,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                               <Ionicons
                                 name="create-outline"
                                 size={15}
-                                color="#047857"
+                                color="#0F766E"
                               />
                               <Text style={styles.presetManageBtnText}>
                                 Modificar / Cancelar en Enviados
@@ -1040,21 +1153,37 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                               activeOpacity={0.85}
                               onPress={() => cargarEjercicioParaEditar(preset)}
                             >
+                              <Ionicons
+                                name="create-outline"
+                                size={15}
+                                color="#334155"
+                              />
                               <Text style={styles.presetEditBtnText}>
-                                {seleccionada ? "Cargado ✓" : "Cargar / Editar"}
+                                {seleccionada ? "Cargado ✓" : "Editar"}
                               </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                              style={styles.presetSendBtn}
+                              style={{ flex: 1.35 }}
                               activeOpacity={0.85}
                               disabled={guardando}
                               onPress={() => enviarEjercicioDirecto(preset)}
                             >
-                              <Ionicons name="send" size={14} color="#FFFFFF" />
-                              <Text style={styles.presetSendBtnText}>
-                                Enviar a paciente
-                              </Text>
+                              <LinearGradient
+                                colors={["#2563EB", "#1D4ED8"]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.presetSendBtn}
+                              >
+                                <Ionicons
+                                  name="send"
+                                  size={14}
+                                  color="#FFFFFF"
+                                />
+                                <Text style={styles.presetSendBtnText}>
+                                  Enviar
+                                </Text>
+                              </LinearGradient>
                             </TouchableOpacity>
                           </View>
                         )}
@@ -1064,11 +1193,13 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 </View>
               </View>
 
-              {/* DETALLES Y FRECUENCIA DEL EJERCICIO (SIN DURACIÓN SUGERIDA) */}
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>
-                  3. Detalles y frecuencia del ejercicio
-                </Text>
+                <View style={styles.stepPillTitle}>
+                  <Text style={styles.stepPillNum}>3</Text>
+                  <Text style={styles.sectionTitle}>
+                    Personalizar detalles y frecuencia
+                  </Text>
+                </View>
 
                 <Text style={styles.fieldLabel}>Nombre del ejercicio *</Text>
                 <TextInput
@@ -1080,11 +1211,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 />
 
                 <Text style={styles.fieldLabel}>Enfoque</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 6, marginBottom: 8 }}
-                >
+                <View style={styles.chipsWrapRow}>
                   {ENFOQUES.map((enf) => {
                     const act = enfoqueEjercicio === enf;
                     return (
@@ -1099,7 +1226,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                         <Text
                           style={[
                             styles.smallChipText,
-                            act && { color: "#FFF" },
+                            act && { color: "#FFFFFF" },
                           ]}
                         >
                           {enf}
@@ -1107,13 +1234,13 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 <Text style={styles.fieldLabel}>
                   Detalles e instrucciones para el paciente *
                 </Text>
                 <TextInput
-                  style={[styles.input, { minHeight: 75 }]}
+                  style={[styles.input, { minHeight: 78 }]}
                   multiline
                   placeholder="Escribe los detalles e instrucciones para el paciente..."
                   placeholderTextColor="#94A3B8"
@@ -1125,7 +1252,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                   ¿Cada cuánto tiempo volver a hacerlo?
                 </Text>
                 <Text style={styles.subHint}>
-                  Volverá a aparecer en el celular del paciente según esta
+                  Volverá a mostrarse en el dispositivo del paciente según esta
                   frecuencia.
                 </Text>
                 <View style={styles.freqGrid}>
@@ -1146,8 +1273,8 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                               ? "checkmark-done-circle-outline"
                               : "repeat-outline"
                           }
-                          size={18}
-                          color={activo ? "#FFFFFF" : "#6D28D9"}
+                          size={17}
+                          color={activo ? "#FFFFFF" : "#2563EB"}
                         />
                         <Text
                           style={[
@@ -1164,33 +1291,42 @@ export default function EjerciciosPsicologo({ route, navigation }) {
               </View>
 
               <TouchableOpacity
-                style={styles.submitBtn}
+                activeOpacity={0.9}
                 disabled={guardando}
                 onPress={handleGuardarEjercicioEditado}
               >
-                <Ionicons name="send" size={18} color="#FFFFFF" />
-                <Text style={styles.submitBtnText}>
-                  {guardando
-                    ? "Enviando ejercicio..."
-                    : `Enviar ejercicio a ${
-                        pacienteSeleccionado?.nombre || "Paciente"
-                      }`}
-                </Text>
+                <LinearGradient
+                  colors={["#2563EB", "#1D4ED8"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.submitBtn}
+                >
+                  <Ionicons name="send" size={18} color="#FFFFFF" />
+                  <Text style={styles.submitBtnText}>
+                    {guardando
+                      ? "Enviando ejercicio..."
+                      : `Enviar ejercicio a ${
+                          pacienteSeleccionado?.nombre || "Paciente"
+                        }`}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </>
           )}
 
-          {/* ================= SECCIÓN 2: PREGUNTAS (ESCALA / INDICACIÓN) ================= */}
           {tabActiva === "preguntas" && (
             <>
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>
-                  2. Preguntas, escalas o indicaciones
-                </Text>
+                <View style={styles.stepPillTitle}>
+                  <Text style={styles.stepPillNum}>2</Text>
+                  <Text style={styles.sectionTitle}>
+                    Preguntas, escalas o indicaciones
+                  </Text>
+                </View>
                 <Text style={styles.subHint}>
-                  Envío independiente para no saturar al paciente. Aparecerá en
-                  su pantalla para responder y enviar según la frecuencia
-                  elegida.
+                  Envía preguntas abiertas, escalas del 1 al 10 o indicaciones
+                  breves. Solo en este apartado verás lo que responda el
+                  paciente.
                 </Text>
 
                 <Text style={styles.fieldLabel}>Título (opcional)</Text>
@@ -1205,9 +1341,11 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 {pasosPregunta.map((paso, index) => (
                   <View key={index} style={styles.stepBox}>
                     <View style={styles.stepBoxHeader}>
-                      <Text style={styles.stepBoxNum}>
-                        Reactivo #{index + 1}
-                      </Text>
+                      <View style={styles.reactivoBadge}>
+                        <Text style={styles.stepBoxNum}>
+                          Reactivo #{index + 1}
+                        </Text>
+                      </View>
                       <TouchableOpacity
                         onPress={() => eliminarPasoPregunta(index)}
                       >
@@ -1233,10 +1371,15 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                               actualizarPasoPreguntaTipo(index, tp.key)
                             }
                           >
+                            <Ionicons
+                              name={tp.icon}
+                              size={13}
+                              color={act ? "#FFFFFF" : "#334155"}
+                            />
                             <Text
                               style={[
                                 styles.typePillText,
-                                act && { color: "#FFF" },
+                                act && { color: "#FFFFFF" },
                               ]}
                             >
                               {tp.label}
@@ -1247,7 +1390,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                     </View>
 
                     <TextInput
-                      style={[styles.input, { marginTop: 8, minHeight: 62 }]}
+                      style={[styles.input, { marginTop: 8, minHeight: 64 }]}
                       multiline
                       placeholder="Escribe la pregunta, escala o indicación..."
                       placeholderTextColor="#94A3B8"
@@ -1284,7 +1427,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                   ¿Cada cuánto tiempo debe responderlo?
                 </Text>
                 <Text style={styles.subHint}>
-                  Volverá a mostrarse en el celular del paciente según esta
+                  Volverá a mostrarse en el dispositivo del paciente según esta
                   frecuencia.
                 </Text>
                 <View style={styles.freqGrid}>
@@ -1305,8 +1448,8 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                               ? "checkmark-done-circle-outline"
                               : "repeat-outline"
                           }
-                          size={18}
-                          color={activo ? "#FFFFFF" : "#6D28D9"}
+                          size={17}
+                          color={activo ? "#FFFFFF" : "#2563EB"}
                         />
                         <Text
                           style={[
@@ -1323,36 +1466,42 @@ export default function EjerciciosPsicologo({ route, navigation }) {
               </View>
 
               <TouchableOpacity
-                style={styles.submitBtn}
+                activeOpacity={0.9}
                 disabled={guardando}
                 onPress={handleEnviarPreguntas}
               >
-                <Ionicons name="send" size={18} color="#FFFFFF" />
-                <Text style={styles.submitBtnText}>
-                  {guardando
-                    ? "Enviando pregunta..."
-                    : `Enviar pregunta a ${
-                        pacienteSeleccionado?.nombre || "Paciente"
-                      }`}
-                </Text>
+                <LinearGradient
+                  colors={["#2563EB", "#1D4ED8"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.submitBtn}
+                >
+                  <Ionicons name="send" size={18} color="#FFFFFF" />
+                  <Text style={styles.submitBtnText}>
+                    {guardando
+                      ? "Enviando pregunta..."
+                      : `Enviar pregunta a ${
+                          pacienteSeleccionado?.nombre || "Paciente"
+                        }`}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </>
           )}
 
-          {/* ================= SECCIÓN 3: ENVIADOS ================= */}
           {tabActiva === "enviados" && (
             <>
               {ejerciciosPaciente.length === 0 ? (
                 <View
                   style={[
                     styles.card,
-                    { alignItems: "center", paddingVertical: 28 },
+                    { alignItems: "center", paddingVertical: 30 },
                   ]}
                 >
-                  <Ionicons
-                    name="clipboard-outline"
-                    size={42}
-                    color="#94A3B8"
+                  <Image
+                    source={LAMI_AVATAR}
+                    style={{ width: 68, height: 68, marginBottom: 8 }}
+                    resizeMode="contain"
                   />
                   <Text style={styles.emptyTitle}>
                     Sin envíos activos para este paciente
@@ -1366,6 +1515,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 ejerciciosPaciente.map((tarea) => {
                   const abierto = expandedTareaId === tarea.id;
                   const estaEditando = editandoTareaId === tarea.id;
+                  const verDetalle = muestraDetalleEnEnviados(tarea);
                   const registros = Array.isArray(tarea.registrosRespuestas)
                     ? tarea.registrosRespuestas
                     : [];
@@ -1375,15 +1525,38 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                       <View style={styles.assignedHeaderRow}>
                         <AvatarPaciente
                           paciente={pacienteSeleccionado}
-                          size={36}
+                          size={40}
                         />
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.assignedEnfoque}>
-                            {tarea.categoriaEnvio === "pregunta"
-                              ? "💬 PREGUNTA / INDICACIÓN"
-                              : "🧘 EJERCICIO"}{" "}
-                            • {tarea.frecuenciaLabel || "Única vez"}
-                          </Text>
+                          <View style={styles.assignedBadgesRow}>
+                            <View
+                              style={[
+                                styles.tipoPillBadge,
+                                {
+                                  backgroundColor: verDetalle
+                                    ? "#E0F2FE"
+                                    : "#CCFBF1",
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.assignedEnfoque,
+                                  {
+                                    color: verDetalle ? "#0369A1" : "#0F766E",
+                                  },
+                                ]}
+                              >
+                                {tarea.categoriaEnvio === "pregunta"
+                                  ? "PREGUNTA"
+                                  : "EJERCICIO"}
+                              </Text>
+                            </View>
+                            <Text style={styles.assignedFreqText}>
+                              {tarea.frecuenciaLabel || "Única vez"}
+                            </Text>
+                          </View>
+
                           <Text style={styles.assignedTitle}>
                             {tarea.titulo}
                           </Text>
@@ -1392,7 +1565,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                           </Text>
                           {tarea.proximoDisponibleISO ? (
                             <Text style={styles.nextRunText}>
-                              Próxima aparición en celular:{" "}
+                              Próxima aparición:{" "}
                               {formatearFechaHora(tarea.proximoDisponibleISO)}
                             </Text>
                           ) : null}
@@ -1411,7 +1584,7 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                           <Ionicons
                             name="options-outline"
                             size={15}
-                            color="#4C1D95"
+                            color="#1E293B"
                           />
                           <Text style={styles.modifyBtnText}>
                             {estaEditando
@@ -1475,22 +1648,32 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                           </View>
 
                           <TouchableOpacity
-                            style={styles.saveEditBtn}
+                            activeOpacity={0.9}
                             disabled={guardandoEdicion}
                             onPress={() => guardarEdicionTarea(tarea)}
+                            style={{ marginTop: 10 }}
                           >
-                            <Text style={styles.saveEditBtnText}>
-                              {guardandoEdicion
-                                ? "Guardando..."
-                                : "Guardar cambios"}
-                            </Text>
+                            <LinearGradient
+                              colors={["#2563EB", "#1D4ED8"]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 0 }}
+                              style={styles.saveEditBtn}
+                            >
+                              <Text style={styles.saveEditBtnText}>
+                                {guardandoEdicion
+                                  ? "Guardando..."
+                                  : "Guardar cambios"}
+                              </Text>
+                            </LinearGradient>
                           </TouchableOpacity>
                         </View>
                       )}
 
                       <View style={styles.assignedStatsRow}>
                         <Text style={styles.assignedStatPill}>
-                          Ejecuciones en celular: {tarea.vecesCompletado || 0}
+                          {verDetalle
+                            ? `Registros enviados: ${registros.length}`
+                            : `Veces realizado: ${tarea.vecesCompletado || 0}`}
                         </Text>
                         <TouchableOpacity
                           style={styles.toggleResponsesBtn}
@@ -1500,8 +1683,10 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                         >
                           <Text style={styles.toggleResponsesText}>
                             {abierto
-                              ? "Ocultar ejecución ▲"
-                              : `Ver ejecución (${registros.length}) ▼`}
+                              ? "Ocultar ▲"
+                              : verDetalle
+                                ? `Ver respuestas (${registros.length}) ▼`
+                                : `Ver registro (${registros.length}) ▼`}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1510,9 +1695,15 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                         <View style={styles.responsesContainer}>
                           {registros.length === 0 ? (
                             <Text style={styles.emptyText}>
-                              Aún no se registra ejecución completada en el
-                              celular de{" "}
-                              {pacienteSeleccionado?.nombre || "este paciente"}.
+                              {verDetalle
+                                ? `Aún no hay respuestas registradas de ${
+                                    pacienteSeleccionado?.nombre ||
+                                    "este paciente"
+                                  }.`
+                                : `Aún no se registra actividad completada por ${
+                                    pacienteSeleccionado?.nombre ||
+                                    "este paciente"
+                                  }.`}
                             </Text>
                           ) : (
                             registros.map((reg, rIdx) => (
@@ -1521,22 +1712,36 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                                 style={styles.responseEntryCard}
                               >
                                 <Text style={styles.responseDate}>
-                                  Ejecución #{registros.length - rIdx} •{" "}
+                                  Registro #{registros.length - rIdx} •{" "}
                                   {formatearFechaHora(reg.fechaISO)}
                                 </Text>
-                                {Array.isArray(reg.respuestas) &&
-                                  reg.respuestas.map((itemResp, pIdx) => (
-                                    <View key={pIdx} style={{ marginTop: 6 }}>
-                                      <Text style={styles.responseQuestion}>
-                                        {pIdx + 1}. {itemResp.paso}
-                                      </Text>
-                                      <Text style={styles.responseAnswer}>
-                                        {itemResp.tipo === "escala"
-                                          ? `📊 Puntaje: ${itemResp.valor}/10`
-                                          : `💬 ${itemResp.valor}`}
-                                      </Text>
-                                    </View>
-                                  ))}
+
+                                {verDetalle ? (
+                                  Array.isArray(reg.respuestas) &&
+                                  reg.respuestas.length > 0 ? (
+                                    reg.respuestas.map((itemResp, pIdx) => (
+                                      <View key={pIdx} style={{ marginTop: 6 }}>
+                                        <Text style={styles.responseQuestion}>
+                                          {pIdx + 1}. {itemResp.paso}
+                                        </Text>
+                                        <Text style={styles.responseAnswer}>
+                                          {itemResp.tipo === "escala"
+                                            ? `Puntaje: ${itemResp.valor}/10`
+                                            : `Respuesta: ${itemResp.valor}`}
+                                        </Text>
+                                      </View>
+                                    ))
+                                  ) : (
+                                    <Text style={styles.responseAnswer}>
+                                      Sin detalle registrado.
+                                    </Text>
+                                  )
+                                ) : (
+                                  <Text style={styles.responseAnswer}>
+                                    Ejercicio iniciado/realizado por el
+                                    paciente.
+                                  </Text>
+                                )}
                               </View>
                             ))
                           )}
@@ -1550,12 +1755,11 @@ export default function EjerciciosPsicologo({ route, navigation }) {
           )}
         </ScrollView>
 
-        {/* MODAL ESTILIZADO PARA CONFIRMACIONES DE ENVÍO Y AVISOS */}
         <Modal
           visible={modalAviso.visible}
           transparent
           animationType="fade"
-          onRequestClose={cerrarModalAviso}
+          onRequestClose={() => cerrarModalAviso({ navegarAEnviados: false })}
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
@@ -1563,10 +1767,10 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 style={[
                   styles.modalBadge,
                   modalAviso.tipo === "exito"
-                    ? { backgroundColor: "#D1FAE5" }
+                    ? { backgroundColor: "#CCFBF1" }
                     : modalAviso.tipo === "confirmar_cancelar"
                       ? { backgroundColor: "#FEE2E2" }
-                      : { backgroundColor: "#EDE9FE" },
+                      : { backgroundColor: "#E0F2FE" },
                 ]}
               >
                 <Ionicons
@@ -1580,25 +1784,31 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                   size={16}
                   color={
                     modalAviso.tipo === "exito"
-                      ? "#047857"
+                      ? "#0F766E"
                       : modalAviso.tipo === "confirmar_cancelar"
                         ? "#DC2626"
-                        : "#5B21B6"
+                        : "#0369A1"
                   }
                 />
                 <Text
                   style={[
                     styles.modalBadgeText,
                     modalAviso.tipo === "exito"
-                      ? { color: "#047857" }
+                      ? { color: "#0F766E" }
                       : modalAviso.tipo === "confirmar_cancelar"
                         ? { color: "#DC2626" }
-                        : { color: "#5B21B6" },
+                        : { color: "#0369A1" },
                   ]}
                 >
                   {modalAviso.badge}
                 </Text>
               </View>
+
+              <Image
+                source={LAMI_AVATAR}
+                style={styles.modalLamiImg}
+                resizeMode="contain"
+              />
 
               <Text style={styles.modalTitle}>{modalAviso.titulo}</Text>
               <Text style={styles.modalMessage}>{modalAviso.mensaje}</Text>
@@ -1607,7 +1817,9 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 <View style={styles.modalActionsRow}>
                   <TouchableOpacity
                     style={styles.modalSecondaryBtn}
-                    onPress={cerrarModalAviso}
+                    onPress={() =>
+                      cerrarModalAviso({ navegarAEnviados: false })
+                    }
                     activeOpacity={0.85}
                   >
                     <Text style={styles.modalSecondaryBtnText}>Mantener</Text>
@@ -1625,7 +1837,9 @@ export default function EjerciciosPsicologo({ route, navigation }) {
                 <View style={styles.modalActionsRow}>
                   <TouchableOpacity
                     style={styles.modalSecondaryBtn}
-                    onPress={cerrarModalAviso}
+                    onPress={() =>
+                      cerrarModalAviso({ navegarAEnviados: false })
+                    }
                     activeOpacity={0.85}
                   >
                     <Text style={styles.modalSecondaryBtnText}>
@@ -1635,11 +1849,11 @@ export default function EjerciciosPsicologo({ route, navigation }) {
 
                   <TouchableOpacity
                     style={{ flex: 1.2 }}
-                    onPress={cerrarModalAviso}
+                    onPress={() => cerrarModalAviso({ navegarAEnviados: true })}
                     activeOpacity={0.9}
                   >
                     <LinearGradient
-                      colors={["#7C3AED", "#5B21B6"]}
+                      colors={["#2563EB", "#1D4ED8"]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.modalPrimaryBtn}
@@ -1653,11 +1867,11 @@ export default function EjerciciosPsicologo({ route, navigation }) {
               ) : (
                 <TouchableOpacity
                   style={{ width: "100%", marginTop: 14 }}
-                  onPress={cerrarModalAviso}
+                  onPress={() => cerrarModalAviso({ navegarAEnviados: false })}
                   activeOpacity={0.9}
                 >
                   <LinearGradient
-                    colors={["#7C3AED", "#5B21B6"]}
+                    colors={["#2563EB", "#1D4ED8"]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.modalPrimaryBtn}
@@ -1680,25 +1894,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 8,
-    gap: 12,
+    paddingBottom: 10,
+    gap: 10,
   },
   backBtn: {
     backgroundColor: "#FFFFFF",
     padding: 9,
-    borderRadius: 12,
-    elevation: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
   },
   headerBadge: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#6D28D9",
-    letterSpacing: 0.6,
+    color: "#1D4ED8",
+    letterSpacing: 0.7,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "800",
+    color: "#0F172A",
+  },
+  headerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+  },
+  welcomeStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 14,
+  },
+  welcomeIconBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  welcomeStripText: {
+    flex: 1,
+    fontSize: 12.5,
     color: "#1E293B",
+    lineHeight: 18,
+    fontWeight: "500",
   },
   scroll: {
     padding: 16,
@@ -1706,76 +1954,128 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 16,
     marginBottom: 14,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  stepPillTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  stepPillNum: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#DBEAFE",
+    color: "#1D4ED8",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+    lineHeight: 24,
+    overflow: "hidden",
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#1E293B",
-    marginBottom: 4,
+    color: "#0F172A",
   },
-  subHint: {
-    fontSize: 12,
-    color: "#64748B",
-    marginBottom: 10,
-  },
-  patientHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 8,
-  },
-  selectedPatientBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#F5F3FF",
+  countBadge: {
+    backgroundColor: "#F1F5F9",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
   },
-  selectedPatientBadgeText: {
+  sectionMeta: {
     fontSize: 11.5,
     fontWeight: "700",
-    color: "#5B21B6",
+    color: "#475569",
+  },
+  subHint: {
+    fontSize: 12.5,
+    color: "#64748B",
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  activePatientBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    borderRadius: 18,
+    padding: 10,
+    marginBottom: 10,
+  },
+  activePatientCaption: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  activePatientName: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  activePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#CCFBF1",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  activePillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0F766E",
   },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#DDD6FE",
-    borderRadius: 12,
+    borderColor: "#CBD5E1",
+    borderRadius: 14,
     paddingHorizontal: 12,
-    height: 42,
+    height: 44,
     gap: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 13.5,
-    color: "#1E293B",
+    color: "#0F172A",
   },
   patientChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#F3E8FF",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
   },
   patientChipActive: {
-    backgroundColor: "#7C3AED",
+    backgroundColor: "#1D4ED8",
+    borderColor: "#1D4ED8",
   },
   patientChipText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#4C1D95",
+    color: "#1E293B",
   },
   tabsRow: {
     flexDirection: "row",
@@ -1784,70 +2084,104 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#EDE9FE",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
     paddingVertical: 11,
-    paddingHorizontal: 6,
-    borderRadius: 14,
+    paddingHorizontal: 8,
+    borderRadius: 16,
   },
   tabBtnActive: {
-    backgroundColor: "#7C3AED",
+    backgroundColor: "#1E293B",
+    borderColor: "#1E293B",
   },
   tabBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#4C1D95",
-    textAlign: "center",
+    color: "#334155",
+  },
+  tabBtnTextActive: {
+    color: "#FFFFFF",
   },
   presetsGrid: {
-    gap: 12,
+    gap: 14,
   },
   presetCard: {
     backgroundColor: "#F8FAFC",
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    borderRadius: 16,
-    padding: 12,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    borderRadius: 20,
+    padding: 13,
   },
   presetCardActive: {
-    backgroundColor: "#F5F3FF",
-    borderColor: "#7C3AED",
+    backgroundColor: "#EFF6FF",
+    borderColor: "#2563EB",
   },
   presetCardAlreadySent: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#6EE7B7",
+    backgroundColor: "#F0FDFA",
+    borderColor: "#5EEAD4",
   },
   presetCardDisabled: {
-    backgroundColor: "#F9FAFB",
-    borderColor: "#E5E7EB",
+    backgroundColor: "#F8FAFC",
+    borderColor: "#E2E8F0",
     opacity: 0.85,
+  },
+  presetImgWrapper: {
+    position: "relative",
+    marginBottom: 10,
   },
   presetImage: {
     width: "100%",
-    height: 112,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: "#EDE9FE",
+    height: 130,
+    borderRadius: 16,
+    backgroundColor: "#E2E8F0",
+  },
+  presetEnfoqueFloating: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  presetEnfoqueTag: {
+    fontSize: 10,
+    fontWeight: "800",
   },
   presetTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 6,
+    flexWrap: "wrap",
   },
-  presetEnfoqueTag: {
-    fontSize: 10.5,
-    fontWeight: "800",
-    color: "#6D28D9",
-    flex: 1,
+  freqTagSoft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  presetFreqMini: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1D4ED8",
   },
   alreadySentBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#CCFBF1",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
@@ -1855,12 +2189,12 @@ const styles = StyleSheet.create({
   alreadySentBadgeText: {
     fontSize: 10.5,
     fontWeight: "800",
-    color: "#047857",
+    color: "#0F766E",
   },
   presetTitle: {
-    fontSize: 15.5,
+    fontSize: 16.5,
     fontWeight: "800",
-    color: "#1E293B",
+    color: "#0F172A",
   },
   presetCase: {
     fontSize: 12,
@@ -1868,23 +2202,30 @@ const styles = StyleSheet.create({
     color: "#0F766E",
     marginTop: 2,
   },
+  presetWhatBox: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    padding: 11,
+    marginTop: 8,
+  },
   presetWhatLabel: {
     fontSize: 11.5,
     fontWeight: "800",
-    color: "#334155",
-    marginTop: 6,
+    color: "#1E293B",
   },
   presetDesc: {
     fontSize: 12,
     color: "#475569",
-    marginTop: 2,
+    marginTop: 3,
     lineHeight: 17,
   },
   presetStatus: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#6D28D9",
-    marginTop: 6,
+    color: "#1D4ED8",
+    marginTop: 8,
   },
   presetActionsRow: {
     flexDirection: "row",
@@ -1893,23 +2234,25 @@ const styles = StyleSheet.create({
   },
   presetEditBtn: {
     flex: 1,
-    backgroundColor: "#EDE9FE",
-    paddingVertical: 9,
-    borderRadius: 10,
+    flexDirection: "row",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   presetEditBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#5B21B6",
+    color: "#1E293B",
   },
   presetSendBtn: {
-    flex: 1.25,
     flexDirection: "row",
-    backgroundColor: "#7C3AED",
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
@@ -1925,21 +2268,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#CCFBF1",
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   presetManageBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#047857",
+    color: "#0F766E",
   },
   presetPendingBox: {
     flex: 1,
     backgroundColor: "#FEF3C7",
     paddingVertical: 9,
     paddingHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
   },
   presetPendingText: {
@@ -1951,33 +2294,42 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#334155",
+    color: "#1E293B",
     marginTop: 10,
     marginBottom: 6,
   },
   input: {
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
+    borderColor: "#CBD5E1",
+    borderRadius: 14,
     padding: 12,
     fontSize: 14,
-    color: "#1E293B",
+    color: "#0F172A",
     textAlignVertical: "top",
   },
+  chipsWrapRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
   smallChip: {
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 12,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 999,
   },
   smallChipActive: {
-    backgroundColor: "#6D28D9",
+    backgroundColor: "#1D4ED8",
+    borderColor: "#1D4ED8",
   },
   smallChipText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#475569",
+    color: "#334155",
   },
   freqGrid: {
     flexDirection: "row",
@@ -1988,27 +2340,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#F5F3FF",
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#DDD6FE",
+    borderColor: "#CBD5E1",
     paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   freqCardActive: {
-    backgroundColor: "#7C3AED",
-    borderColor: "#7C3AED",
+    backgroundColor: "#1D4ED8",
+    borderColor: "#1D4ED8",
   },
   freqCardText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#4C1D95",
+    color: "#1E293B",
   },
   stepBox: {
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 14,
+    borderColor: "#DBEAFE",
+    borderRadius: 16,
     padding: 12,
     marginBottom: 10,
   },
@@ -2018,10 +2370,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  reactivoBadge: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
   stepBoxNum: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
-    color: "#4C1D95",
+    color: "#1D4ED8",
   },
   stepTypesRow: {
     flexDirection: "row",
@@ -2029,13 +2387,16 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   typePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     backgroundColor: "#E2E8F0",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
   },
   typePillActive: {
-    backgroundColor: "#6D28D9",
+    backgroundColor: "#1D4ED8",
   },
   typePillText: {
     fontSize: 11,
@@ -2049,36 +2410,36 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   addStepBtn: {
-    backgroundColor: "#EDE9FE",
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
     paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   addStepBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#5B21B6",
+    color: "#1D4ED8",
   },
   submitBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#7C3AED",
     paddingVertical: 15,
     borderRadius: 999,
-    elevation: 3,
   },
   submitBtnText: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: "800",
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#334155",
-    marginTop: 8,
+    color: "#1E293B",
+    marginTop: 6,
     marginBottom: 4,
   },
   emptyText: {
@@ -2092,27 +2453,44 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 10,
   },
+  assignedBadgesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  tipoPillBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
   assignedEnfoque: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "800",
-    color: "#7C3AED",
+    letterSpacing: 0.4,
+  },
+  assignedFreqText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
   },
   assignedTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#1E293B",
-    marginTop: 2,
+    color: "#0F172A",
+    marginTop: 4,
   },
   assignedDesc: {
     fontSize: 13,
     color: "#475569",
     marginTop: 4,
+    lineHeight: 18,
   },
   nextRunText: {
     fontSize: 11.5,
     fontWeight: "700",
     color: "#0F766E",
-    marginTop: 4,
+    marginTop: 5,
   },
   manageActionsRow: {
     flexDirection: "row",
@@ -2125,25 +2503,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    backgroundColor: "#EDE9FE",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
     paddingVertical: 9,
     paddingHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   modifyBtnText: {
     fontSize: 11.5,
     fontWeight: "800",
-    color: "#4C1D95",
+    color: "#1E293B",
   },
   cancelTaskBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
     paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   cancelTaskBtnText: {
     fontSize: 12,
@@ -2154,15 +2536,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#DDD6FE",
-    borderRadius: 14,
+    borderColor: "#CBD5E1",
+    borderRadius: 16,
     padding: 12,
   },
   saveEditBtn: {
-    marginTop: 10,
-    backgroundColor: "#6D28D9",
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 11,
+    borderRadius: 12,
     alignItems: "center",
   },
   saveEditBtnText: {
@@ -2175,17 +2555,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 12,
-    paddingTop: 15,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: "#E2E8F0",
   },
   assignedStatPill: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#059669",
+    color: "#0F766E",
   },
   toggleResponsesBtn: {
-    backgroundColor: "#EDE9FE",
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
@@ -2193,7 +2575,7 @@ const styles = StyleSheet.create({
   toggleResponsesText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#5B21B6",
+    color: "#1D4ED8",
   },
   responsesContainer: {
     marginTop: 12,
@@ -2202,14 +2584,14 @@ const styles = StyleSheet.create({
   responseEntryCard: {
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
+    borderColor: "#DBEAFE",
+    borderRadius: 14,
     padding: 12,
   },
   responseDate: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#6D28D9",
+    color: "#1D4ED8",
     marginBottom: 4,
   },
   responseQuestion: {
@@ -2225,7 +2607,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.48)",
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -2234,11 +2616,11 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 380,
     backgroundColor: "#FFFFFF",
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 22,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#DDD6FE",
+    borderColor: "#DBEAFE",
   },
   modalBadge: {
     flexDirection: "row",
@@ -2253,11 +2635,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
   },
+  modalLamiImg: {
+    width: 68,
+    height: 68,
+    marginTop: 10,
+  },
   modalTitle: {
     fontSize: 19,
     fontWeight: "900",
-    color: "#1E293B",
-    marginTop: 10,
+    color: "#0F172A",
+    marginTop: 6,
     textAlign: "center",
   },
   modalMessage: {
@@ -2275,14 +2662,16 @@ const styles = StyleSheet.create({
   },
   modalSecondaryBtn: {
     flex: 1,
-    backgroundColor: "#F3E8FF",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
     paddingVertical: 12,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
   },
   modalSecondaryBtnText: {
-    color: "#4C1D95",
+    color: "#1E293B",
     fontSize: 13,
     fontWeight: "800",
   },
