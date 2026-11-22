@@ -73,7 +73,7 @@ const ejerciciosIniciales = [
 
 const imagenTestDiario = require("../assets/emociones.jpg");
 const imagenTestPersonalidad = require("../assets/personalidad.jpg");
-const imagenTecnicaABCDE = require("../assets/ilustrar.jpg");
+const imagenTecnicaABCDE = require("../assets/autoabrazo.jpg");
 const imagenPreguntaDefault = require("../assets/preguntas.jpg");
 const imagenMapaDetonantes = require("../assets/ansiedad.jpg");
 const imagenPlanCalma = require("../assets/escaneo.jpg");
