@@ -58,6 +58,80 @@ const PREFS_KEY = "@prefs_goal_notifications";
 const NOTIF_IDS_KEY = "@scheduled_notif_ids";
 const CITAS_STORAGE_KEY = "@citas_agendadas_v1";
 const USER_PHOTO_KEY = "@user_profile_photo";
+const RACHA_STORAGE_KEY = "@lami_racha_state_v1";
+
+const ACCESORIOS_LAMI = [
+  {
+    id: "natural",
+    nombre: "Lami Natural",
+    costo: 0,
+    icono: "water",
+    color: "#0D9488",
+    bg: "#CCFBF1",
+    desc: "Estilo clásico",
+  },
+  {
+    id: "zen",
+    nombre: "Lami Zen",
+    costo: 20,
+    icono: "flower",
+    color: "#7C3AED",
+    bg: "#EDE9FE",
+    desc: "Aura de flor lila",
+  },
+  {
+    id: "estrella",
+    nombre: "Lami Astral",
+    costo: 35,
+    icono: "sparkles",
+    color: "#D97706",
+    bg: "#FEF3C7",
+    desc: "Brillo dorado",
+  },
+  {
+    id: "bosque",
+    nombre: "Lami Bosque",
+    costo: 50,
+    icono: "leaf",
+    color: "#059669",
+    bg: "#D1FAE5",
+    desc: "Hojita serena",
+  },
+];
+
+function getLocalDateISO(dateObj = new Date()) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getDiffDaysISO(fromISO, toISO) {
+  if (!fromISO || !toISO) return 0;
+  const [y1, m1, d1] = fromISO.split("-").map(Number);
+  const [y2, m2, d2] = toISO.split("-").map(Number);
+  const utc1 = Date.UTC(y1, m1 - 1, d1);
+  const utc2 = Date.UTC(y2, m2 - 1, d2);
+  return Math.round((utc2 - utc1) / (1000 * 60 * 60 * 24));
+}
+
+function getCurrentWeekDays() {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday);
+
+  const labels = ["L", "M", "X", "J", "V", "S", "D"];
+  return labels.map((label, idx) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + idx);
+    return {
+      label,
+      iso: getLocalDateISO(d),
+    };
+  });
+}
 
 const PRIVACIDAD_PSI_DEFAULT = {
   fotoPerfil: true,
@@ -224,7 +298,24 @@ export default function ProfileScreen({ navigation }) {
   const [camaraLista, setCamaraLista] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
-  // Animación decorativa sutil en el aura del avatar
+  // Estados del sistema de Racha, Gotitas de Luz, Escudos y Guía
+  const [gotitasLuz, setGotitasLuz] = useState(10);
+  const [escudosAutocuidado, setEscudosAutocuidado] = useState(0);
+  const [diasActivosHistorial, setDiasActivosHistorial] = useState([]);
+  const [diasProtegidosHistorial, setDiasProtegidosHistorial] = useState([]);
+  const [rachaPerdidaRescatable, setRachaPerdidaRescatable] = useState(0);
+  const [accesoriosDesbloqueados, setAccesoriosDesbloqueados] = useState([
+    "natural",
+  ]);
+  const [accesorioEquipado, setAccesorioEquipado] = useState("natural");
+  const [modalRescateRacha, setModalRescateRacha] = useState(false);
+  const [modalGuiaRacha, setModalGuiaRacha] = useState(false);
+  const [pasosRescateCompletados, setPasosRescateCompletados] = useState({
+    emocion: false,
+    respiracion: false,
+    gratitud: false,
+  });
+
   const auraPulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const pulse = Animated.loop(
@@ -300,12 +391,315 @@ export default function ProfileScreen({ navigation }) {
   const [calmStreak, setCalmStreak] = useState(0);
   const [sessionsCount, setSessionsCount] = useState(0);
 
-  const loadCounters = async () => {
-    const streakSaved = await AsyncStorage.getItem("@calm_streak");
-    const sessionsSaved = await AsyncStorage.getItem("@sessions_count");
+  const persistirEstadoRacha = async (nuevoEstado) => {
+    try {
+      await AsyncStorage.setItem(
+        RACHA_STORAGE_KEY,
+        JSON.stringify(nuevoEstado),
+      );
+      await AsyncStorage.setItem(
+        "@calm_streak",
+        String(nuevoEstado.streak || 0),
+      );
+      const user = auth.currentUser;
+      if (user) {
+        await setDoc(
+          doc(db, "usuarios", user.uid),
+          {
+            rachaCalma: nuevoEstado.streak || 0,
+            gotitasLuz: nuevoEstado.gotitas ?? 10,
+            escudosAutocuidado: nuevoEstado.escudos ?? 0,
+            accesorioLami: nuevoEstado.accesorioEquipado || "natural",
+            rachaActualizadaEn: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+    } catch (e) {
+      console.log("Error guardando estado de racha:", e);
+    }
+  };
 
-    setCalmStreak(streakSaved ? Number(streakSaved) : 0);
+  const loadCounters = async () => {
+    const sessionsSaved = await AsyncStorage.getItem("@sessions_count");
     setSessionsCount(sessionsSaved ? Number(sessionsSaved) : 0);
+
+    const hoyISO = getLocalDateISO();
+    const yesterdayObj = new Date();
+    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    const ayerISO = getLocalDateISO(yesterdayObj);
+
+    try {
+      const rawRacha = await AsyncStorage.getItem(RACHA_STORAGE_KEY);
+      if (!rawRacha) {
+        const inicial = {
+          streak: 1,
+          gotitas: 10,
+          escudos: 0,
+          diasActivos: [hoyISO],
+          diasProtegidos: [],
+          rachaPerdida: 0,
+          accesoriosDesbloqueados: ["natural"],
+          accesorioEquipado: "natural",
+          ultimoDiaActivo: hoyISO,
+        };
+        setCalmStreak(1);
+        setGotitasLuz(10);
+        setEscudosAutocuidado(0);
+        setDiasActivosHistorial([hoyISO]);
+        setDiasProtegidosHistorial([]);
+        setRachaPerdidaRescatable(0);
+        setAccesoriosDesbloqueados(["natural"]);
+        setAccesorioEquipado("natural");
+        await persistirEstadoRacha(inicial);
+        return;
+      }
+
+      const data = JSON.parse(rawRacha);
+      let streak = Number(data.streak || 0);
+      let gotitas = Number(data.gotitas ?? 10);
+      let escudos = Number(data.escudos ?? 0);
+      let diasActivos = Array.isArray(data.diasActivos) ? data.diasActivos : [];
+      let diasProtegidos = Array.isArray(data.diasProtegidos)
+        ? data.diasProtegidos
+        : [];
+      let rachaPerdida = Number(data.rachaPerdida || 0);
+      const desbloqueados = Array.isArray(data.accesoriosDesbloqueados)
+        ? data.accesoriosDesbloqueados
+        : ["natural"];
+      const equipado = data.accesorioEquipado || "natural";
+      const ultimoDia = data.ultimoDiaActivo || "";
+
+      if (ultimoDia && ultimoDia !== hoyISO && ultimoDia !== ayerISO) {
+        const diff = getDiffDaysISO(ultimoDia, hoyISO);
+        if (diff === 2 && escudos > 0) {
+          escudos -= 1;
+          if (!diasProtegidos.includes(ayerISO)) {
+            diasProtegidos = [...diasProtegidos, ayerISO];
+          }
+          const actualizado = {
+            ...data,
+            streak,
+            gotitas,
+            escudos,
+            diasActivos,
+            diasProtegidos,
+            ultimoDiaActivo: ayerISO,
+          };
+          await persistirEstadoRacha(actualizado);
+        } else if (diff >= 2 && streak > 0) {
+          rachaPerdida = diff <= 3 ? streak : 0;
+          streak = 0;
+          const actualizado = {
+            ...data,
+            streak: 0,
+            rachaPerdida,
+          };
+          await persistirEstadoRacha(actualizado);
+        }
+      }
+
+      setCalmStreak(streak);
+      setGotitasLuz(gotitas);
+      setEscudosAutocuidado(escudos);
+      setDiasActivosHistorial(diasActivos);
+      setDiasProtegidosHistorial(diasProtegidos);
+      setRachaPerdidaRescatable(rachaPerdida);
+      setAccesoriosDesbloqueados(desbloqueados);
+      setAccesorioEquipado(equipado);
+    } catch (e) {
+      const streakSaved = await AsyncStorage.getItem("@calm_streak");
+      setCalmStreak(streakSaved ? Number(streakSaved) : 1);
+    }
+  };
+
+  const handleRegistrarActividadRacha = async () => {
+    const hoyISO = getLocalDateISO();
+    const yaActivoHoy = diasActivosHistorial.includes(hoyISO);
+
+    if (yaActivoHoy) {
+      Alert.alert(
+        "Racha activa hoy ✨",
+        "Ya encendiste tu llama de calma hoy. Vuelve mañana para seguir sumando días y Gotitas de Luz.",
+      );
+      return;
+    }
+
+    const nuevaRacha = calmStreak + 1;
+    const ganoEscudoHito = nuevaRacha === 3 || nuevaRacha % 7 === 0;
+    const bonoGotitas = ganoEscudoHito ? 15 : 5;
+    const nuevasGotitas = gotitasLuz + bonoGotitas;
+    const nuevosEscudos = ganoEscudoHito
+      ? Math.min(2, escudosAutocuidado + 1)
+      : escudosAutocuidado;
+    const nuevosDiasActivos = [...diasActivosHistorial, hoyISO];
+
+    setCalmStreak(nuevaRacha);
+    setGotitasLuz(nuevasGotitas);
+    setEscudosAutocuidado(nuevosEscudos);
+    setDiasActivosHistorial(nuevosDiasActivos);
+    setRachaPerdidaRescatable(0);
+
+    await persistirEstadoRacha({
+      streak: nuevaRacha,
+      gotitas: nuevasGotitas,
+      escudos: nuevosEscudos,
+      diasActivos: nuevosDiasActivos,
+      diasProtegidos: diasProtegidosHistorial,
+      rachaPerdida: 0,
+      accesoriosDesbloqueados,
+      accesorioEquipado,
+      ultimoDiaActivo: hoyISO,
+    });
+
+    Alert.alert(
+      ganoEscudoHito
+        ? `¡Hito de ${nuevaRacha} días alcanzado! 🛡️`
+        : "¡Racha del día encendida! 💧",
+      ganoEscudoHito
+        ? `Ganaste +${bonoGotitas} Gotitas de Luz y desbloqueaste un Escudo de Autocuidado.`
+        : `Sumaste +${bonoGotitas} Gotitas de Luz por dedicarte este momento de calma hoy.`,
+    );
+  };
+
+  const handleCanjearEscudo = async () => {
+    const COSTO_ESCUDO = 15;
+    if (escudosAutocuidado >= 2) {
+      Alert.alert(
+        "Capacidad máxima",
+        "Ya tienes el máximo de 2 Escudos de Autocuidado activos.",
+      );
+      return;
+    }
+    if (gotitasLuz < COSTO_ESCUDO) {
+      Alert.alert(
+        "Gotitas insuficientes",
+        `Necesitas ${COSTO_ESCUDO} Gotitas de Luz para activar un Escudo de Autocuidado.`,
+      );
+      return;
+    }
+
+    const nuevasGotitas = gotitasLuz - COSTO_ESCUDO;
+    const nuevosEscudos = escudosAutocuidado + 1;
+    setGotitasLuz(nuevasGotitas);
+    setEscudosAutocuidado(nuevosEscudos);
+
+    await persistirEstadoRacha({
+      streak: calmStreak,
+      gotitas: nuevasGotitas,
+      escudos: nuevosEscudos,
+      diasActivos: diasActivosHistorial,
+      diasProtegidos: diasProtegidosHistorial,
+      rachaPerdida: rachaPerdidaRescatable,
+      accesoriosDesbloqueados,
+      accesorioEquipado,
+      ultimoDiaActivo:
+        diasActivosHistorial[diasActivosHistorial.length - 1] ||
+        getLocalDateISO(),
+    });
+
+    Alert.alert(
+      "Escudo activado 🛡️",
+      "Si algún día olvidas entrar a Lami, este escudo congelará tu racha sin romperla.",
+    );
+  };
+
+  const handleSeleccionarAccesorio = async (item) => {
+    const yaDesbloqueado = accesoriosDesbloqueados.includes(item.id);
+    if (yaDesbloqueado) {
+      setAccesorioEquipado(item.id);
+      await persistirEstadoRacha({
+        streak: calmStreak,
+        gotitas: gotitasLuz,
+        escudos: escudosAutocuidado,
+        diasActivos: diasActivosHistorial,
+        diasProtegidos: diasProtegidosHistorial,
+        rachaPerdida: rachaPerdidaRescatable,
+        accesoriosDesbloqueados,
+        accesorioEquipado: item.id,
+        ultimoDiaActivo:
+          diasActivosHistorial[diasActivosHistorial.length - 1] ||
+          getLocalDateISO(),
+      });
+      return;
+    }
+
+    if (gotitasLuz < item.costo) {
+      Alert.alert(
+        "Aún te faltan gotitas 💧",
+        `Necesitas ${item.costo} Gotitas de Luz para desbloquear "${item.nombre}".`,
+      );
+      return;
+    }
+
+    const nuevasGotitas = gotitasLuz - item.costo;
+    const nuevosDesbloqueados = [...accesoriosDesbloqueados, item.id];
+    setGotitasLuz(nuevasGotitas);
+    setAccesoriosDesbloqueados(nuevosDesbloqueados);
+    setAccesorioEquipado(item.id);
+
+    await persistirEstadoRacha({
+      streak: calmStreak,
+      gotitas: nuevasGotitas,
+      escudos: escudosAutocuidado,
+      diasActivos: diasActivosHistorial,
+      diasProtegidos: diasProtegidosHistorial,
+      rachaPerdida: rachaPerdidaRescatable,
+      accesoriosDesbloqueados: nuevosDesbloqueados,
+      accesorioEquipado: item.id,
+      ultimoDiaActivo:
+        diasActivosHistorial[diasActivosHistorial.length - 1] ||
+        getLocalDateISO(),
+    });
+
+    Alert.alert(
+      `¡${item.nombre} desbloqueado! ✨`,
+      "El estilo de tu compañero Lami se actualizó.",
+    );
+  };
+
+  const handleCompletarRescateRacha = async () => {
+    const hoyISO = getLocalDateISO();
+    const yesterdayObj = new Date();
+    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    const ayerISO = getLocalDateISO(yesterdayObj);
+
+    const rachaRestaurada = (rachaPerdidaRescatable || 1) + 1;
+    const nuevosDiasActivos = diasActivosHistorial.includes(hoyISO)
+      ? diasActivosHistorial
+      : [...diasActivosHistorial, hoyISO];
+    const nuevosProtegidos = diasProtegidosHistorial.includes(ayerISO)
+      ? diasProtegidosHistorial
+      : [...diasProtegidosHistorial, ayerISO];
+
+    setCalmStreak(rachaRestaurada);
+    setRachaPerdidaRescatable(0);
+    setDiasActivosHistorial(nuevosDiasActivos);
+    setDiasProtegidosHistorial(nuevosProtegidos);
+    setModalRescateRacha(false);
+    setPasosRescateCompletados({
+      emocion: false,
+      respiracion: false,
+      gratitud: false,
+    });
+
+    await persistirEstadoRacha({
+      streak: rachaRestaurada,
+      gotitas: gotitasLuz + 5,
+      escudos: escudosAutocuidado,
+      diasActivos: nuevosDiasActivos,
+      diasProtegidos: nuevosProtegidos,
+      rachaPerdida: 0,
+      accesoriosDesbloqueados,
+      accesorioEquipado,
+      ultimoDiaActivo: hoyISO,
+    });
+    setGotitasLuz((prev) => prev + 5);
+
+    Alert.alert(
+      "¡Racha rescatada con amor! 💜",
+      `Recuperaste tu racha y ahora llevas ${rachaRestaurada} días en calma.`,
+    );
   };
 
   const loadPreferences = async () => {
@@ -1380,6 +1774,30 @@ export default function ProfileScreen({ navigation }) {
   const streakProgressPct = Math.min(100, Math.max(12, calmStreak * 14));
   const sessionsProgressPct = Math.min(100, Math.max(14, sessionsCount * 12));
 
+  const hoyISO = getLocalDateISO();
+  const rachaCompletadaHoy = diasActivosHistorial.includes(hoyISO);
+  const semanaActualDias = getCurrentWeekDays();
+  const esMetaInicial3Dias = calmStreak < 3;
+  const progresoMetaInicialPct = Math.min(
+    100,
+    Math.round(
+      ((calmStreak % 7 === 0 && calmStreak > 0
+        ? 7
+        : calmStreak < 3
+          ? calmStreak
+          : calmStreak % 7) /
+        (esMetaInicial3Dias ? 3 : 7)) *
+        100,
+    ),
+  );
+  const accesorioActualObj =
+    ACCESORIOS_LAMI.find((a) => a.id === accesorioEquipado) ||
+    ACCESORIOS_LAMI[0];
+  const todosPasosRescateListos =
+    pasosRescateCompletados.emocion &&
+    pasosRescateCompletados.respiracion &&
+    pasosRescateCompletados.gratitud;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F3FF" }}>
       <LinearGradient
@@ -1389,7 +1807,7 @@ export default function ProfileScreen({ navigation }) {
         style={{ flex: 1 }}
       >
         <View style={styles.screen}>
-          {/* Barra superior flotante con indicador activo iluminado */}
+          {/* Barra superior flotante */}
           <View
             style={[
               styles.navBar,
@@ -1433,7 +1851,7 @@ export default function ProfileScreen({ navigation }) {
             contentContainerStyle={{ paddingBottom: 38 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* Hero Card de Bienvenida — Editorial Luxury */}
+            {/* Hero Card de Bienvenida */}
             <LinearGradient
               colors={["#FFFFFF", "#F8F3FF", "#EEF6FF"]}
               start={{ x: 0, y: 0 }}
@@ -1502,108 +1920,346 @@ export default function ProfileScreen({ navigation }) {
               </TouchableOpacity>
             </LinearGradient>
 
-            {/* Tarjetas de Racha y Sesiones con Micro-Progreso */}
-            <View style={styles.statsRow}>
-              <LinearGradient
-                colors={["#FFFDF5", "#FEF3C7", "#FFEDD5"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.statCard, { borderColor: "#FDE68A" }]}
-              >
-                <View style={styles.statHeaderRow}>
-                  <Text style={[styles.statLabel, { color: "#92400E" }]}>
-                    Racha de calma
-                  </Text>
-                  <View
-                    style={[
-                      styles.statIconBubble,
-                      { backgroundColor: "rgba(245, 158, 11, 0.18)" },
-                    ]}
-                  >
-                    <Ionicons name="flame" size={16} color="#D97706" />
+            {/* Tarjeta horizontal de Racha de calma */}
+            <LinearGradient
+              colors={["#FFFDF7", "#FEF3C7", "#FDE68A"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.streakBannerCard}
+            >
+              <View style={styles.streakBannerOrb} />
+
+              <View style={styles.streakBannerTopRow}>
+                <LinearGradient
+                  colors={["#FBBF24", "#F59E0B", "#D97706"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.streakFlameBadge}
+                >
+                  <Ionicons name="flame" size={26} color="#FFFFFF" />
+                </LinearGradient>
+
+                <View style={{ flex: 1 }}>
+                  <View style={styles.streakTagRow}>
+                    <Text style={styles.streakKicker}>RACHA DE CALMA</Text>
+                    <View style={styles.streakStatusChip}>
+                      <Text style={styles.streakStatusChipText}>✨ Activa</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.streakValueRow}>
+                    <Text style={styles.streakBigNumber}>
+                      {calmStreak} {calmStreak === 1 ? "día" : "días"}
+                    </Text>
+                    <Text style={styles.streakSubInline}>seguidos</Text>
                   </View>
                 </View>
+              </View>
 
-                <Text style={[styles.statNumber, { color: "#78350F" }]}>
-                  {calmStreak} {calmStreak === 1 ? "día" : "días"}
-                </Text>
-
-                <View style={styles.statMiniTrackWarm}>
-                  <View
+              <View style={styles.streakProgressWrapper}>
+                <View style={styles.streakTrackEnhanced}>
+                  <LinearGradient
+                    colors={["#F59E0B", "#EA580C"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
                     style={[
-                      styles.statMiniFillWarm,
+                      styles.streakFillEnhanced,
                       { width: `${streakProgressPct}%` },
                     ]}
                   />
                 </View>
-
-                <Text style={[styles.statHint, { color: "#B45309" }]}>
-                  Sigue así, lo haces genial
+                <Text style={styles.streakMotivationalText}>
+                  Sigue así, lo haces genial 💛
                 </Text>
-              </LinearGradient>
-
-              <LinearGradient
-                colors={["#F5F3FF", "#EDE9FE", "#E0E7FF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.statCard, { borderColor: "#DDD6FE" }]}
-              >
-                <View style={styles.statHeaderRow}>
-                  <Text style={[styles.statLabel, { color: "#4338CA" }]}>
-                    Sesiones
-                  </Text>
+              </View>
+            </LinearGradient>
+            
+            {/* Centro de Racha Amable, Gotitas de Luz y Escudos */}
+            <LinearGradient
+              colors={["#FFFFFF", "#F0FDFA", "#ECFEFF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.rachaCenterCard}
+            >
+              <View style={styles.rachaTopHeader}>
+                <View style={styles.rachaMascotRow}>
                   <View
                     style={[
-                      styles.statIconBubble,
-                      { backgroundColor: "rgba(124, 58, 237, 0.16)" },
+                      styles.rachaLamiCircle,
+                      { backgroundColor: accesorioActualObj.bg },
                     ]}
                   >
-                    <Ionicons name="headset" size={16} color="#6D28D9" />
+                    <Image
+                      source={require("../assets/lami_1.png")}
+                      style={styles.rachaLamiImg}
+                    />
+                    <View
+                      style={[
+                        styles.rachaLamiBadgeIcon,
+                        { backgroundColor: accesorioActualObj.color },
+                      ]}
+                    >
+                      <Ionicons
+                        name={accesorioActualObj.icono}
+                        size={11}
+                        color="#FFFFFF"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rachaKicker}>
+                      CONSTANCIA AMABLE • DÍA {Math.max(1, calmStreak)}
+                    </Text>
+                    <Text style={styles.rachaMainTitle}>
+                      {calmStreak} {calmStreak === 1 ? "día" : "días"} en calma
+                    </Text>
+                    <Text style={styles.rachaSubCaption}>
+                      {accesorioActualObj.nombre} activo
+                    </Text>
                   </View>
                 </View>
 
-                <Text style={[styles.statNumber, { color: "#312E81" }]}>
-                  {sessionsCount}
-                </Text>
+                <View style={{ alignItems: "flex-end", gap: 6 }}>
+                  <View style={styles.gotitasPill}>
+                    <Ionicons name="water" size={15} color="#0284C7" />
+                    <Text style={styles.gotitasCountText}>{gotitasLuz}</Text>
+                  </View>
 
-                <View style={styles.statMiniTrackViolet}>
-                  <View
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setModalGuiaRacha(true)}
+                    style={styles.howItWorksPill}
+                  >
+                    <Ionicons
+                      name="help-circle"
+                      size={13}
+                      color="#0F766E"
+                    />
+                    <Text style={styles.howItWorksText}>¿Cómo funciona?</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Banner de Misión de Rescate si perdió racha ayer */}
+              {rachaPerdidaRescatable > 0 && (
+                <View style={styles.rescueBanner}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rescueBannerTitle}>
+                      ¿Recuperamos tu racha de {rachaPerdidaRescatable} días? 💜
+                    </Text>
+                    <Text style={styles.rescueBannerSub}>
+                      Completa 3 micro-acciones suaves hoy para restaurarla sin
+                      culpa.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setModalRescateRacha(true)}
+                    style={styles.rescueBannerBtn}
+                  >
+                    <Text style={styles.rescueBannerBtnText}>Rescatar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Progreso de Hito (3 días arranque / 7 días semanal) */}
+              <View style={styles.hitoProgressBox}>
+                <View style={styles.hitoProgressHeader}>
+                  <Text style={styles.hitoProgressLabel}>
+                    {esMetaInicial3Dias
+                      ? "🌱 Semilla de calma (Meta inicial: 3 días)"
+                      : "✨ Hito semanal hacia Escudo gratis"}
+                  </Text>
+                  <Text style={styles.hitoProgressValue}>
+                    {esMetaInicial3Dias
+                      ? `${calmStreak}/3 días`
+                      : `${calmStreak % 7 === 0 && calmStreak > 0 ? 7 : calmStreak % 7}/7 días`}
+                  </Text>
+                </View>
+                <View style={styles.hitoTrack}>
+                  <LinearGradient
+                    colors={["#10B981", "#0D9488", "#0284C7"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
                     style={[
-                      styles.statMiniFillViolet,
-                      { width: `${sessionsProgressPct}%` },
+                      styles.hitoFill,
+                      { width: `${Math.max(12, progresoMetaInicialPct)}%` },
                     ]}
                   />
                 </View>
+              </View>
 
-                <Text style={[styles.statHint, { color: "#5B21B6" }]}>
-                  Tu mente se está cuidando
-                </Text>
-              </LinearGradient>
-            </View>
+              {/* Calendario Semanal L M X J V S D */}
+              <View style={styles.weekDaysRow}>
+                {semanaActualDias.map((dia) => {
+                  const activo = diasActivosHistorial.includes(dia.iso);
+                  const protegido = diasProtegidosHistorial.includes(dia.iso);
+                  const esHoy = dia.iso === hoyISO;
 
-            {/* Botón Principal de Sesión con Degradado Luminoso */}
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={addSession}
-              style={styles.sessionButtonShadow}
-            >
-              <LinearGradient
-                colors={["#7C3AED", "#5B21B6", "#3730A3"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.sessionButton}
+                  return (
+                    <View key={dia.iso} style={styles.weekDayCol}>
+                      <Text
+                        style={[
+                          styles.weekDayLabel,
+                          esHoy && { color: "#0F766E", fontWeight: "900" },
+                        ]}
+                      >
+                        {dia.label}
+                      </Text>
+                      <View
+                        style={[
+                          styles.weekDayCircle,
+                          activo && styles.weekDayCircleActive,
+                          protegido && !activo && styles.weekDayCircleShield,
+                          esHoy && !activo && styles.weekDayCircleToday,
+                        ]}
+                      >
+                        {activo ? (
+                          <Ionicons name="flame" size={15} color="#FFFFFF" />
+                        ) : protegido ? (
+                          <Ionicons
+                            name="shield-checkmark"
+                            size={14}
+                            color="#0284C7"
+                          />
+                        ) : (
+                          <View style={styles.weekDayEmptyDot} />
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Botón de Check-in diario para encender la racha */}
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={handleRegistrarActividadRacha}
+                style={{ marginTop: 12 }}
               >
-                <View style={styles.sessionBtnIconCircle}>
-                  <Ionicons name="headset-outline" size={17} color="#FFFFFF" />
+                <LinearGradient
+                  colors={
+                    rachaCompletadaHoy
+                      ? ["#059669", "#0D9488"]
+                      : ["#14B8A6", "#0284C7"]
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.checkinRachaBtn}
+                >
+                  <Ionicons
+                    name={
+                      rachaCompletadaHoy ? "checkmark-circle" : "sparkles"
+                    }
+                    size={17}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.checkinRachaBtnText}>
+                    {rachaCompletadaHoy
+                      ? "Llama de hoy encendida • +5 Gotitas ganadas"
+                      : "Encender racha de hoy (+5 Gotitas de Luz)"}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Escudos de Autocuidado */}
+              <View style={styles.escudosBox}>
+                <View style={styles.escudoInfoRow}>
+                  <View style={styles.escudoIconCircle}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={18}
+                      color="#0284C7"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.escudoTitle}>
+                      Escudos de Autocuidado ({escudosAutocuidado}/2)
+                    </Text>
+                    <Text style={styles.escudoDesc}>
+                      Congelan tu racha automáticamente si un día necesitas
+                      descansar.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleCanjearEscudo}
+                    style={[
+                      styles.canjearEscudoBtn,
+                      (escudosAutocuidado >= 2 || gotitasLuz < 15) && {
+                        opacity: 0.6,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="water" size={12} color="#FFFFFF" />
+                    <Text style={styles.canjearEscudoText}>15</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.sessionButtonText}>
-                  Registrar una sesión completada 🎧
-                </Text>
-                <View style={styles.sessionPlusPill}>
-                  <Text style={styles.sessionPlusText}>+1</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+              </View>
+
+              {/* Personalización de Lami con Gotitas de Luz */}
+              <Text style={styles.accesoriosSectionTitle}>
+                Estilos de Lami (Canjea con tus Gotitas)
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 9, paddingVertical: 4 }}
+              >
+                {ACCESORIOS_LAMI.map((acc) => {
+                  const desbloqueado = accesoriosDesbloqueados.includes(acc.id);
+                  const equipado = accesorioEquipado === acc.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={acc.id}
+                      activeOpacity={0.85}
+                      onPress={() => handleSeleccionarAccesorio(acc)}
+                      style={[
+                        styles.accesorioCard,
+                        equipado && styles.accesorioCardEquipped,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.accesorioIconBox,
+                          { backgroundColor: acc.bg },
+                        ]}
+                      >
+                        <Ionicons
+                          name={acc.icono}
+                          size={18}
+                          color={acc.color}
+                        />
+                      </View>
+                      <Text style={styles.accesorioName} numberOfLines={1}>
+                        {acc.nombre}
+                      </Text>
+                      <View
+                        style={[
+                          styles.accesorioTag,
+                          equipado && { backgroundColor: "#0D9488" },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.accesorioTagText,
+                            equipado && { color: "#FFFFFF" },
+                          ]}
+                        >
+                          {equipado
+                            ? "Equipado"
+                            : desbloqueado
+                              ? "Usar"
+                              : `💧 ${acc.costo}`}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </LinearGradient>
 
             {/* Card Mi Plan Lami */}
             <View style={styles.card}>
@@ -2959,6 +3615,336 @@ export default function ProfileScreen({ navigation }) {
           </ScrollView>
         </View>
       </LinearGradient>
+
+      {/* Modal Guía Visual de Racha de Calma y Gotitas de Luz */}
+      <Modal
+        visible={modalGuiaRacha}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalGuiaRacha(false)}
+      >
+        <View style={styles.dirModalOverlay}>
+          <View style={styles.guideModalCard}>
+            <View style={styles.modalHandleBar} />
+
+            <View style={styles.dirModalHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.guideKickerRow}>
+                  <Ionicons name="sparkles" size={12} color="#0D9488" />
+                  <Text style={styles.guideKickerText}>GUÍA DE BIENESTAR</Text>
+                </View>
+                <Text style={styles.dirModalTitle}>
+                  ¿Cómo funciona tu Racha? 💧
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setModalGuiaRacha(false)}
+                style={styles.dirModalClose}
+              >
+                <Ionicons name="close" size={22} color="#475569" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 14, gap: 11 }}
+            >
+              {/* Paso 1 */}
+              <LinearGradient
+                colors={["#F0FDFA", "#ECFEFF"]}
+                style={styles.guideStepCard}
+              >
+                <View style={styles.guideStepHeader}>
+                  <View
+                    style={[
+                      styles.guideStepIconBox,
+                      { backgroundColor: "#CCFBF1" },
+                    ]}
+                  >
+                    <Ionicons name="flame" size={19} color="#0D9488" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.guideStepTitle}>
+                      1. Enciende tu llama cada día
+                    </Text>
+                    <View style={styles.guideRewardPill}>
+                      <Text style={styles.guideRewardText}>
+                        +5 Gotitas de Luz diarios
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Text style={styles.guideStepDesc}>
+                  Presiona el botón{" "}
+                  <Text style={{ fontWeight: "800", color: "#0F766E" }}>
+                    "Encender racha de hoy"
+                  </Text>{" "}
+                  (o realiza tu chequeo diario) una vez al día. Verás tu día
+                  iluminarse en el calendario semanal L–D.
+                </Text>
+              </LinearGradient>
+
+              {/* Paso 2 */}
+              <LinearGradient
+                colors={["#FFFBEB", "#FEF3C7"]}
+                style={[styles.guideStepCard, { borderColor: "#FDE68A" }]}
+              >
+                <View style={styles.guideStepHeader}>
+                  <View
+                    style={[
+                      styles.guideStepIconBox,
+                      { backgroundColor: "#FDE68A" },
+                    ]}
+                  >
+                    <Ionicons name="trophy" size={18} color="#B45309" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.guideStepTitle, { color: "#78350F" }]}
+                    >
+                      2. Cumple hitos y gana regalos
+                    </Text>
+                    <View
+                      style={[
+                        styles.guideRewardPill,
+                        { backgroundColor: "#FFFFFF" },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.guideRewardText, { color: "#B45309" }]}
+                      >
+                        +15 Gotitas + 1 Escudo gratis
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Text style={[styles.guideStepDesc, { color: "#92400E" }]}>
+                  Al lograr tu{" "}
+                  <Text style={{ fontWeight: "800" }}>
+                    Semilla de Calma (3 días seguidos)
+                  </Text>{" "}
+                  y cada <Text style={{ fontWeight: "800" }}>7 días</Text>,
+                  recibirás automáticamente un bono de gotitas y un Escudo de
+                  Autocuidado sin costo.
+                </Text>
+              </LinearGradient>
+
+              {/* Paso 3 */}
+              <LinearGradient
+                colors={["#EFF6FF", "#E0F2FE"]}
+                style={[styles.guideStepCard, { borderColor: "#BAE6FD" }]}
+              >
+                <View style={styles.guideStepHeader}>
+                  <View
+                    style={[
+                      styles.guideStepIconBox,
+                      { backgroundColor: "#BAE6FD" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={19}
+                      color="#0369A1"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.guideStepTitle, { color: "#0C4A6E" }]}
+                    >
+                      3. Escudos y Estilos de Lami
+                    </Text>
+                    <View
+                      style={[
+                        styles.guideRewardPill,
+                        { backgroundColor: "#FFFFFF" },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.guideRewardText, { color: "#0369A1" }]}
+                      >
+                        Canjea tus Gotitas de Luz
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Text style={[styles.guideStepDesc, { color: "#075985" }]}>
+                  •{" "}
+                  <Text style={{ fontWeight: "800" }}>
+                    Escudos (15 gotitas):
+                  </Text>{" "}
+                  Si un día olvidas entrar o necesitas descansar, el escudo
+                  congela tu racha automáticamente para que no se pierda.{"\n"}•{" "}
+                  <Text style={{ fontWeight: "800" }}>Estilos de Lami:</Text>{" "}
+                  Desbloquea auras y accesorios especiales para personalizar a
+                  tu mascota.
+                </Text>
+              </LinearGradient>
+
+              {/* Paso 4 */}
+              <LinearGradient
+                colors={["#F5F3FF", "#EDE9FE"]}
+                style={[styles.guideStepCard, { borderColor: "#DDD6FE" }]}
+              >
+                <View style={styles.guideStepHeader}>
+                  <View
+                    style={[
+                      styles.guideStepIconBox,
+                      { backgroundColor: "#DDD6FE" },
+                    ]}
+                  >
+                    <Ionicons name="heart" size={18} color="#6D28D9" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.guideStepTitle, { color: "#4C1D95" }]}
+                    >
+                      4. Rescate amable sin culpa
+                    </Text>
+                    <View
+                      style={[
+                        styles.guideRewardPill,
+                        { backgroundColor: "#FFFFFF" },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.guideRewardText, { color: "#6D28D9" }]}
+                      >
+                        Misión de reconexión
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Text style={[styles.guideStepDesc, { color: "#5B21B6" }]}>
+                  Si tuviste un día difícil y no tenías escudo, aparecerá un
+                  aviso para completar{" "}
+                  <Text style={{ fontWeight: "800" }}>
+                    3 micro-acciones suaves
+                  </Text>{" "}
+                  y recuperar todos los días que ya habías construido.
+                </Text>
+              </LinearGradient>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setModalGuiaRacha(false)}
+                style={{ marginTop: 4 }}
+              >
+                <LinearGradient
+                  colors={["#14B8A6", "#0284C7"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.agendarSubmitBtn}
+                >
+                  <Text style={styles.agendarSubmitText}>
+                    ¡Entendido, empezar a cuidar mi racha! ✨
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Misión de Rescate de Racha */}
+      <Modal
+        visible={modalRescateRacha}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalRescateRacha(false)}
+      >
+        <View style={styles.infoModalOverlay}>
+          <View style={styles.rescueModalCard}>
+            <TouchableOpacity
+              onPress={() => setModalRescateRacha(false)}
+              style={styles.infoModalClose}
+            >
+              <Ionicons name="close" size={20} color="#475569" />
+            </TouchableOpacity>
+
+            <View style={styles.rescueModalIconCircle}>
+              <Ionicons name="heart" size={28} color="#0D9488" />
+            </View>
+
+            <Text style={styles.rescueModalBadge}>MISIÓN DE RECONEXIÓN</Text>
+            <Text style={styles.rescueModalTitle}>
+              Rescata tu racha de {rachaPerdidaRescatable} días
+            </Text>
+            <Text style={styles.rescueModalSubtitle}>
+              A veces tenemos días difíciles. Marca estas 3 micro-acciones de
+              autocuidado hoy para restaurar tu progreso:
+            </Text>
+
+            <View style={{ width: "100%", gap: 10, marginVertical: 14 }}>
+              {[
+                {
+                  key: "emocion",
+                  titulo: "1. Reconocí cómo me siento hoy",
+                  sub: "Sin juzgarme, aceptando mi emoción actual",
+                },
+                {
+                  key: "respiracion",
+                  titulo: "2. Tomé 3 respiraciones profundas",
+                  sub: "Inhalando calma y soltando tensión",
+                },
+                {
+                  key: "gratitud",
+                  titulo: "3. Agradecí un pequeño paso de hoy",
+                  sub: "Estar aquí ya cuenta como autocuidado",
+                },
+              ].map((paso) => {
+                const marcado = pasosRescateCompletados[paso.key];
+                return (
+                  <TouchableOpacity
+                    key={paso.key}
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      setPasosRescateCompletados((prev) => ({
+                        ...prev,
+                        [paso.key]: !prev[paso.key],
+                      }))
+                    }
+                    style={[
+                      styles.rescueStepRow,
+                      marcado && styles.rescueStepRowChecked,
+                    ]}
+                  >
+                    <Ionicons
+                      name={marcado ? "checkbox" : "square-outline"}
+                      size={22}
+                      color={marcado ? "#0D9488" : "#94A3B8"}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rescueStepTitle}>{paso.titulo}</Text>
+                      <Text style={styles.rescueStepSub}>{paso.sub}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              disabled={!todosPasosRescateListos}
+              onPress={handleCompletarRescateRacha}
+              style={{
+                width: "100%",
+                opacity: todosPasosRescateListos ? 1 : 0.5,
+              }}
+            >
+              <LinearGradient
+                colors={["#10B981", "#0D9488", "#0284C7"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.agendarSubmitBtn}
+              >
+                <Text style={styles.agendarSubmitText}>
+                  Restaurar mi racha (+5 Gotitas)
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal Pago Lami Premium */}
       <Modal
@@ -4475,6 +5461,112 @@ const styles = StyleSheet.create({
     gap: 11,
     marginBottom: 13,
   },
+  streakBannerCard: {
+    borderRadius: 26,
+    padding: 18,
+    marginBottom: 15,
+    borderWidth: 1.2,
+    borderColor: "#FCD34D",
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#D97706",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  streakBannerOrb: {
+    position: "absolute",
+    top: -30,
+    right: -25,
+    width: 115,
+    height: 115,
+    borderRadius: 58,
+    backgroundColor: "rgba(255, 255, 255, 0.38)",
+  },
+  streakBannerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  streakFlameBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#D97706",
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  streakTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  streakKicker: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#B45309",
+    letterSpacing: 0.9,
+  },
+  streakStatusChip: {
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  streakStatusChipText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#92400E",
+  },
+  streakValueRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+  },
+  streakBigNumber: {
+    fontSize: 27,
+    fontWeight: "900",
+    color: "#78350F",
+    letterSpacing: -0.6,
+  },
+  streakSubInline: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#B45309",
+  },
+  streakProgressWrapper: {
+    marginTop: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.62)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: "rgba(253, 230, 138, 0.8)",
+  },
+  streakTrackEnhanced: {
+    height: 6.5,
+    borderRadius: 4,
+    backgroundColor: "rgba(217, 119, 6, 0.16)",
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  streakFillEnhanced: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  streakMotivationalText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#92400E",
+  },
   statCard: {
     flex: 1,
     borderRadius: 24,
@@ -4578,6 +5670,450 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
   },
+
+  // CENTRO DE RACHA AMABLE, GOTITAS Y ESCUDOS
+  rachaCenterCard: {
+    borderRadius: 28,
+    padding: 19,
+    marginBottom: 16,
+    borderWidth: 1.2,
+    borderColor: "#99F6E4",
+    shadowColor: "#0F766E",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  rachaTopHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  rachaMascotRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  rachaLamiCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#5EEAD4",
+    position: "relative",
+  },
+  rachaLamiImg: {
+    width: 44,
+    height: 44,
+    resizeMode: "contain",
+  },
+  rachaLamiBadgeIcon: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  rachaKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0F766E",
+    letterSpacing: 0.8,
+  },
+  rachaMainTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#0F172A",
+    letterSpacing: -0.3,
+  },
+  rachaSubCaption: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  gotitasPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#E0F2FE",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+  },
+  gotitasCountText: {
+    fontSize: 14.5,
+    fontWeight: "900",
+    color: "#0369A1",
+  },
+  howItWorksPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#CCFBF1",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+  },
+  howItWorksText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#0F766E",
+  },
+  rescueBanner: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F5F3FF",
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  rescueBannerTitle: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#5B21B6",
+  },
+  rescueBannerSub: {
+    fontSize: 11.5,
+    color: "#6D28D9",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  rescueBannerBtn: {
+    backgroundColor: "#7C3AED",
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  rescueBannerBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  hitoProgressBox: {
+    marginTop: 14,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: 15,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: "#CCFBF1",
+  },
+  hitoProgressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  hitoProgressLabel: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#0F766E",
+  },
+  hitoProgressValue: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#0369A1",
+  },
+  hitoTrack: {
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  hitoFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  weekDaysRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 14,
+    paddingHorizontal: 4,
+  },
+  weekDayCol: {
+    alignItems: "center",
+    gap: 5,
+  },
+  weekDayLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  weekDayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  weekDayCircleActive: {
+    backgroundColor: "#14B8A6",
+    borderColor: "#0D9488",
+  },
+  weekDayCircleShield: {
+    backgroundColor: "#E0F2FE",
+    borderColor: "#7DD3FC",
+  },
+  weekDayCircleToday: {
+    borderColor: "#14B8A6",
+    borderWidth: 2,
+    backgroundColor: "#FFFFFF",
+  },
+  weekDayEmptyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#CBD5E1",
+  },
+  checkinRachaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 12.5,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+  },
+  checkinRachaBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12.5,
+    fontWeight: "800",
+  },
+  escudosBox: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E0F2FE",
+  },
+  escudoInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  escudoIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#E0F2FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  escudoTitle: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  escudoDesc: {
+    fontSize: 11,
+    color: "#64748B",
+    lineHeight: 15,
+    marginTop: 1,
+  },
+  canjearEscudoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#0284C7",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 12,
+  },
+  canjearEscudoText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  accesoriosSectionTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0F766E",
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  accesorioCard: {
+    width: 96,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 5,
+  },
+  accesorioCardEquipped: {
+    borderColor: "#14B8A6",
+    borderWidth: 1.5,
+    backgroundColor: "#F0FDFA",
+  },
+  accesorioIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accesorioName: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1E293B",
+    textAlign: "center",
+  },
+  accesorioTag: {
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  accesorioTagText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#475569",
+  },
+
+  // Modal Guía Visual de Racha
+  guideModalCard: {
+    maxHeight: "88%",
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 20,
+  },
+  guideKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 2,
+  },
+  guideKickerText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0D9488",
+    letterSpacing: 0.9,
+  },
+  guideStepCard: {
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    gap: 8,
+  },
+  guideStepHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  guideStepIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guideStepTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  guideRewardPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "#CCFBF1",
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+    marginTop: 3,
+  },
+  guideRewardText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#0F766E",
+  },
+  guideStepDesc: {
+    fontSize: 12.5,
+    color: "#334155",
+    lineHeight: 18,
+  },
+
+  rescueModalCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 22,
+    alignItems: "center",
+  },
+  rescueModalIconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#CCFBF1",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  rescueModalBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0F766E",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  rescueModalTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+  rescueModalSubtitle: {
+    fontSize: 12.5,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  rescueStepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  rescueStepRowChecked: {
+    backgroundColor: "#F0FDFA",
+    borderColor: "#99F6E4",
+  },
+  rescueStepTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1E293B",
+  },
+  rescueStepSub: {
+    fontSize: 11.5,
+    color: "#64748B",
+    marginTop: 1,
+  },
+
   primaryIndigoBtn: {
     flexDirection: "row",
     paddingVertical: 13.5,
