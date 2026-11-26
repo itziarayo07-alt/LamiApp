@@ -21,6 +21,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../config/firebaseConfig";
 
+const PORCENTAJE_BONIFICACION_PACIENTE = 0.05; // 5% por paciente activo
+const TOPE_DESCUENTO_PORCENTAJE = 0.5; // Máximo 50% de descuento
+
 function generarCodigoEspecialista() {
   const num = Math.floor(100 + Math.random() * 900);
   return `PSI-${num}`;
@@ -30,14 +33,14 @@ const PLANES_TERAPEUTA = [
   {
     id: "semilla",
     nombre: "Semilla",
-    precio: 299,
+    precio: 289,
     limite: 10,
     descripcion: "Ideal para iniciar • Hasta 10 pacientes vinculados",
   },
   {
     id: "profesional",
     nombre: "Profesional",
-    precio: 599,
+    precio: 700,
     limite: 30,
     descripcion: "Consultorio activo • Hasta 30 pacientes vinculados",
     destacado: true,
@@ -45,7 +48,7 @@ const PLANES_TERAPEUTA = [
   {
     id: "consultorio",
     nombre: "Consultorio",
-    precio: 1299,
+    precio: 2600,
     limite: 100,
     descripcion: "Clínica o grupo • Hasta 100 pacientes vinculados",
   },
@@ -144,7 +147,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "PERMISOS",
         "Acceso a galería requerido",
-        "Habilita el permiso de galería en tu dispositivo para seleccionar una fotografía."
+        "Habilita el permiso de galería en tu dispositivo para seleccionar una fotografía.",
       );
       return;
     }
@@ -169,7 +172,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "PERMISOS",
         "Acceso a cámara requerido",
-        "Habilita el permiso de cámara en tu dispositivo para tomar tu fotografía."
+        "Habilita el permiso de cámara en tu dispositivo para tomar tu fotografía.",
       );
       return;
     }
@@ -199,7 +202,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "VERIFICACIÓN",
         "Campos incompletos",
-        "Por favor completa todos los campos obligatorios antes de continuar con el alta."
+        "Por favor completa todos los campos obligatorios antes de continuar con el alta.",
       );
       return;
     }
@@ -212,7 +215,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "UBICACIÓN DE CONSULTA",
           "Falta la dirección del consultorio",
-          "Como atiendes de forma presencial o híbrida, indica al menos la ciudad y la dirección donde recibes a tus pacientes."
+          "Como atiendes de forma presencial o híbrida, indica al menos la ciudad y la dirección donde recibes a tus pacientes.",
         );
         return;
       }
@@ -221,7 +224,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "CLÍNICA U HOSPITAL",
           "Nombre del centro médico requerido",
-          "Indica el nombre del hospital, clínica o torre médica donde se encuentra tu consultorio."
+          "Indica el nombre del hospital, clínica o torre médica donde se encuentra tu consultorio.",
         );
         return;
       }
@@ -231,7 +234,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "CREDENCIALES",
         "Las contraseñas no coinciden",
-        "Verifica que ambos campos de contraseña sean idénticos."
+        "Verifica que ambos campos de contraseña sean idénticos.",
       );
       return;
     }
@@ -240,7 +243,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "CREDENCIALES",
         "Contraseña muy corta",
-        "La contraseña debe contener al menos 6 caracteres."
+        "La contraseña debe contener al menos 6 caracteres.",
       );
       return;
     }
@@ -249,7 +252,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "ACREDITACIÓN",
         "Cédula profesional inválida",
-        "Ingresa un número de cédula profesional válido de al menos 6 dígitos."
+        "Ingresa un número de cédula profesional válido de al menos 6 dígitos.",
       );
       return;
     }
@@ -258,7 +261,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "SUSCRIPCIÓN",
         "Selecciona tu plan",
-        "Elige el plan profesional con el que deseas iniciar en Lami."
+        "Elige el plan profesional con el que deseas iniciar en Lami.",
       );
       return;
     }
@@ -271,7 +274,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "MÉTODO DE PAGO",
           "Titular requerido",
-          "Ingresa el nombre del titular de la tarjeta."
+          "Ingresa el nombre del titular de la tarjeta.",
         );
         return;
       }
@@ -279,7 +282,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "MÉTODO DE PAGO",
           "Tarjeta incompleta",
-          "Ingresa los 16 dígitos de tu tarjeta."
+          "Ingresa los 16 dígitos de tu tarjeta.",
         );
         return;
       }
@@ -287,7 +290,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "MÉTODO DE PAGO",
           "Vencimiento requerido",
-          "Ingresa la fecha de vencimiento (MM/AA)."
+          "Ingresa la fecha de vencimiento (MM/AA).",
         );
         return;
       }
@@ -295,7 +298,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "MÉTODO DE PAGO",
           "CVV requerido",
-          "Ingresa el código CVV de seguridad."
+          "Ingresa el código CVV de seguridad.",
         );
         return;
       }
@@ -305,7 +308,7 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "MÉTODO DE PAGO",
           "PayPal inválido",
-          "Ingresa un correo electrónico válido de PayPal."
+          "Ingresa un correo electrónico válido de PayPal.",
         );
         return;
       }
@@ -316,7 +319,7 @@ export default function RegistroPsicologo({ navigation }) {
       mostrarAviso(
         "DECLARACIÓN",
         "Validación profesional requerida",
-        "Confirma que cuentas con título y cédula profesional vigente para ejercer atención psicológica."
+        "Confirma que cuentas con título y cédula profesional vigente para ejercer atención psicológica.",
       );
       return;
     }
@@ -330,7 +333,7 @@ export default function RegistroPsicologo({ navigation }) {
       const cred = await createUserWithEmailAndPassword(
         auth,
         correo.trim(),
-        password
+        password,
       );
       const uid = cred.user.uid;
       const codigoVinculacion = generarCodigoEspecialista();
@@ -377,7 +380,8 @@ export default function RegistroPsicologo({ navigation }) {
         planNombre: planInfo.nombre,
         precioMensual: planInfo.precio,
         limitePacientes: planInfo.limite,
-        bonificacionPorPaciente: 50,
+        bonificacionPorcentajePaciente: PORCENTAJE_BONIFICACION_PACIENTE * 100,
+        topeDescuentoPorcentaje: TOPE_DESCUENTO_PORCENTAJE * 100,
         estadoSuscripcion: "activo",
         metodoPagoTipo: metodoPagoSeleccionado,
         metodoPagoResumen: resumenMetodo,
@@ -392,16 +396,20 @@ export default function RegistroPsicologo({ navigation }) {
         mostrarAviso(
           "CUENTA EXISTENTE",
           "Correo ya registrado",
-          "Este correo electrónico ya cuenta con un perfil activo en Lami."
+          "Este correo electrónico ya cuenta con un perfil activo en Lami.",
         );
       } else if (error.code === "auth/invalid-email") {
         mostrarAviso(
           "CORREO INVÁLIDO",
           "Formato incorrecto",
-          "Ingresa una dirección de correo electrónico válida."
+          "Ingresa una dirección de correo electrónico válida.",
         );
       } else {
-        mostrarAviso("ERROR DE REGISTRO", "No se pudo completar", error.message);
+        mostrarAviso(
+          "ERROR DE REGISTRO",
+          "No se pudo completar",
+          error.message,
+        );
       }
     } finally {
       setProcesandoPago(false);
@@ -813,8 +821,9 @@ export default function RegistroPsicologo({ navigation }) {
                 Selecciona tu plan profesional
               </Text>
               <Text style={styles.planIntroText}>
-                Con el Sistema Flywheel recibes $50 MXN de descuento por cada
-                paciente activo al mes hasta llegar a $0 MXN.
+                Con el Sistema Flywheel recibes 5% de bonificación por cada
+                paciente activo al mes, con un tope máximo del 50% de descuento
+                sobre tu plan.
               </Text>
 
               <View style={styles.plansList}>
@@ -825,13 +834,16 @@ export default function RegistroPsicologo({ navigation }) {
                       key={plan.id}
                       activeOpacity={0.88}
                       onPress={() => setPlanSeleccionado(plan.id)}
-                      style={[
-                        styles.planCard,
-                        activo && styles.planCardActive,
-                      ]}
+                      style={[styles.planCard, activo && styles.planCardActive]}
                     >
                       <View style={styles.planTopRow}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
                           <Ionicons
                             name={
                               activo ? "radio-button-on" : "radio-button-off"
@@ -862,7 +874,7 @@ export default function RegistroPsicologo({ navigation }) {
               {/* Sección de método de pago integrada */}
               <View style={styles.paymentSectionContainer}>
                 <Text style={[styles.sectionHeader, { marginTop: 16 }]}>
-                   Método de pago de suscripción
+                  Método de pago de suscripción
                 </Text>
                 <View style={styles.payMethodRow}>
                   <TouchableOpacity
@@ -1223,10 +1235,12 @@ export default function RegistroPsicologo({ navigation }) {
               </LinearGradient>
 
               <Text style={styles.successBadge}>PERFIL CREADO</Text>
-              <Text style={styles.successTitle}>Registro profesional listo</Text>
+              <Text style={styles.successTitle}>
+                Registro profesional listo
+              </Text>
               <Text style={styles.successDesc}>
-                Tu cuenta ha sido creada correctamente, tu suscripción está activa
-                y tu cédula quedó registrada para validación.
+                Tu cuenta ha sido creada correctamente, tu suscripción está
+                activa y tu cédula quedó registrada para validación.
               </Text>
 
               <View style={styles.codeCard}>
