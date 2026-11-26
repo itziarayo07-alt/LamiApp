@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
@@ -120,6 +121,22 @@ export default function PerfilPsicologo({ navigation }) {
     }));
   };
 
+  const procesarImagenPerfil = async (uri) => {
+    const manipulada = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 400, height: 400 } }],
+      {
+        compress: 0.55,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    return manipulada.base64
+      ? `data:image/jpeg;base64,${manipulada.base64}`
+      : manipulada.uri;
+  };
+
   const abrirCamara = async () => {
     setModalFotoVisible(false);
     try {
@@ -136,16 +153,12 @@ export default function PerfilPsicologo({ navigation }) {
         mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.65,
-        base64: true,
+        quality: 0.6,
       });
 
       if (!res.canceled && res.assets?.[0]) {
-        const asset = res.assets[0];
-        const uriFinal = asset.base64
-          ? `data:image/jpeg;base64,${asset.base64}`
-          : asset.uri;
-        setFotoPerfil(uriFinal);
+        const uriOptimizada = await procesarImagenPerfil(res.assets[0].uri);
+        setFotoPerfil(uriOptimizada);
       }
     } catch (e) {
       Alert.alert("Error", "No se pudo abrir la cámara.");
@@ -168,16 +181,12 @@ export default function PerfilPsicologo({ navigation }) {
         mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.65,
-        base64: true,
+        quality: 0.6,
       });
 
       if (!res.canceled && res.assets?.[0]) {
-        const asset = res.assets[0];
-        const uriFinal = asset.base64
-          ? `data:image/jpeg;base64,${asset.base64}`
-          : asset.uri;
-        setFotoPerfil(uriFinal);
+        const uriOptimizada = await procesarImagenPerfil(res.assets[0].uri);
+        setFotoPerfil(uriOptimizada);
       }
     } catch (e) {
       Alert.alert("Error", "No se pudo abrir la galería.");
